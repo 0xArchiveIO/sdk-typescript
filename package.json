@@ -1,0 +1,60 @@
+{
+  "name": "@0xarchive/sdk",
+  "version": "0.3.11",
+  "description": "Official TypeScript SDK for 0xarchive - Hyperliquid Historical Data API",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "0xarchive",
+    "hyperliquid",
+    "trading",
+    "orderbook",
+    "historical-data",
+    "api",
+    "sdk"
+  ],
+  "author": "0xarchive",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0xarchiveIO/sdk-typescript"
+  },
+  "homepage": "https://0xarchive.io/docs/sdks",
+  "bugs": {
+    "url": "https://github.com/0xarchiveIO/sdk-typescript/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}
