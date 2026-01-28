@@ -1,7 +1,7 @@
 {
   "name": "@0xarchive/sdk",
-  "version": "0.3.11",
-  "description": "Official TypeScript SDK for 0xarchive - Hyperliquid Historical Data API",
+  "version": "0.4.0",
+  "description": "Official TypeScript SDK for 0xarchive - Historical Market Data API (Hyperliquid, Lighter.xyz)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -27,6 +27,7 @@
   "keywords": [
     "0xarchive",
     "hyperliquid",
+    "lighter",
     "trading",
     "orderbook",
     "historical-data",

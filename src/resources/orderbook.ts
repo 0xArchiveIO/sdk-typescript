@@ -31,7 +31,7 @@ import { OrderBookResponseSchema, OrderBookArrayResponseSchema } from '../schema
  * ```
  */
 export class OrderBookResource {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private basePath: string = '/v1') {}
 
   /**
    * Get order book snapshot for a coin
@@ -42,7 +42,7 @@ export class OrderBookResource {
    */
   async get(coin: string, params?: GetOrderBookParams): Promise<OrderBook> {
     const response = await this.http.get<ApiResponse<OrderBook>>(
-      `/v1/orderbook/${coin.toUpperCase()}`,
+      `${this.basePath}/orderbook/${coin.toUpperCase()}`,
       params as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookResponseSchema : undefined
     );
