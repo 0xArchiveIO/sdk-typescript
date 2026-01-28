@@ -173,7 +173,7 @@ export interface CursorResponse<T> {
 export type InstrumentType = 'perp' | 'spot';
 
 /**
- * Trading instrument metadata
+ * Trading instrument metadata (Hyperliquid)
  */
 export interface Instrument {
   /** Instrument symbol (e.g., BTC) */
@@ -186,6 +186,41 @@ export interface Instrument {
   onlyIsolated?: boolean;
   /** Type of instrument */
   instrumentType?: InstrumentType;
+  /** Whether the instrument is currently tradeable */
+  isActive: boolean;
+}
+
+/**
+ * Trading instrument metadata (Lighter.xyz)
+ *
+ * Lighter instruments have a different schema than Hyperliquid with more
+ * detailed market configuration including fees and minimum amounts.
+ */
+export interface LighterInstrument {
+  /** Instrument symbol (e.g., BTC, ETH) */
+  symbol: string;
+  /** Unique market identifier */
+  marketId: number;
+  /** Market type (e.g., 'perp') */
+  marketType: string;
+  /** Market status (e.g., 'active') */
+  status: string;
+  /** Taker fee rate (e.g., 0.0005 = 0.05%) */
+  takerFee: number;
+  /** Maker fee rate (e.g., 0.0002 = 0.02%) */
+  makerFee: number;
+  /** Liquidation fee rate */
+  liquidationFee: number;
+  /** Minimum order size in base currency */
+  minBaseAmount: number;
+  /** Minimum order size in quote currency */
+  minQuoteAmount: number;
+  /** Size decimal precision */
+  sizeDecimals: number;
+  /** Price decimal precision */
+  priceDecimals: number;
+  /** Quote currency decimal precision */
+  quoteDecimals: number;
   /** Whether the instrument is currently tradeable */
   isActive: boolean;
 }

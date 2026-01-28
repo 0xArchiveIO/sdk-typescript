@@ -108,12 +108,38 @@ while (result.nextCursor) {
 ### Instruments
 
 ```typescript
-// List all trading instruments
+// List all trading instruments (Hyperliquid)
 const instruments = await client.hyperliquid.instruments.list();
 
 // Get specific instrument details
 const btc = await client.hyperliquid.instruments.get('BTC');
+console.log(`BTC size decimals: ${btc.szDecimals}`);
 ```
+
+#### Lighter.xyz Instruments
+
+Lighter instruments have a different schema with additional fields for fees, market IDs, and minimum order amounts:
+
+```typescript
+// List Lighter instruments (returns LighterInstrument, not Instrument)
+const lighterInstruments = await client.lighter.instruments.list();
+
+// Get specific Lighter instrument
+const eth = await client.lighter.instruments.get('ETH');
+console.log(`ETH taker fee: ${eth.takerFee}`);
+console.log(`ETH maker fee: ${eth.makerFee}`);
+console.log(`ETH market ID: ${eth.marketId}`);
+console.log(`ETH min base amount: ${eth.minBaseAmount}`);
+```
+
+**Key differences:**
+| Field | Hyperliquid (`Instrument`) | Lighter (`LighterInstrument`) |
+|-------|---------------------------|------------------------------|
+| Symbol | `name` | `symbol` |
+| Size decimals | `szDecimals` | `sizeDecimals` |
+| Fee info | Not available | `takerFee`, `makerFee`, `liquidationFee` |
+| Market ID | Not available | `marketId` |
+| Min amounts | Not available | `minBaseAmount`, `minQuoteAmount` |
 
 ### Funding Rates
 
@@ -350,6 +376,7 @@ import type {
   PriceLevel,
   Trade,
   Instrument,
+  LighterInstrument,
   FundingRate,
   OpenInterest,
   CursorResponse,

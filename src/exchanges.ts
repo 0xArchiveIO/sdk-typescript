@@ -3,6 +3,7 @@ import {
   OrderBookResource,
   TradesResource,
   InstrumentsResource,
+  LighterInstrumentsResource,
   FundingResource,
   OpenInterestResource,
 } from './resources';
@@ -65,6 +66,8 @@ export class HyperliquidClient {
  * const client = new OxArchive({ apiKey: '...' });
  * const orderbook = await client.lighter.orderbook.get('BTC');
  * const trades = await client.lighter.trades.list('ETH', { start, end });
+ * const instruments = await client.lighter.instruments.list();
+ * console.log(`ETH taker fee: ${instruments[0].takerFee}`);
  * ```
  */
 export class LighterClient {
@@ -79,9 +82,9 @@ export class LighterClient {
   public readonly trades: TradesResource;
 
   /**
-   * Trading instruments metadata
+   * Trading instruments metadata (returns LighterInstrument with fees, min amounts, etc.)
    */
-  public readonly instruments: InstrumentsResource;
+  public readonly instruments: LighterInstrumentsResource;
 
   /**
    * Funding rates
@@ -97,7 +100,7 @@ export class LighterClient {
     const basePath = '/v1/lighter';
     this.orderbook = new OrderBookResource(http, basePath);
     this.trades = new TradesResource(http, basePath);
-    this.instruments = new InstrumentsResource(http, basePath);
+    this.instruments = new LighterInstrumentsResource(http, basePath);
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
   }

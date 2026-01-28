@@ -115,6 +115,7 @@ export type {
   TradeDirection,
   // Instruments
   Instrument,
+  LighterInstrument,
   InstrumentType,
   // Funding
   FundingRate,
