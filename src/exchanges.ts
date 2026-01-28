@@ -59,7 +59,6 @@ export class HyperliquidClient {
  * Lighter.xyz exchange client
  *
  * Access Lighter.xyz market data through the 0xarchive API.
- * Lighter orderbooks are reconstructed from checkpoint + delta data.
  *
  * @example
  * ```typescript
@@ -70,7 +69,7 @@ export class HyperliquidClient {
  */
 export class LighterClient {
   /**
-   * Order book data (reconstructed from checkpoints + deltas)
+   * Order book data (L2 snapshots)
    */
   public readonly orderbook: OrderBookResource;
 

@@ -4,7 +4,7 @@ Official TypeScript/JavaScript SDK for [0xarchive](https://0xarchive.io) - Histo
 
 Supports multiple exchanges:
 - **Hyperliquid** - Perpetuals data from April 2023
-- **Lighter.xyz** - Perpetuals data with orderbook reconstruction
+- **Lighter.xyz** - Perpetuals data (August 2025+ for fills, Jan 2026+ for OB, OI, Funding Rate)
 
 ## Installation
 

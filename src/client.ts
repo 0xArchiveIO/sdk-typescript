@@ -58,7 +58,7 @@ export class OxArchive {
   public readonly hyperliquid: HyperliquidClient;
 
   /**
-   * Lighter.xyz exchange data (orderbook reconstructed from checkpoints + deltas)
+   * Lighter.xyz exchange data (August 2025+)
    */
   public readonly lighter: LighterClient;
 
