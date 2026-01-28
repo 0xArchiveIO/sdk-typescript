@@ -1,6 +1,10 @@
 # @0xarchive/sdk
 
-Official TypeScript/JavaScript SDK for [0xarchive](https://0xarchive.io) - Hyperliquid Historical Data API.
+Official TypeScript/JavaScript SDK for [0xarchive](https://0xarchive.io) - Historical Market Data API.
+
+Supports multiple exchanges:
+- **Hyperliquid** - Perpetuals data from April 2023
+- **Lighter.xyz** - Perpetuals data with orderbook reconstruction
 
 ## Installation
 
@@ -19,12 +23,16 @@ import { OxArchive } from '@0xarchive/sdk';
 
 const client = new OxArchive({ apiKey: 'ox_your_api_key' });
 
-// Get current order book
-const orderbook = await client.orderbook.get('BTC');
-console.log(`BTC mid price: ${orderbook.midPrice}`);
+// Hyperliquid data
+const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
+console.log(`Hyperliquid BTC mid price: ${hlOrderbook.midPrice}`);
+
+// Lighter.xyz data
+const lighterOrderbook = await client.lighter.orderbook.get('BTC');
+console.log(`Lighter BTC mid price: ${lighterOrderbook.midPrice}`);
 
 // Get historical order book snapshots
-const history = await client.orderbook.history('ETH', {
+const history = await client.hyperliquid.orderbook.history('ETH', {
   start: Date.now() - 86400000, // 24 hours ago
   end: Date.now(),
   limit: 100
@@ -44,20 +52,25 @@ const client = new OxArchive({
 
 ## REST API Reference
 
+All examples use `client.hyperliquid.*` but the same methods are available on `client.lighter.*` for Lighter.xyz data.
+
 ### Order Book
 
 ```typescript
-// Get current order book
-const orderbook = await client.orderbook.get('BTC');
+// Get current order book (Hyperliquid)
+const orderbook = await client.hyperliquid.orderbook.get('BTC');
+
+// Get current order book (Lighter.xyz)
+const lighterOb = await client.lighter.orderbook.get('BTC');
 
 // Get order book at specific timestamp with custom depth
-const historical = await client.orderbook.get('BTC', {
+const historical = await client.hyperliquid.orderbook.get('BTC', {
   timestamp: 1704067200000,
   depth: 20  // Number of levels per side
 });
 
 // Get historical snapshots (start is required)
-const history = await client.orderbook.history('BTC', {
+const history = await client.hyperliquid.orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 1000
@@ -70,10 +83,10 @@ The trades API uses cursor-based pagination for efficient retrieval of large dat
 
 ```typescript
 // Get recent trades
-const recent = await client.trades.recent('BTC', 100);
+const recent = await client.hyperliquid.trades.recent('BTC', 100);
 
 // Get trade history with cursor-based pagination
-let result = await client.trades.list('BTC', {
+let result = await client.hyperliquid.trades.list('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 1000
@@ -82,7 +95,7 @@ let result = await client.trades.list('BTC', {
 // Paginate through all results
 const allTrades = [...result.data];
 while (result.nextCursor) {
-  result = await client.trades.list('BTC', {
+  result = await client.hyperliquid.trades.list('BTC', {
     start: Date.now() - 86400000,
     end: Date.now(),
     cursor: result.nextCursor,
@@ -96,20 +109,20 @@ while (result.nextCursor) {
 
 ```typescript
 // List all trading instruments
-const instruments = await client.instruments.list();
+const instruments = await client.hyperliquid.instruments.list();
 
 // Get specific instrument details
-const btc = await client.instruments.get('BTC');
+const btc = await client.hyperliquid.instruments.get('BTC');
 ```
 
 ### Funding Rates
 
 ```typescript
 // Get current funding rate
-const current = await client.funding.current('BTC');
+const current = await client.hyperliquid.funding.current('BTC');
 
 // Get funding rate history (start is required)
-const history = await client.funding.history('ETH', {
+const history = await client.hyperliquid.funding.history('ETH', {
   start: Date.now() - 86400000 * 7,
   end: Date.now()
 });
@@ -119,14 +132,26 @@ const history = await client.funding.history('ETH', {
 
 ```typescript
 // Get current open interest
-const current = await client.openInterest.current('BTC');
+const current = await client.hyperliquid.openInterest.current('BTC');
 
 // Get open interest history (start is required)
-const history = await client.openInterest.history('ETH', {
+const history = await client.hyperliquid.openInterest.history('ETH', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 100
 });
+```
+
+### Legacy API (Deprecated)
+
+The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:
+
+```typescript
+// Deprecated - use client.hyperliquid.orderbook.get() instead
+const orderbook = await client.orderbook.get('BTC');
+
+// Deprecated - use client.hyperliquid.trades.list() instead
+const trades = await client.trades.list('BTC', { start, end });
 ```
 
 ## WebSocket Client

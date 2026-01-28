@@ -1,5 +1,6 @@
 import type { ClientOptions } from './types';
 import { HttpClient } from './http';
+import { HyperliquidClient, LighterClient } from './exchanges';
 import {
   OrderBookResource,
   TradesResource,
@@ -14,52 +15,75 @@ const DEFAULT_TIMEOUT = 30000;
 /**
  * 0xarchive API client
  *
+ * Supports multiple exchanges:
+ * - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
+ * - `client.lighter` - Lighter.xyz perpetuals
+ *
  * @example
  * ```typescript
  * import { OxArchive } from '@0xarchive/sdk';
  *
  * const client = new OxArchive({ apiKey: 'ox_your_api_key' });
  *
- * // Get current order book
- * const orderbook = await client.orderbook.get('BTC');
- * console.log(`BTC mid price: ${orderbook.mid_price}`);
+ * // Hyperliquid data
+ * const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
+ * console.log(`BTC mid price: ${hlOrderbook.mid_price}`);
+ *
+ * // Lighter.xyz data
+ * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
  *
  * // Get historical data
- * const history = await client.orderbook.history('ETH', {
+ * const history = await client.hyperliquid.orderbook.history('ETH', {
  *   start: Date.now() - 86400000,
  *   end: Date.now(),
  *   limit: 100
  * });
  *
  * // List all instruments
- * const instruments = await client.instruments.list();
+ * const instruments = await client.hyperliquid.instruments.list();
+ * ```
+ *
+ * Legacy usage (deprecated, will be removed in v2.0):
+ * ```typescript
+ * // These still work but use client.hyperliquid.* instead
+ * const orderbook = await client.orderbook.get('BTC');  // deprecated
  * ```
  */
 export class OxArchive {
   private http: HttpClient;
 
   /**
-   * Order book data (L2 snapshots from April 2023)
+   * Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)
+   */
+  public readonly hyperliquid: HyperliquidClient;
+
+  /**
+   * Lighter.xyz exchange data (orderbook reconstructed from checkpoints + deltas)
+   */
+  public readonly lighter: LighterClient;
+
+  /**
+   * @deprecated Use client.hyperliquid.orderbook instead
    */
   public readonly orderbook: OrderBookResource;
 
   /**
-   * Trade/fill history
+   * @deprecated Use client.hyperliquid.trades instead
    */
   public readonly trades: TradesResource;
 
   /**
-   * Trading instruments metadata
+   * @deprecated Use client.hyperliquid.instruments instead
    */
   public readonly instruments: InstrumentsResource;
 
   /**
-   * Funding rates
+   * @deprecated Use client.hyperliquid.funding instead
    */
   public readonly funding: FundingResource;
 
   /**
-   * Open interest
+   * @deprecated Use client.hyperliquid.openInterest instead
    */
   public readonly openInterest: OpenInterestResource;
 
@@ -80,11 +104,18 @@ export class OxArchive {
       validate: options.validate ?? false,
     });
 
-    // Initialize resource namespaces
-    this.orderbook = new OrderBookResource(this.http);
-    this.trades = new TradesResource(this.http);
-    this.instruments = new InstrumentsResource(this.http);
-    this.funding = new FundingResource(this.http);
-    this.openInterest = new OpenInterestResource(this.http);
+    // Exchange-specific clients (recommended)
+    this.hyperliquid = new HyperliquidClient(this.http);
+    this.lighter = new LighterClient(this.http);
+
+    // Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
+    // These will be removed in v2.0
+    // Note: Using /v1/hyperliquid base path for backward compatibility
+    const legacyBase = '/v1/hyperliquid';
+    this.orderbook = new OrderBookResource(this.http, legacyBase);
+    this.trades = new TradesResource(this.http, legacyBase);
+    this.instruments = new InstrumentsResource(this.http, legacyBase);
+    this.funding = new FundingResource(this.http, legacyBase);
+    this.openInterest = new OpenInterestResource(this.http, legacyBase);
   }
 }

@@ -31,7 +31,7 @@ import { TradeArrayResponseSchema } from '../schemas';
  * ```
  */
 export class TradesResource {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private basePath: string = '/v1') {}
 
   /**
    * Get trade history for a coin using cursor-based pagination
@@ -65,7 +65,7 @@ export class TradesResource {
    */
   async list(coin: string, params: GetTradesCursorParams): Promise<CursorResponse<Trade[]>> {
     const response = await this.http.get<ApiResponse<Trade[]>>(
-      `/v1/trades/${coin.toUpperCase()}`,
+      `${this.basePath}/trades/${coin.toUpperCase()}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? TradeArrayResponseSchema : undefined
     );

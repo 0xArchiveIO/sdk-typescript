@@ -1,17 +1,24 @@
 /**
  * @0xarchive/sdk - Official TypeScript SDK for 0xarchive
  *
+ * Historical Market Data API for multiple exchanges:
+ * - Hyperliquid (perpetuals data from April 2023)
+ * - Lighter.xyz (perpetuals data)
+ *
  * @example
  * ```typescript
  * import { OxArchive } from '@0xarchive/sdk';
  *
  * const client = new OxArchive({ apiKey: 'ox_your_api_key' });
  *
- * // Get current order book
- * const orderbook = await client.orderbook.get('BTC');
+ * // Hyperliquid data
+ * const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
+ *
+ * // Lighter.xyz data
+ * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
  *
  * // Get historical snapshots
- * const history = await client.orderbook.history('ETH', {
+ * const history = await client.hyperliquid.orderbook.history('ETH', {
  *   start: Date.now() - 86400000,
  *   end: Date.now()
  * });
@@ -22,6 +29,9 @@
 
 // Main client
 export { OxArchive } from './client';
+
+// Exchange clients
+export { HyperliquidClient, LighterClient } from './exchanges';
 
 // WebSocket client
 export { OxArchiveWs } from './websocket';

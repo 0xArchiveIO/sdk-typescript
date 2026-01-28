@@ -15,7 +15,7 @@ import { InstrumentResponseSchema, InstrumentArrayResponseSchema } from '../sche
  * ```
  */
 export class InstrumentsResource {
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private basePath: string = '/v1') {}
 
   /**
    * List all available trading instruments
@@ -24,7 +24,7 @@ export class InstrumentsResource {
    */
   async list(): Promise<Instrument[]> {
     const response = await this.http.get<ApiResponse<Instrument[]>>(
-      '/v1/instruments',
+      `${this.basePath}/instruments`,
       undefined,
       this.http.validationEnabled ? InstrumentArrayResponseSchema : undefined
     );
@@ -39,7 +39,7 @@ export class InstrumentsResource {
    */
   async get(coin: string): Promise<Instrument> {
     const response = await this.http.get<ApiResponse<Instrument>>(
-      `/v1/instruments/${coin.toUpperCase()}`,
+      `${this.basePath}/instruments/${coin.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? InstrumentResponseSchema : undefined
     );
