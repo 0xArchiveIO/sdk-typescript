@@ -218,6 +218,64 @@ const history = await client.hyperliquid.openInterest.history('ETH', {
 });
 ```
 
+### Candles (OHLCV)
+
+Get historical OHLCV candle data aggregated from trades.
+
+```typescript
+// Get candle history (start is required)
+const candles = await client.hyperliquid.candles.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h',  // 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
+  limit: 100
+});
+
+// Iterate through candles
+for (const candle of candles.data) {
+  console.log(`${candle.timestamp}: O=${candle.open} H=${candle.high} L=${candle.low} C=${candle.close} V=${candle.volume}`);
+}
+
+// Cursor-based pagination for large datasets
+let result = await client.hyperliquid.candles.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1m',
+  limit: 1000
+});
+const allCandles = [...result.data];
+while (result.nextCursor) {
+  result = await client.hyperliquid.candles.history('BTC', {
+    start: Date.now() - 86400000,
+    end: Date.now(),
+    interval: '1m',
+    cursor: result.nextCursor,
+    limit: 1000
+  });
+  allCandles.push(...result.data);
+}
+
+// Lighter.xyz candles
+const lighterCandles = await client.lighter.candles.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '15m'
+});
+```
+
+#### Available Intervals
+
+| Interval | Description |
+|----------|-------------|
+| `1m` | 1 minute |
+| `5m` | 5 minutes |
+| `15m` | 15 minutes |
+| `30m` | 30 minutes |
+| `1h` | 1 hour (default) |
+| `4h` | 4 hours |
+| `1d` | 1 day |
+| `1w` | 1 week |
+
 ### Legacy API (Deprecated)
 
 The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:
@@ -382,12 +440,40 @@ const ws = new OxArchiveWs({
 
 ### Available Channels
 
-| Channel | Description | Requires Coin |
-|---------|-------------|---------------|
-| `orderbook` | L2 order book updates | Yes |
-| `trades` | Trade/fill updates | Yes |
-| `ticker` | Price and 24h volume | Yes |
-| `all_tickers` | All market tickers | No |
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `orderbook` | L2 order book updates | Yes | Yes |
+| `trades` | Trade/fill updates | Yes | Yes |
+| `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
+| `ticker` | Price and 24h volume | Yes | Real-time only |
+| `all_tickers` | All market tickers | No | Real-time only |
+
+#### Candle Replay/Stream
+
+```typescript
+// Replay candles at 10x speed
+ws.replay('candles', 'BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  speed: 10,
+  interval: '15m'  // 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
+});
+
+// Bulk stream candles
+ws.stream('candles', 'ETH', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  batchSize: 1000,
+  interval: '1h'
+});
+
+// Lighter.xyz candles
+ws.replay('lighter_candles', 'BTC', {
+  start: Date.now() - 86400000,
+  speed: 10,
+  interval: '5m'
+});
+```
 
 ### WebSocket Connection States
 

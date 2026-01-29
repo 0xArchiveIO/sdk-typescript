@@ -64,6 +64,10 @@ export {
   OpenInterestSchema,
   OpenInterestResponseSchema,
   OpenInterestArrayResponseSchema,
+  // Candle schemas
+  CandleIntervalSchema,
+  CandleSchema,
+  CandleArrayResponseSchema,
   // WebSocket schemas
   WsChannelSchema,
   WsConnectionStateSchema,
@@ -93,6 +97,7 @@ export {
   type ValidatedInstrument,
   type ValidatedFundingRate,
   type ValidatedOpenInterest,
+  type ValidatedCandle,
   type ValidatedWsServerMessage,
 } from './schemas';
 
@@ -122,6 +127,10 @@ export type {
   FundingRate,
   // Open Interest
   OpenInterest,
+  // Candles
+  Candle,
+  CandleInterval,
+  CandleHistoryParams,
   // WebSocket
   WsChannel,
   WsOptions,
