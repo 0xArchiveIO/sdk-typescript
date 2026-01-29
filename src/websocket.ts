@@ -49,9 +49,11 @@ import type {
   WsConnectionState,
   WsEventHandlers,
   OrderBook,
+  OrderbookDelta,
   PriceLevel,
   Trade,
   WsHistoricalData,
+  WsHistoricalTickData,
   WsHistoricalBatch,
   WsReplayStarted,
   WsReplayCompleted,
@@ -198,6 +200,7 @@ export class OxArchiveWs {
 
   // Typed event handlers (separate from WsEventHandlers to avoid wrapping issues)
   private historicalDataHandlers: Array<(coin: string, timestamp: number, data: unknown) => void> = [];
+  private historicalTickDataHandlers: Array<(coin: string, checkpoint: OrderBook, deltas: OrderbookDelta[]) => void> = [];
   private batchHandlers: Array<(coin: string, records: Array<{ timestamp: number; data: unknown }>) => void> = [];
   private replayStartHandlers: Array<(channel: WsChannel, coin: string, start: number, end: number, speed: number) => void> = [];
   private replayCompleteHandlers: Array<(channel: WsChannel, coin: string, snapshotsSent: number) => void> = [];
@@ -405,6 +408,7 @@ export class OxArchiveWs {
       start: number;
       end?: number;
       speed?: number;
+      granularity?: string;
     }
   ): void {
     this.send({
@@ -414,6 +418,7 @@ export class OxArchiveWs {
       start: options.start,
       end: options.end,
       speed: options.speed ?? 1,
+      granularity: options.granularity,
     });
   }
 
@@ -473,6 +478,7 @@ export class OxArchiveWs {
       start: number;
       end: number;
       batchSize?: number;
+      granularity?: string;
     }
   ): void {
     this.send({
@@ -482,6 +488,7 @@ export class OxArchiveWs {
       start: options.start,
       end: options.end,
       batch_size: options.batchSize ?? 1000,
+      granularity: options.granularity,
     });
   }
 
@@ -503,6 +510,17 @@ export class OxArchiveWs {
     handler: (coin: string, timestamp: number, data: T) => void
   ): void {
     this.historicalDataHandlers.push(handler as (coin: string, timestamp: number, data: unknown) => void);
+  }
+
+  /**
+   * Handle historical tick data (granularity='tick' mode)
+   * Receives a checkpoint (full orderbook) followed by incremental deltas.
+   * This is for tick-level granularity on Lighter.xyz orderbook data.
+   */
+  onHistoricalTickData(
+    handler: (coin: string, checkpoint: OrderBook, deltas: OrderbookDelta[]) => void
+  ): void {
+    this.historicalTickDataHandlers.push(handler);
   }
 
   /**
@@ -671,6 +689,13 @@ export class OxArchiveWs {
         const msg = message as WsHistoricalData;
         for (const handler of this.historicalDataHandlers) {
           handler(msg.coin, msg.timestamp, msg.data);
+        }
+        break;
+      }
+      case 'historical_tick_data': {
+        const msg = message as WsHistoricalTickData;
+        for (const handler of this.historicalTickDataHandlers) {
+          handler(msg.coin, msg.checkpoint, msg.deltas);
         }
         break;
       }
