@@ -6,6 +6,7 @@ import {
   LighterInstrumentsResource,
   FundingResource,
   OpenInterestResource,
+  CandlesResource,
 } from './resources';
 
 /**
@@ -46,6 +47,11 @@ export class HyperliquidClient {
    */
   public readonly openInterest: OpenInterestResource;
 
+  /**
+   * OHLCV candle data
+   */
+  public readonly candles: CandlesResource;
+
   constructor(http: HttpClient) {
     const basePath = '/v1/hyperliquid';
     this.orderbook = new OrderBookResource(http, basePath);
@@ -53,6 +59,7 @@ export class HyperliquidClient {
     this.instruments = new InstrumentsResource(http, basePath);
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
+    this.candles = new CandlesResource(http, basePath);
   }
 }
 
@@ -96,6 +103,11 @@ export class LighterClient {
    */
   public readonly openInterest: OpenInterestResource;
 
+  /**
+   * OHLCV candle data
+   */
+  public readonly candles: CandlesResource;
+
   constructor(http: HttpClient) {
     const basePath = '/v1/lighter';
     this.orderbook = new OrderBookResource(http, basePath);
@@ -103,5 +115,6 @@ export class LighterClient {
     this.instruments = new LighterInstrumentsResource(http, basePath);
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
+    this.candles = new CandlesResource(http, basePath);
   }
 }

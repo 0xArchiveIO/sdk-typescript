@@ -303,11 +303,48 @@ export interface OpenInterest {
 export interface OpenInterestHistoryParams extends CursorPaginationParams {}
 
 // =============================================================================
+// Candle Types
+// =============================================================================
+
+/** Candle interval for OHLCV data */
+export type CandleInterval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
+
+/**
+ * OHLCV candle data
+ */
+export interface Candle {
+  /** Candle open timestamp (UTC) */
+  timestamp: string;
+  /** Opening price */
+  open: number;
+  /** Highest price during the interval */
+  high: number;
+  /** Lowest price during the interval */
+  low: number;
+  /** Closing price */
+  close: number;
+  /** Total volume traded during the interval */
+  volume: number;
+  /** Total quote volume (volume * price) */
+  quoteVolume?: number;
+  /** Number of trades during the interval */
+  tradeCount?: number;
+}
+
+/**
+ * Parameters for getting candle history
+ */
+export interface CandleHistoryParams extends CursorPaginationParams {
+  /** Candle interval (default: 1h) */
+  interval?: CandleInterval;
+}
+
+// =============================================================================
 // WebSocket Types
 // =============================================================================
 
 /** WebSocket channel types. Note: ticker/all_tickers are real-time only. */
-export type WsChannel = 'orderbook' | 'trades' | 'ticker' | 'all_tickers';
+export type WsChannel = 'orderbook' | 'trades' | 'candles' | 'ticker' | 'all_tickers';
 
 /** Subscribe message from client */
 export interface WsSubscribe {

@@ -127,10 +127,27 @@ export const OpenInterestSchema = z.object({
 });
 
 // =============================================================================
+// Candle Schemas
+// =============================================================================
+
+export const CandleIntervalSchema = z.enum(['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w']);
+
+export const CandleSchema = z.object({
+  timestamp: z.string(),
+  open: z.number(),
+  high: z.number(),
+  low: z.number(),
+  close: z.number(),
+  volume: z.number(),
+  quoteVolume: z.number().optional(),
+  tradeCount: z.number().optional(),
+});
+
+// =============================================================================
 // WebSocket Message Schemas
 // =============================================================================
 
-export const WsChannelSchema = z.enum(['orderbook', 'trades', 'ticker', 'all_tickers']);
+export const WsChannelSchema = z.enum(['orderbook', 'trades', 'candles', 'ticker', 'all_tickers']);
 
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
 
@@ -273,6 +290,7 @@ export const FundingRateResponseSchema = ApiResponseSchema(FundingRateSchema);
 export const FundingRateArrayResponseSchema = ApiResponseSchema(z.array(FundingRateSchema));
 export const OpenInterestResponseSchema = ApiResponseSchema(OpenInterestSchema);
 export const OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(OpenInterestSchema));
+export const CandleArrayResponseSchema = ApiResponseSchema(z.array(CandleSchema));
 
 // =============================================================================
 // Type exports (inferred from schemas)
@@ -285,4 +303,5 @@ export type ValidatedTrade = z.infer<typeof TradeSchema>;
 export type ValidatedInstrument = z.infer<typeof InstrumentSchema>;
 export type ValidatedFundingRate = z.infer<typeof FundingRateSchema>;
 export type ValidatedOpenInterest = z.infer<typeof OpenInterestSchema>;
+export type ValidatedCandle = z.infer<typeof CandleSchema>;
 export type ValidatedWsServerMessage = z.infer<typeof WsServerMessageSchema>;
