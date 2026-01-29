@@ -77,6 +77,19 @@ const history = await client.hyperliquid.orderbook.history('BTC', {
 });
 ```
 
+#### Orderbook Depth Limits
+
+The `depth` parameter controls how many price levels are returned per side. Tier-based limits apply:
+
+| Tier | Max Depth |
+|------|-----------|
+| Free | 20 |
+| Build | 50 |
+| Pro | 100 |
+| Enterprise | Full Depth |
+
+**Note:** Hyperliquid source data only contains 20 levels. Higher limits apply to Lighter.xyz data.
+
 #### Lighter Orderbook Granularity
 
 Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions. Tier restrictions apply.
