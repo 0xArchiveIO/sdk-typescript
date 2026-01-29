@@ -81,7 +81,7 @@ export class OrderBookResource {
     params: OrderBookHistoryParams
   ): Promise<CursorResponse<OrderBook[]>> {
     const response = await this.http.get<ApiResponse<OrderBook[]>>(
-      `/v1/orderbook/${coin.toUpperCase()}/history`,
+      `${this.basePath}/orderbook/${coin.toUpperCase()}/history`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookArrayResponseSchema : undefined
     );

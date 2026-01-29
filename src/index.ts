@@ -107,6 +107,7 @@ export type {
   OrderBook,
   GetOrderBookParams,
   OrderBookHistoryParams,
+  LighterGranularity,
   // Trades
   Trade,
   GetTradesCursorParams,

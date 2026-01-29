@@ -77,6 +77,43 @@ const history = await client.hyperliquid.orderbook.history('BTC', {
 });
 ```
 
+#### Lighter Orderbook Granularity
+
+Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions. Tier restrictions apply.
+
+| Granularity | Interval | Tier Required | Credit Multiplier |
+|-------------|----------|---------------|-------------------|
+| `checkpoint` | ~60s | Free+ | 1x |
+| `30s` | 30s | Build+ | 2x |
+| `10s` | 10s | Build+ | 3x |
+| `1s` | 1s | Pro+ | 10x |
+| `tick` | tick-level | Enterprise | 20x |
+
+```typescript
+// Get Lighter orderbook history with 10s resolution (Build+ tier)
+const history = await client.lighter.orderbook.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  granularity: '10s'
+});
+
+// Get 1-second resolution (Pro+ tier)
+const history = await client.lighter.orderbook.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  granularity: '1s'
+});
+
+// Tick-level data (Enterprise tier) - returns checkpoint + raw deltas
+const history = await client.lighter.orderbook.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  granularity: 'tick'
+});
+```
+
+**Note:** The `granularity` parameter is ignored for Hyperliquid orderbook history.
+
 ### Trades
 
 The trades API uses cursor-based pagination for efficient retrieval of large datasets.
@@ -377,6 +414,7 @@ import type {
   Trade,
   Instrument,
   LighterInstrument,
+  LighterGranularity,
   FundingRate,
   OpenInterest,
   CursorResponse,

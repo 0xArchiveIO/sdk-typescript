@@ -77,9 +77,28 @@ export interface GetOrderBookParams {
   depth?: number;
 }
 
+/**
+ * Lighter orderbook data granularity levels.
+ * Controls the resolution of historical orderbook data (Lighter.xyz only).
+ *
+ * - 'checkpoint': ~60s intervals (default, all tiers)
+ * - '30s': 30 second intervals (Build+ tier)
+ * - '10s': 10 second intervals (Build+ tier)
+ * - '1s': 1 second intervals (Pro+ tier)
+ * - 'tick': Checkpoint + raw deltas (Enterprise tier only)
+ */
+export type LighterGranularity = 'checkpoint' | '30s' | '10s' | '1s' | 'tick';
+
 export interface OrderBookHistoryParams extends CursorPaginationParams {
   /** Number of price levels to return per side */
   depth?: number;
+  /**
+   * Data resolution for Lighter orderbook history (Lighter.xyz only, ignored for Hyperliquid).
+   * Controls the granularity of returned snapshots. Tier restrictions apply.
+   * Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
+   * @default 'checkpoint'
+   */
+  granularity?: LighterGranularity;
 }
 
 // =============================================================================
