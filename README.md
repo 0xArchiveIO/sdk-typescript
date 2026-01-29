@@ -305,6 +305,20 @@ ws.replay('orderbook', 'BTC', {
   speed: 10                       // Optional, defaults to 1x
 });
 
+// Lighter.xyz replay with granularity (tier restrictions apply)
+ws.replay('orderbook', 'BTC', {
+  start: Date.now() - 86400000,
+  speed: 10,
+  granularity: '10s'  // Options: 'checkpoint', '30s', '10s', '1s', 'tick'
+});
+
+// Handle tick-level data (granularity='tick', Enterprise tier)
+ws.onHistoricalTickData((coin, checkpoint, deltas) => {
+  console.log(`Checkpoint: ${checkpoint.bids.length} bids`);
+  console.log(`Deltas: ${deltas.length} updates`);
+  // Apply deltas to checkpoint to reconstruct orderbook at any point
+});
+
 // Control playback
 ws.replayPause();
 ws.replayResume();
@@ -340,6 +354,13 @@ ws.stream('orderbook', 'ETH', {
   start: Date.now() - 3600000,  // 1 hour ago
   end: Date.now(),
   batchSize: 1000               // Optional, defaults to 1000
+});
+
+// Lighter.xyz stream with granularity (tier restrictions apply)
+ws.stream('orderbook', 'BTC', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  granularity: '10s'  // Options: 'checkpoint', '30s', '10s', '1s', 'tick'
 });
 
 // Stop if needed

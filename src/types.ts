@@ -339,6 +339,8 @@ export interface WsReplay {
   end?: number;
   /** Playback speed multiplier (1 = real-time, 10 = 10x faster) */
   speed?: number;
+  /** Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick') */
+  granularity?: string;
 }
 
 /** Replay control messages */
@@ -358,6 +360,8 @@ export interface WsStream {
   end: number;
   /** Batch size (records per message) */
   batch_size?: number;
+  /** Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick') */
+  granularity?: string;
 }
 
 /** Stream control messages */
@@ -456,6 +460,31 @@ export interface WsHistoricalData<T = unknown> {
   data: T;
 }
 
+/** Orderbook delta for tick-level data */
+export interface OrderbookDelta {
+  /** Timestamp in milliseconds */
+  timestamp: number;
+  /** Side: 'bid' or 'ask' */
+  side: 'bid' | 'ask';
+  /** Price level */
+  price: number;
+  /** New size (0 = level removed) */
+  size: number;
+  /** Sequence number for ordering */
+  sequence: number;
+}
+
+/** Historical tick data (granularity='tick' mode) - checkpoint + deltas */
+export interface WsHistoricalTickData {
+  type: 'historical_tick_data';
+  channel: WsChannel;
+  coin: string;
+  /** Initial checkpoint (full orderbook snapshot) */
+  checkpoint: OrderBook;
+  /** Incremental deltas to apply after checkpoint */
+  deltas: OrderbookDelta[];
+}
+
 /** Stream started response */
 export interface WsStreamStarted {
   type: 'stream_started';
@@ -514,6 +543,7 @@ export type WsServerMessage =
   | WsReplayCompleted
   | WsReplayStopped
   | WsHistoricalData
+  | WsHistoricalTickData
   | WsStreamStarted
   | WsStreamProgress
   | WsHistoricalBatch
