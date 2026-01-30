@@ -303,6 +303,53 @@ export interface OpenInterest {
 export interface OpenInterestHistoryParams extends CursorPaginationParams {}
 
 // =============================================================================
+// Liquidation Types
+// =============================================================================
+
+/**
+ * Liquidation event record
+ */
+export interface Liquidation {
+  /** Trading pair symbol */
+  coin: string;
+  /** Liquidation timestamp (UTC) */
+  timestamp: string;
+  /** Address of the liquidated user */
+  liquidatedUser: string;
+  /** Address of the liquidator */
+  liquidatorUser: string;
+  /** Liquidation execution price */
+  price: string;
+  /** Liquidation size */
+  size: string;
+  /** Side: 'B' (buy) or 'S' (sell) */
+  side: 'B' | 'S';
+  /** Mark price at time of liquidation */
+  markPrice?: string;
+  /** Realized PnL from the liquidation */
+  closedPnl?: string;
+  /** Position direction (e.g., 'Open Long', 'Close Short') */
+  direction?: string;
+  /** Unique trade ID */
+  tradeId?: number;
+  /** Blockchain transaction hash */
+  txHash?: string;
+}
+
+/**
+ * Parameters for getting liquidation history
+ */
+export interface LiquidationHistoryParams extends CursorPaginationParams {}
+
+/**
+ * Parameters for getting liquidations by user
+ */
+export interface LiquidationsByUserParams extends CursorPaginationParams {
+  /** Optional coin filter */
+  coin?: string;
+}
+
+// =============================================================================
 // Candle Types
 // =============================================================================
 
@@ -343,8 +390,8 @@ export interface CandleHistoryParams extends CursorPaginationParams {
 // WebSocket Types
 // =============================================================================
 
-/** WebSocket channel types. Note: ticker/all_tickers are real-time only. */
-export type WsChannel = 'orderbook' | 'trades' | 'candles' | 'ticker' | 'all_tickers';
+/** WebSocket channel types. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+). */
+export type WsChannel = 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers';
 
 /** Subscribe message from client */
 export interface WsSubscribe {

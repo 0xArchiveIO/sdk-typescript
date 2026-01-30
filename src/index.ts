@@ -68,6 +68,10 @@ export {
   CandleIntervalSchema,
   CandleSchema,
   CandleArrayResponseSchema,
+  // Liquidation schemas
+  LiquidationSideSchema,
+  LiquidationSchema,
+  LiquidationArrayResponseSchema,
   // WebSocket schemas
   WsChannelSchema,
   WsConnectionStateSchema,
@@ -98,6 +102,7 @@ export {
   type ValidatedFundingRate,
   type ValidatedOpenInterest,
   type ValidatedCandle,
+  type ValidatedLiquidation,
   type ValidatedWsServerMessage,
 } from './schemas';
 
@@ -131,6 +136,10 @@ export type {
   Candle,
   CandleInterval,
   CandleHistoryParams,
+  // Liquidations
+  Liquidation,
+  LiquidationHistoryParams,
+  LiquidationsByUserParams,
   // WebSocket
   WsChannel,
   WsOptions,

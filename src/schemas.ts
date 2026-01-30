@@ -127,6 +127,27 @@ export const OpenInterestSchema = z.object({
 });
 
 // =============================================================================
+// Liquidation Schemas
+// =============================================================================
+
+export const LiquidationSideSchema = z.enum(['B', 'S']);
+
+export const LiquidationSchema = z.object({
+  coin: z.string(),
+  timestamp: z.string(),
+  liquidatedUser: z.string(),
+  liquidatorUser: z.string(),
+  price: z.string(),
+  size: z.string(),
+  side: LiquidationSideSchema,
+  markPrice: z.string().optional(),
+  closedPnl: z.string().optional(),
+  direction: z.string().optional(),
+  tradeId: z.number().optional(),
+  txHash: z.string().optional(),
+});
+
+// =============================================================================
 // Candle Schemas
 // =============================================================================
 
@@ -147,7 +168,7 @@ export const CandleSchema = z.object({
 // WebSocket Message Schemas
 // =============================================================================
 
-export const WsChannelSchema = z.enum(['orderbook', 'trades', 'candles', 'ticker', 'all_tickers']);
+export const WsChannelSchema = z.enum(['orderbook', 'trades', 'candles', 'liquidations', 'ticker', 'all_tickers']);
 
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
 
@@ -291,6 +312,7 @@ export const FundingRateArrayResponseSchema = ApiResponseSchema(z.array(FundingR
 export const OpenInterestResponseSchema = ApiResponseSchema(OpenInterestSchema);
 export const OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(OpenInterestSchema));
 export const CandleArrayResponseSchema = ApiResponseSchema(z.array(CandleSchema));
+export const LiquidationArrayResponseSchema = ApiResponseSchema(z.array(LiquidationSchema));
 
 // =============================================================================
 // Type exports (inferred from schemas)
@@ -304,4 +326,5 @@ export type ValidatedInstrument = z.infer<typeof InstrumentSchema>;
 export type ValidatedFundingRate = z.infer<typeof FundingRateSchema>;
 export type ValidatedOpenInterest = z.infer<typeof OpenInterestSchema>;
 export type ValidatedCandle = z.infer<typeof CandleSchema>;
+export type ValidatedLiquidation = z.infer<typeof LiquidationSchema>;
 export type ValidatedWsServerMessage = z.infer<typeof WsServerMessageSchema>;

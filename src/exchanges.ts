@@ -7,6 +7,7 @@ import {
   FundingResource,
   OpenInterestResource,
   CandlesResource,
+  LiquidationsResource,
 } from './resources';
 
 /**
@@ -52,6 +53,11 @@ export class HyperliquidClient {
    */
   public readonly candles: CandlesResource;
 
+  /**
+   * Liquidation events (May 2025+)
+   */
+  public readonly liquidations: LiquidationsResource;
+
   constructor(http: HttpClient) {
     const basePath = '/v1/hyperliquid';
     this.orderbook = new OrderBookResource(http, basePath);
@@ -60,6 +66,7 @@ export class HyperliquidClient {
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
     this.candles = new CandlesResource(http, basePath);
+    this.liquidations = new LiquidationsResource(http, basePath);
   }
 }
 
