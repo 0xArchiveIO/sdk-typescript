@@ -378,6 +378,8 @@ export interface WsReplay {
   speed?: number;
   /** Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick') */
   granularity?: string;
+  /** Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w') */
+  interval?: string;
 }
 
 /** Replay control messages */
@@ -399,6 +401,8 @@ export interface WsStream {
   batch_size?: number;
   /** Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick') */
   granularity?: string;
+  /** Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w') */
+  interval?: string;
 }
 
 /** Stream control messages */

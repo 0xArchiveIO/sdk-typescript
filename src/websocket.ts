@@ -409,6 +409,8 @@ export class OxArchiveWs {
       end?: number;
       speed?: number;
       granularity?: string;
+      /** Candle interval for candles channel (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w) */
+      interval?: string;
     }
   ): void {
     this.send({
@@ -419,6 +421,7 @@ export class OxArchiveWs {
       end: options.end,
       speed: options.speed ?? 1,
       granularity: options.granularity,
+      interval: options.interval,
     });
   }
 
@@ -479,6 +482,8 @@ export class OxArchiveWs {
       end: number;
       batchSize?: number;
       granularity?: string;
+      /** Candle interval for candles channel (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w) */
+      interval?: string;
     }
   ): void {
     this.send({
@@ -489,6 +494,7 @@ export class OxArchiveWs {
       end: options.end,
       batch_size: options.batchSize ?? 1000,
       granularity: options.granularity,
+      interval: options.interval,
     });
   }
 
