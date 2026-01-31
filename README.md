@@ -132,9 +132,6 @@ const history = await client.lighter.orderbook.history('BTC', {
 The trades API uses cursor-based pagination for efficient retrieval of large datasets.
 
 ```typescript
-// Get recent trades
-const recent = await client.hyperliquid.trades.recent('BTC', 100);
-
 // Get trade history with cursor-based pagination
 let result = await client.hyperliquid.trades.list('BTC', {
   start: Date.now() - 86400000,
@@ -153,6 +150,9 @@ while (result.nextCursor) {
   });
   allTrades.push(...result.data);
 }
+
+// Get recent trades (Lighter only - has real-time data)
+const recent = await client.lighter.trades.recent('BTC', 100);
 ```
 
 ### Instruments
