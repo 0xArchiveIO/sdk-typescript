@@ -218,6 +218,38 @@ const history = await client.hyperliquid.openInterest.history('ETH', {
 });
 ```
 
+### Liquidations (Hyperliquid only)
+
+Get historical liquidation events. Data available from May 2025 onwards.
+
+```typescript
+// Get liquidation history for a coin
+const liquidations = await client.hyperliquid.liquidations.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 100
+});
+
+// Paginate through all results
+const allLiquidations = [...liquidations.data];
+while (liquidations.nextCursor) {
+  const next = await client.hyperliquid.liquidations.history('BTC', {
+    start: Date.now() - 86400000,
+    end: Date.now(),
+    cursor: liquidations.nextCursor,
+    limit: 1000
+  });
+  allLiquidations.push(...next.data);
+}
+
+// Get liquidations for a specific user
+const userLiquidations = await client.hyperliquid.liquidations.byUser('0x1234...', {
+  start: Date.now() - 86400000 * 7,
+  end: Date.now(),
+  coin: 'BTC'  // optional filter
+});
+```
+
 ### Candles (OHLCV)
 
 Get historical OHLCV candle data aggregated from trades.
@@ -532,11 +564,13 @@ import type {
   OrderBook,
   PriceLevel,
   Trade,
+  Candle,
   Instrument,
   LighterInstrument,
   LighterGranularity,
   FundingRate,
   OpenInterest,
+  Liquidation,
   CursorResponse,
   WsOptions,
   WsChannel,
