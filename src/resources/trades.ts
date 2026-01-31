@@ -7,11 +7,8 @@ import { TradeArrayResponseSchema } from '../schemas';
  *
  * @example
  * ```typescript
- * // Get recent trades
- * const trades = await client.trades.recent('BTC');
- *
  * // Get trade history with cursor-based pagination (recommended)
- * let result = await client.trades.list('BTC', {
+ * let result = await client.hyperliquid.trades.list('BTC', {
  *   start: Date.now() - 86400000,
  *   end: Date.now(),
  *   limit: 1000
@@ -20,7 +17,7 @@ import { TradeArrayResponseSchema } from '../schemas';
  * // Get all pages
  * const allTrades = [...result.data];
  * while (result.nextCursor) {
- *   result = await client.trades.list('BTC', {
+ *   result = await client.hyperliquid.trades.list('BTC', {
  *     start: Date.now() - 86400000,
  *     end: Date.now(),
  *     cursor: result.nextCursor,
@@ -28,6 +25,9 @@ import { TradeArrayResponseSchema } from '../schemas';
  *   });
  *   allTrades.push(...result.data);
  * }
+ *
+ * // Get recent trades (Lighter only - has real-time data)
+ * const recent = await client.lighter.trades.recent('BTC');
  * ```
  */
 export class TradesResource {
@@ -76,7 +76,11 @@ export class TradesResource {
   }
 
   /**
-   * Get most recent trades for a coin
+   * Get most recent trades for a coin.
+   *
+   * Note: This method is only available for Lighter (client.lighter.trades.recent())
+   * which has real-time data ingestion. Hyperliquid uses hourly backfill so this
+   * endpoint is not available for Hyperliquid.
    *
    * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
    * @param limit - Number of trades to return (default: 100)
