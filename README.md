@@ -308,6 +308,68 @@ const lighterCandles = await client.lighter.candles.history('BTC', {
 | `1d` | 1 day |
 | `1w` | 1 week |
 
+### Data Quality Monitoring
+
+Monitor data coverage, incidents, latency, and SLA compliance across all exchanges.
+
+```typescript
+// Get overall system health status
+const status = await client.dataQuality.status();
+console.log(`System status: ${status.status}`);
+for (const [exchange, info] of Object.entries(status.exchanges)) {
+  console.log(`  ${exchange}: ${info.status}`);
+}
+
+// Get data coverage summary for all exchanges
+const coverage = await client.dataQuality.coverage();
+for (const exchange of coverage.exchanges) {
+  console.log(`${exchange.exchange}:`);
+  for (const [dtype, info] of Object.entries(exchange.dataTypes)) {
+    console.log(`  ${dtype}: ${info.totalRecords.toLocaleString()} records, ${info.completeness}% complete`);
+  }
+}
+
+// Get symbol-specific coverage with gap detection
+const btc = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC');
+const oi = btc.dataTypes.open_interest;
+console.log(`BTC OI completeness: ${oi.completeness}%`);
+console.log(`Gaps found: ${oi.gaps.length}`);
+for (const gap of oi.gaps.slice(0, 5)) {
+  console.log(`  ${gap.durationMinutes} min gap: ${gap.start} -> ${gap.end}`);
+}
+
+// List incidents with filtering
+const result = await client.dataQuality.listIncidents({ status: 'open' });
+for (const incident of result.incidents) {
+  console.log(`[${incident.severity}] ${incident.title}`);
+}
+
+// Get latency metrics
+const latency = await client.dataQuality.latency();
+for (const [exchange, metrics] of Object.entries(latency.exchanges)) {
+  console.log(`${exchange}: OB lag ${metrics.dataFreshness.orderbookLagMs}ms`);
+}
+
+// Get SLA compliance metrics for a specific month
+const sla = await client.dataQuality.sla({ year: 2026, month: 1 });
+console.log(`Period: ${sla.period}`);
+console.log(`Uptime: ${sla.actual.uptime}% (${sla.actual.uptimeStatus})`);
+console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatus})`);
+```
+
+#### Data Quality Endpoints
+
+| Method | Description |
+|--------|-------------|
+| `status()` | Overall system health and per-exchange status |
+| `coverage()` | Data coverage summary for all exchanges |
+| `exchangeCoverage(exchange)` | Coverage details for a specific exchange |
+| `symbolCoverage(exchange, symbol)` | Coverage with gap detection for specific symbol |
+| `listIncidents(params)` | List incidents with filtering and pagination |
+| `getIncident(incidentId)` | Get specific incident details |
+| `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
+| `sla(params)` | SLA compliance metrics for a specific month |
+
 ### Legacy API (Deprecated)
 
 The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:

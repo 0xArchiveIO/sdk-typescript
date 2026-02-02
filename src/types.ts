@@ -701,3 +701,292 @@ export class OxArchiveError extends Error {
 
 /** Timestamp can be Unix ms (number), ISO string, or Date object */
 export type Timestamp = number | string | Date;
+
+// =============================================================================
+// Data Quality Types
+// =============================================================================
+
+/** System status values */
+export type SystemStatusValue = 'operational' | 'degraded' | 'outage' | 'maintenance';
+
+/** Status of a single exchange */
+export interface ExchangeStatus {
+  /** Current status */
+  status: SystemStatusValue;
+  /** Timestamp of last received data */
+  lastDataAt?: string;
+  /** Current latency in milliseconds */
+  latencyMs?: number;
+}
+
+/** Status of a data type (orderbook, fills, etc.) */
+export interface DataTypeStatus {
+  /** Current status */
+  status: SystemStatusValue;
+  /** Data completeness over last 24 hours (0-100) */
+  completeness24h: number;
+}
+
+/** Overall system status response */
+export interface StatusResponse {
+  /** Overall system status */
+  status: SystemStatusValue;
+  /** When this status was computed */
+  updatedAt: string;
+  /** Per-exchange status */
+  exchanges: Record<string, ExchangeStatus>;
+  /** Per-data-type status */
+  dataTypes: Record<string, DataTypeStatus>;
+  /** Number of active incidents */
+  activeIncidents: number;
+}
+
+/** Coverage information for a specific data type */
+export interface DataTypeCoverage {
+  /** Earliest available data timestamp */
+  earliest: string;
+  /** Latest available data timestamp */
+  latest: string;
+  /** Total number of records */
+  totalRecords: number;
+  /** Number of symbols with data */
+  symbols: number;
+  /** Data resolution (e.g., '1.2s', '1m') */
+  resolution?: string;
+  /** Current data lag */
+  lag?: string;
+  /** Completeness percentage (0-100) */
+  completeness: number;
+}
+
+/** Coverage for a single exchange */
+export interface ExchangeCoverage {
+  /** Exchange name */
+  exchange: string;
+  /** Coverage per data type */
+  dataTypes: Record<string, DataTypeCoverage>;
+}
+
+/** Overall coverage response */
+export interface CoverageResponse {
+  /** Coverage for all exchanges */
+  exchanges: ExchangeCoverage[];
+}
+
+/** Gap information for per-symbol coverage */
+export interface CoverageGap {
+  /** Start of the gap (last data before gap) */
+  start: string;
+  /** End of the gap (first data after gap) */
+  end: string;
+  /** Duration of the gap in minutes */
+  durationMinutes: number;
+}
+
+/** Coverage for a specific symbol and data type */
+export interface SymbolDataTypeCoverage {
+  /** Earliest available data timestamp */
+  earliest: string;
+  /** Latest available data timestamp */
+  latest: string;
+  /** Total number of records */
+  totalRecords: number;
+  /** Completeness percentage (0-100) */
+  completeness: number;
+  /** Detected data gaps */
+  gaps: CoverageGap[];
+}
+
+/** Per-symbol coverage response */
+export interface SymbolCoverageResponse {
+  /** Exchange name */
+  exchange: string;
+  /** Symbol name */
+  symbol: string;
+  /** Coverage per data type */
+  dataTypes: Record<string, SymbolDataTypeCoverage>;
+}
+
+/** Incident status values */
+export type IncidentStatusValue = 'open' | 'investigating' | 'identified' | 'monitoring' | 'resolved';
+
+/** Incident severity values */
+export type IncidentSeverityValue = 'minor' | 'major' | 'critical';
+
+/** Data quality incident */
+export interface Incident {
+  /** Unique incident ID */
+  id: string;
+  /** Status: open, investigating, identified, monitoring, resolved */
+  status: string;
+  /** Severity: minor, major, critical */
+  severity: string;
+  /** Affected exchange (if specific to one) */
+  exchange?: string;
+  /** Affected data types */
+  dataTypes: string[];
+  /** Affected symbols */
+  symbolsAffected: string[];
+  /** When the incident started */
+  startedAt: string;
+  /** When the incident was resolved */
+  resolvedAt?: string;
+  /** Total duration in minutes */
+  durationMinutes?: number;
+  /** Incident title */
+  title: string;
+  /** Detailed description */
+  description?: string;
+  /** Root cause analysis */
+  rootCause?: string;
+  /** Resolution details */
+  resolution?: string;
+  /** Number of records affected */
+  recordsAffected?: number;
+  /** Number of records recovered */
+  recordsRecovered?: number;
+}
+
+/** Pagination info for incident list */
+export interface Pagination {
+  /** Total number of incidents */
+  total: number;
+  /** Page size limit */
+  limit: number;
+  /** Current offset */
+  offset: number;
+}
+
+/** Incidents list response */
+export interface IncidentsResponse {
+  /** List of incidents */
+  incidents: Incident[];
+  /** Pagination info */
+  pagination: Pagination;
+}
+
+/** WebSocket latency metrics */
+export interface WebSocketLatency {
+  /** Current latency */
+  currentMs: number;
+  /** 1-hour average latency */
+  avg1hMs: number;
+  /** 24-hour average latency */
+  avg24hMs: number;
+  /** 24-hour P99 latency */
+  p9924hMs?: number;
+}
+
+/** REST API latency metrics */
+export interface RestApiLatency {
+  /** Current latency */
+  currentMs: number;
+  /** 1-hour average latency */
+  avg1hMs: number;
+  /** 24-hour average latency */
+  avg24hMs: number;
+}
+
+/** Data freshness metrics (lag from source) */
+export interface DataFreshness {
+  /** Orderbook data lag */
+  orderbookLagMs?: number;
+  /** Fills/trades data lag */
+  fillsLagMs?: number;
+  /** Funding rate data lag */
+  fundingLagMs?: number;
+  /** Open interest data lag */
+  oiLagMs?: number;
+}
+
+/** Latency metrics for a single exchange */
+export interface ExchangeLatency {
+  /** WebSocket latency metrics */
+  websocket?: WebSocketLatency;
+  /** REST API latency metrics */
+  restApi?: RestApiLatency;
+  /** Data freshness metrics */
+  dataFreshness: DataFreshness;
+}
+
+/** Overall latency response */
+export interface LatencyResponse {
+  /** When these metrics were measured */
+  measuredAt: string;
+  /** Per-exchange latency metrics */
+  exchanges: Record<string, ExchangeLatency>;
+}
+
+/** SLA targets */
+export interface SlaTargets {
+  /** Uptime target percentage */
+  uptime: number;
+  /** Data completeness target percentage */
+  dataCompleteness: number;
+  /** API P99 latency target in milliseconds */
+  apiLatencyP99Ms: number;
+}
+
+/** Completeness metrics per data type */
+export interface CompletenessMetrics {
+  /** Orderbook completeness percentage */
+  orderbook: number;
+  /** Fills completeness percentage */
+  fills: number;
+  /** Funding rate completeness percentage */
+  funding: number;
+  /** Overall completeness percentage */
+  overall: number;
+}
+
+/** Actual SLA metrics */
+export interface SlaActual {
+  /** Actual uptime percentage */
+  uptime: number;
+  /** 'met' or 'missed' */
+  uptimeStatus: string;
+  /** Actual completeness metrics */
+  dataCompleteness: CompletenessMetrics;
+  /** 'met' or 'missed' */
+  completenessStatus: string;
+  /** Actual API P99 latency */
+  apiLatencyP99Ms: number;
+  /** 'met' or 'missed' */
+  latencyStatus: string;
+}
+
+/** SLA compliance response */
+export interface SlaResponse {
+  /** Period covered (e.g., '2026-01') */
+  period: string;
+  /** Target SLA metrics */
+  slaTargets: SlaTargets;
+  /** Actual SLA metrics */
+  actual: SlaActual;
+  /** Number of incidents in this period */
+  incidentsThisPeriod: number;
+  /** Total downtime in minutes */
+  totalDowntimeMinutes: number;
+}
+
+/** Parameters for listing incidents */
+export interface ListIncidentsParams {
+  /** Filter by incident status */
+  status?: IncidentStatusValue;
+  /** Filter by exchange */
+  exchange?: string;
+  /** Only show incidents starting after this timestamp (Unix ms) */
+  since?: number | string;
+  /** Maximum results per page (default: 20, max: 100) */
+  limit?: number;
+  /** Pagination offset */
+  offset?: number;
+}
+
+/** Parameters for getting SLA metrics */
+export interface SlaParams {
+  /** Year (defaults to current year) */
+  year?: number;
+  /** Month 1-12 (defaults to current month) */
+  month?: number;
+}
