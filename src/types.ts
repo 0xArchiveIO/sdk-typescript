@@ -618,6 +618,23 @@ export interface WsStreamStopped {
   snapshots_sent: number;
 }
 
+/**
+ * Gap detected in historical data stream.
+ * Sent when there's a gap exceeding the threshold between consecutive data points.
+ * Thresholds: 2 minutes for orderbook/candles/liquidations, 60 minutes for trades.
+ */
+export interface WsGapDetected {
+  type: 'gap_detected';
+  channel: WsChannel;
+  coin: string;
+  /** Start of the gap (last data point timestamp in ms) */
+  gap_start: number;
+  /** End of the gap (next data point timestamp in ms) */
+  gap_end: number;
+  /** Gap duration in minutes */
+  duration_minutes: number;
+}
+
 /** Server message union type */
 export type WsServerMessage =
   | WsSubscribed
@@ -636,7 +653,8 @@ export type WsServerMessage =
   | WsStreamProgress
   | WsHistoricalBatch
   | WsStreamCompleted
-  | WsStreamStopped;
+  | WsStreamStopped
+  | WsGapDetected;
 
 /**
  * WebSocket connection options.

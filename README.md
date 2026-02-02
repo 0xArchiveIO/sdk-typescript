@@ -519,6 +519,31 @@ ws.stream('orderbook', 'BTC', {
 ws.streamStop();
 ```
 
+### Gap Detection
+
+During historical replay and bulk streaming, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
+
+```typescript
+// Handle gap notifications during replay/stream
+ws.onGap((channel, coin, gapStart, gapEnd, durationMinutes) => {
+  console.log(`Gap detected in ${channel}/${coin}:`);
+  console.log(`  From: ${new Date(gapStart).toISOString()}`);
+  console.log(`  To: ${new Date(gapEnd).toISOString()}`);
+  console.log(`  Duration: ${durationMinutes} minutes`);
+});
+
+// Start replay - gaps will be reported via onGap callback
+ws.replay('orderbook', 'BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  speed: 10
+});
+```
+
+Gap thresholds vary by channel:
+- **orderbook**, **candles**, **liquidations**: 2 minutes
+- **trades**: 60 minutes (trades can naturally have longer gaps during low activity periods)
+
 ### WebSocket Configuration
 
 ```typescript
@@ -539,6 +564,7 @@ const ws = new OxArchiveWs({
 | `orderbook` | L2 order book updates | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
+| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
 

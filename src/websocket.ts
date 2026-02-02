@@ -60,6 +60,7 @@ import type {
   WsStreamStarted,
   WsStreamCompleted,
   WsStreamProgress,
+  WsGapDetected,
 } from './types';
 
 const DEFAULT_WS_URL = 'wss://api.0xarchive.io/ws';
@@ -209,6 +210,7 @@ export class OxArchiveWs {
   private streamCompleteHandlers: Array<(channel: WsChannel, coin: string, snapshotsSent: number) => void> = [];
   private orderbookHandlers: Array<(coin: string, data: OrderBook) => void> = [];
   private tradesHandlers: Array<(coin: string, data: Trade[]) => void> = [];
+  private gapHandlers: Array<(channel: WsChannel, coin: string, gapStart: number, gapEnd: number, durationMinutes: number) => void> = [];
 
   constructor(options: WsOptions) {
     this.options = {
@@ -584,6 +586,28 @@ export class OxArchiveWs {
   }
 
   /**
+   * Handle gap detected events during replay or streaming.
+   * Called when there's a gap in the historical data exceeding the threshold.
+   * Thresholds: 2 minutes for orderbook/candles/liquidations, 60 minutes for trades.
+   *
+   * @param handler - Callback receiving channel, coin, gap start/end timestamps (ms), and duration (minutes)
+   *
+   * @example
+   * ```typescript
+   * ws.onGap((channel, coin, gapStart, gapEnd, durationMinutes) => {
+   *   console.warn(`Gap detected in ${channel} ${coin}: ${durationMinutes} minutes`);
+   *   console.warn(`  From: ${new Date(gapStart).toISOString()}`);
+   *   console.warn(`  To:   ${new Date(gapEnd).toISOString()}`);
+   * });
+   * ```
+   */
+  onGap(
+    handler: (channel: WsChannel, coin: string, gapStart: number, gapEnd: number, durationMinutes: number) => void
+  ): void {
+    this.gapHandlers.push(handler);
+  }
+
+  /**
    * Get current connection state
    */
   getState(): WsConnectionState {
@@ -744,6 +768,13 @@ export class OxArchiveWs {
         const msg = message as WsStreamCompleted;
         for (const handler of this.streamCompleteHandlers) {
           handler(msg.channel, msg.coin, msg.snapshots_sent);
+        }
+        break;
+      }
+      case 'gap_detected': {
+        const msg = message as WsGapDetected;
+        for (const handler of this.gapHandlers) {
+          handler(msg.channel, msg.coin, msg.gap_start, msg.gap_end, msg.duration_minutes);
         }
         break;
       }
