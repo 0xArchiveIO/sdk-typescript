@@ -7,6 +7,7 @@ import {
   InstrumentsResource,
   FundingResource,
   OpenInterestResource,
+  DataQualityResource,
 } from './resources';
 
 const DEFAULT_BASE_URL = 'https://api.0xarchive.io';
@@ -63,6 +64,11 @@ export class OxArchive {
   public readonly lighter: LighterClient;
 
   /**
+   * Data quality metrics: status, coverage, incidents, latency, SLA
+   */
+  public readonly dataQuality: DataQualityResource;
+
+  /**
    * @deprecated Use client.hyperliquid.orderbook instead
    */
   public readonly orderbook: OrderBookResource;
@@ -107,6 +113,9 @@ export class OxArchive {
     // Exchange-specific clients (recommended)
     this.hyperliquid = new HyperliquidClient(this.http);
     this.lighter = new LighterClient(this.http);
+
+    // Data quality monitoring (cross-exchange)
+    this.dataQuality = new DataQualityResource(this.http);
 
     // Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
     // These will be removed in v2.0
