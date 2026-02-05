@@ -36,6 +36,19 @@ export { HyperliquidClient, LighterClient } from './exchanges';
 // WebSocket client
 export { OxArchiveWs } from './websocket';
 
+// Orderbook Reconstructor (for tick-level data)
+export {
+  OrderBookReconstructor,
+  reconstructOrderBook,
+  reconstructFinal,
+  type TickData,
+  type ReconstructedOrderBook,
+  type ReconstructOptions,
+} from './orderbook-reconstructor';
+
+// Tick-level history params
+export type { TickHistoryParams } from './resources/orderbook';
+
 // Zod schemas for runtime validation
 export {
   // Base schemas
@@ -194,6 +207,8 @@ export type {
   WsReplayCompleted,
   WsReplayStopped,
   WsHistoricalData,
+  WsHistoricalTickData,
+  OrderbookDelta,
   // WebSocket Bulk Stream (Option D)
   WsStream,
   WsStreamStop,
