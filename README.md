@@ -127,6 +127,62 @@ const history = await client.lighter.orderbook.history('BTC', {
 
 **Note:** The `granularity` parameter is ignored for Hyperliquid orderbook history.
 
+#### Orderbook Reconstruction (Enterprise Tier)
+
+For tick-level data, the SDK provides client-side orderbook reconstruction. This efficiently reconstructs full orderbook state from a checkpoint and incremental deltas.
+
+```typescript
+import { OrderBookReconstructor } from '@0xarchive/sdk';
+
+// Option 1: Get fully reconstructed snapshots (simplest)
+const snapshots = await client.lighter.orderbook.historyReconstructed('BTC', {
+  start: Date.now() - 3600000,
+  end: Date.now()
+});
+
+for (const ob of snapshots) {
+  console.log(`${ob.timestamp}: bid=${ob.bids[0]?.px} ask=${ob.asks[0]?.px}`);
+}
+
+// Option 2: Get raw tick data for custom reconstruction
+const tickData = await client.lighter.orderbook.historyTick('BTC', {
+  start: Date.now() - 3600000,
+  end: Date.now()
+});
+
+console.log(`Checkpoint: ${tickData.checkpoint.bids.length} bids`);
+console.log(`Deltas: ${tickData.deltas.length} updates`);
+
+// Option 3: Memory-efficient iteration (for large datasets)
+const reconstructor = client.lighter.orderbook.createReconstructor();
+for (const snapshot of reconstructor.iterate(tickData.checkpoint, tickData.deltas)) {
+  // Process each snapshot without loading all into memory
+  if (someCondition(snapshot)) break; // Early exit if needed
+}
+
+// Option 4: Get only final state (most efficient)
+const final = reconstructor.reconstructFinal(tickData.checkpoint, tickData.deltas);
+
+// Check for sequence gaps
+const gaps = OrderBookReconstructor.detectGaps(tickData.deltas);
+if (gaps.length > 0) {
+  console.warn('Sequence gaps detected:', gaps);
+}
+```
+
+**Methods:**
+| Method | Description |
+|--------|-------------|
+| `historyTick(coin, params)` | Get raw checkpoint + deltas for custom reconstruction |
+| `historyReconstructed(coin, params, options)` | Get fully reconstructed snapshots |
+| `createReconstructor()` | Create a reconstructor instance for manual control |
+
+**ReconstructOptions:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `depth` | all | Maximum price levels in output |
+| `emitAll` | `true` | If `false`, only return final state |
+
 ### Trades
 
 The trades API uses cursor-based pagination for efficient retrieval of large datasets.
@@ -663,7 +719,16 @@ import type {
   WsOptions,
   WsChannel,
   WsConnectionState,
+  // Orderbook reconstruction (Enterprise)
+  OrderbookDelta,
+  TickData,
+  ReconstructedOrderBook,
+  ReconstructOptions,
+  TickHistoryParams,
 } from '@0xarchive/sdk';
+
+// Import reconstructor class
+import { OrderBookReconstructor } from '@0xarchive/sdk';
 ```
 
 ## Runtime Validation
