@@ -88,7 +88,7 @@ export class TradesResource {
    */
   async recent(coin: string, limit?: number): Promise<Trade[]> {
     const response = await this.http.get<ApiResponse<Trade[]>>(
-      `/v1/trades/${coin.toUpperCase()}/recent`,
+      `${this.basePath}/trades/${coin.toUpperCase()}/recent`,
       { limit },
       this.http.validationEnabled ? TradeArrayResponseSchema : undefined
     );
