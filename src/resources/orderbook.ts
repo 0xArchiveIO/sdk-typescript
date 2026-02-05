@@ -157,8 +157,10 @@ export class OrderBookResource {
   ): Promise<TickData> {
     const response = await this.http.get<{
       success: boolean;
-      checkpoint?: OrderBook;
-      deltas?: OrderbookDelta[];
+      data?: {
+        checkpoint?: OrderBook;
+        deltas?: OrderbookDelta[];
+      };
       granularity?: string;
       error?: string;
       message?: string;
@@ -170,8 +172,9 @@ export class OrderBookResource {
       } as Record<string, unknown>
     );
 
-    // Check if tick-level data was returned
-    if (!response.checkpoint || !response.deltas) {
+    // Check if tick-level data was returned (nested inside data wrapper)
+    const tickData = response.data;
+    if (!tickData?.checkpoint || !tickData?.deltas) {
       const errorMsg = response.error || response.message ||
         'Tick-level orderbook data requires Enterprise tier. ' +
         'Upgrade your subscription or use a different granularity.';
@@ -179,8 +182,8 @@ export class OrderBookResource {
     }
 
     return {
-      checkpoint: response.checkpoint,
-      deltas: response.deltas,
+      checkpoint: tickData.checkpoint,
+      deltas: tickData.deltas,
     };
   }
 
