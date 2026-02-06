@@ -153,14 +153,24 @@ const tickData = await client.lighter.orderbook.historyTick('BTC', {
 console.log(`Checkpoint: ${tickData.checkpoint.bids.length} bids`);
 console.log(`Deltas: ${tickData.deltas.length} updates`);
 
-// Option 3: Memory-efficient iteration (for large datasets)
+// Option 3: Auto-paginating iterator (recommended for large time ranges)
+// Automatically handles pagination, fetching up to 1,000 deltas per request
+for await (const snapshot of client.lighter.orderbook.iterateTickHistory('BTC', {
+  start: Date.now() - 86400000, // 24 hours of data
+  end: Date.now()
+})) {
+  console.log(snapshot.timestamp, 'Mid:', snapshot.midPrice);
+  if (someCondition(snapshot)) break; // Early exit supported
+}
+
+// Option 4: Manual iteration (single page, for custom logic)
 const reconstructor = client.lighter.orderbook.createReconstructor();
 for (const snapshot of reconstructor.iterate(tickData.checkpoint, tickData.deltas)) {
   // Process each snapshot without loading all into memory
   if (someCondition(snapshot)) break; // Early exit if needed
 }
 
-// Option 4: Get only final state (most efficient)
+// Option 5: Get only final state (most efficient)
 const final = reconstructor.reconstructFinal(tickData.checkpoint, tickData.deltas);
 
 // Check for sequence gaps
@@ -173,9 +183,12 @@ if (gaps.length > 0) {
 **Methods:**
 | Method | Description |
 |--------|-------------|
-| `historyTick(coin, params)` | Get raw checkpoint + deltas for custom reconstruction |
-| `historyReconstructed(coin, params, options)` | Get fully reconstructed snapshots |
+| `historyTick(coin, params)` | Get raw checkpoint + deltas (single page, max 1,000 deltas) |
+| `historyReconstructed(coin, params, options)` | Get fully reconstructed snapshots (single page) |
+| `iterateTickHistory(coin, params, depth?)` | Auto-paginating async iterator for large time ranges |
 | `createReconstructor()` | Create a reconstructor instance for manual control |
+
+**Note:** The API returns a maximum of 1,000 deltas per request. For time ranges with more deltas, use `iterateTickHistory()` which handles pagination automatically.
 
 **ReconstructOptions:**
 | Option | Default | Description |
@@ -210,6 +223,8 @@ while (result.nextCursor) {
 // Get recent trades (Lighter only - has real-time data)
 const recent = await client.lighter.trades.recent('BTC', 100);
 ```
+
+**Note:** The `recent()` method is only available for Lighter.xyz (`client.lighter.trades.recent()`). Hyperliquid does not have a recent trades endpoint - use `list()` with a time range instead.
 
 ### Instruments
 

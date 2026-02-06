@@ -259,4 +259,87 @@ export class OrderBookResource {
   createReconstructor(): OrderBookReconstructor {
     return new OrderBookReconstructor();
   }
+
+  /**
+   * Iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
+   *
+   * This async generator automatically handles pagination, fetching up to 1,000 deltas
+   * per API request and yielding reconstructed orderbook snapshots one at a time.
+   * Memory-efficient for processing large time ranges.
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param params - Time range parameters
+   * @param depth - Maximum price levels to include in output snapshots
+   * @yields Reconstructed orderbook snapshots
+   *
+   * @example
+   * ```typescript
+   * // Process 24 hours of tick data with automatic pagination
+   * for await (const snapshot of client.lighter.orderbook.iterateTickHistory('BTC', {
+   *   start: Date.now() - 86400000,
+   *   end: Date.now()
+   * })) {
+   *   console.log(snapshot.timestamp, 'Mid:', snapshot.midPrice);
+   *   if (someCondition) break; // Early exit supported
+   * }
+   *
+   * // Collect all snapshots (caution: may use significant memory for large ranges)
+   * const allSnapshots: ReconstructedOrderBook[] = [];
+   * for await (const snapshot of client.lighter.orderbook.iterateTickHistory('BTC', { start, end })) {
+   *   allSnapshots.push(snapshot);
+   * }
+   * ```
+   */
+  async *iterateTickHistory(
+    coin: string,
+    params: TickHistoryParams,
+    depth?: number
+  ): AsyncGenerator<ReconstructedOrderBook, void, undefined> {
+    const startTs = typeof params.start === 'string' ? new Date(params.start).getTime() : params.start;
+    const endTs = typeof params.end === 'string' ? new Date(params.end).getTime() : params.end;
+
+    let cursor = startTs;
+    const reconstructor = new OrderBookReconstructor();
+    const MAX_DELTAS_PER_PAGE = 1000;
+    let isFirstPage = true;
+
+    while (cursor < endTs) {
+      const tickData = await this.historyTick(coin, {
+        start: cursor,
+        end: endTs,
+        depth: params.depth,
+      });
+
+      if (tickData.deltas.length === 0) {
+        // No deltas - yield checkpoint only on first page if no data
+        if (isFirstPage) {
+          reconstructor.initialize(tickData.checkpoint);
+          yield reconstructor.getSnapshot(depth);
+        }
+        break;
+      }
+
+      // Yield each reconstructed snapshot
+      // Skip initial checkpoint on subsequent pages to avoid duplicates
+      let skipFirst = !isFirstPage;
+      for (const snapshot of reconstructor.iterate(tickData.checkpoint, tickData.deltas, { depth })) {
+        if (skipFirst) {
+          skipFirst = false;
+          continue;
+        }
+        yield snapshot;
+      }
+
+      isFirstPage = false;
+
+      // Move cursor past the last delta
+      const lastDelta = tickData.deltas[tickData.deltas.length - 1];
+      cursor = lastDelta.timestamp + 1;
+
+      // If we got fewer than max deltas, we've reached the end
+      if (tickData.deltas.length < MAX_DELTAS_PER_PAGE) {
+        break;
+      }
+    }
+  }
 }
