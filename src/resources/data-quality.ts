@@ -9,6 +9,7 @@ import type {
   SlaParams,
   SlaResponse,
   StatusResponse,
+  SymbolCoverageOptions,
   SymbolCoverageResponse,
 } from '../types';
 
@@ -105,11 +106,13 @@ export class DataQualityResource {
   /**
    * Get data coverage for a specific symbol on an exchange
    *
-   * Includes gap detection showing periods where data may be missing.
+   * Includes gap detection, empirical data cadence, and hour-level historical coverage.
+   * Supports optional time bounds for gap detection (default: last 30 days).
    *
    * @param exchange - Exchange name ('hyperliquid' or 'lighter')
    * @param symbol - Symbol name (e.g., 'BTC', 'ETH')
-   * @returns SymbolCoverageResponse with per-data-type coverage including gaps
+   * @param options - Optional time bounds for gap detection window
+   * @returns SymbolCoverageResponse with per-data-type coverage including gaps, cadence, and historical coverage
    *
    * @example
    * ```typescript
@@ -120,11 +123,28 @@ export class DataQualityResource {
    * for (const gap of oi.gaps.slice(0, 3)) {
    *   console.log(`  ${gap.durationMinutes} min gap at ${gap.start}`);
    * }
+   *
+   * // Check cadence
+   * if (btc.dataTypes.orderbook.cadence) {
+   *   console.log(`Cadence: ~${btc.dataTypes.orderbook.cadence.medianIntervalSeconds}s`);
+   * }
+   *
+   * // Time-bounded (last 7 days)
+   * const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+   * const btc7d = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC', {
+   *   from: weekAgo,
+   *   to: Date.now(),
+   * });
    * ```
    */
-  async symbolCoverage(exchange: string, symbol: string): Promise<SymbolCoverageResponse> {
+  async symbolCoverage(
+    exchange: string,
+    symbol: string,
+    options?: SymbolCoverageOptions,
+  ): Promise<SymbolCoverageResponse> {
     return this.http.get<SymbolCoverageResponse>(
-      `${this.basePath}/coverage/${exchange.toLowerCase()}/${symbol.toUpperCase()}`
+      `${this.basePath}/coverage/${exchange.toLowerCase()}/${symbol.toUpperCase()}`,
+      options as unknown as Record<string, unknown>
     );
   }
 

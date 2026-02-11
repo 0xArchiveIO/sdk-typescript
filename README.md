@@ -404,10 +404,24 @@ for (const exchange of coverage.exchanges) {
 const btc = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC');
 const oi = btc.dataTypes.open_interest;
 console.log(`BTC OI completeness: ${oi.completeness}%`);
+console.log(`Historical coverage: ${oi.historicalCoverage}%`);  // Hour-level granularity
 console.log(`Gaps found: ${oi.gaps.length}`);
 for (const gap of oi.gaps.slice(0, 5)) {
   console.log(`  ${gap.durationMinutes} min gap: ${gap.start} -> ${gap.end}`);
 }
+
+// Check empirical data cadence (when available)
+const ob = btc.dataTypes.orderbook;
+if (ob.cadence) {
+  console.log(`Orderbook cadence: ~${ob.cadence.medianIntervalSeconds}s median, p95=${ob.cadence.p95IntervalSeconds}s`);
+}
+
+// Time-bounded gap detection (last 7 days)
+const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+const btc7d = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC', {
+  from: weekAgo,
+  to: Date.now(),
+});
 
 // List incidents with filtering
 const result = await client.dataQuality.listIncidents({ status: 'open' });
@@ -435,11 +449,20 @@ console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatu
 | `status()` | Overall system health and per-exchange status |
 | `coverage()` | Data coverage summary for all exchanges |
 | `exchangeCoverage(exchange)` | Coverage details for a specific exchange |
-| `symbolCoverage(exchange, symbol)` | Coverage with gap detection for specific symbol |
+| `symbolCoverage(exchange, symbol, options?)` | Coverage with gap detection, cadence, and historical coverage |
 | `listIncidents(params)` | List incidents with filtering and pagination |
 | `getIncident(incidentId)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
 | `sla(params)` | SLA compliance metrics for a specific month |
+
+**Note:** Data Quality endpoints (`coverage()`, `exchangeCoverage()`, `symbolCoverage()`) perform complex aggregation queries and may take 30-60 seconds on first request (results are cached server-side for 5 minutes). If you encounter timeout errors, create a client with a longer timeout:
+
+```typescript
+const client = new OxArchive({
+  apiKey: 'ox_your_api_key',
+  timeout: 60000  // 60 seconds for data quality endpoints
+});
+```
 
 ### Legacy API (Deprecated)
 

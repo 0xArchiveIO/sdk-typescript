@@ -801,6 +801,16 @@ export interface CoverageGap {
   durationMinutes: number;
 }
 
+/** Empirical data cadence measurement based on last 7 days of data */
+export interface DataCadence {
+  /** Median interval between consecutive records in seconds */
+  medianIntervalSeconds: number;
+  /** 95th percentile interval between consecutive records in seconds */
+  p95IntervalSeconds: number;
+  /** Number of intervals sampled for this measurement */
+  sampleCount: number;
+}
+
 /** Coverage for a specific symbol and data type */
 export interface SymbolDataTypeCoverage {
   /** Earliest available data timestamp */
@@ -809,10 +819,22 @@ export interface SymbolDataTypeCoverage {
   latest: string;
   /** Total number of records */
   totalRecords: number;
-  /** Completeness percentage (0-100) */
+  /** 24-hour completeness percentage (0-100) */
   completeness: number;
-  /** Detected data gaps */
+  /** Historical coverage percentage (0-100) based on hours with data / total hours */
+  historicalCoverage?: number;
+  /** Detected data gaps within the requested time window */
   gaps: CoverageGap[];
+  /** Empirical data cadence (present when sufficient data exists) */
+  cadence?: DataCadence;
+}
+
+/** Options for symbol coverage query */
+export interface SymbolCoverageOptions {
+  /** Start of gap detection window (Unix milliseconds). Default: now - 30 days */
+  from?: number;
+  /** End of gap detection window (Unix milliseconds). Default: now */
+  to?: number;
 }
 
 /** Per-symbol coverage response */
