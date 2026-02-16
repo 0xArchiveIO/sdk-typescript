@@ -62,7 +62,11 @@ export interface TickHistoryParams {
  * ```
  */
 export class OrderBookResource {
-  constructor(private http: HttpClient, private basePath: string = '/v1') {}
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1',
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+  ) {}
 
   /**
    * Get order book snapshot for a coin
@@ -73,7 +77,7 @@ export class OrderBookResource {
    */
   async get(coin: string, params?: GetOrderBookParams): Promise<OrderBook> {
     const response = await this.http.get<ApiResponse<OrderBook>>(
-      `${this.basePath}/orderbook/${coin.toUpperCase()}`,
+      `${this.basePath}/orderbook/${this.coinTransform(coin)}`,
       params as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookResponseSchema : undefined
     );
@@ -112,7 +116,7 @@ export class OrderBookResource {
     params: OrderBookHistoryParams
   ): Promise<CursorResponse<OrderBook[]>> {
     const response = await this.http.get<ApiResponse<OrderBook[]>>(
-      `${this.basePath}/orderbook/${coin.toUpperCase()}/history`,
+      `${this.basePath}/orderbook/${this.coinTransform(coin)}/history`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookArrayResponseSchema : undefined
     );
@@ -165,7 +169,7 @@ export class OrderBookResource {
       error?: string;
       message?: string;
     }>(
-      `${this.basePath}/orderbook/${coin.toUpperCase()}/history`,
+      `${this.basePath}/orderbook/${this.coinTransform(coin)}/history`,
       {
         ...params,
         granularity: 'tick',

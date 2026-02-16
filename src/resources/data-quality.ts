@@ -88,7 +88,7 @@ export class DataQualityResource {
   /**
    * Get data coverage for a specific exchange
    *
-   * @param exchange - Exchange name ('hyperliquid' or 'lighter')
+   * @param exchange - Exchange name ('hyperliquid', 'lighter', or 'hip3')
    * @returns ExchangeCoverage with coverage info for all data types on this exchange
    *
    * @example
@@ -109,8 +109,8 @@ export class DataQualityResource {
    * Includes gap detection, empirical data cadence, and hour-level historical coverage.
    * Supports optional time bounds for gap detection (default: last 30 days).
    *
-   * @param exchange - Exchange name ('hyperliquid' or 'lighter')
-   * @param symbol - Symbol name (e.g., 'BTC', 'ETH')
+   * @param exchange - Exchange name ('hyperliquid', 'lighter', or 'hip3')
+   * @param symbol - Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
    * @param options - Optional time bounds for gap detection window
    * @returns SymbolCoverageResponse with per-data-type coverage including gaps, cadence, and historical coverage
    *

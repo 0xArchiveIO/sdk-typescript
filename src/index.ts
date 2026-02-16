@@ -3,6 +3,7 @@
  *
  * Historical Market Data API for multiple exchanges:
  * - Hyperliquid (perpetuals data from April 2023)
+ * - Hyperliquid HIP-3 builder perps (Pro+ only, February 2026+)
  * - Lighter.xyz (perpetuals data)
  *
  * @example
@@ -31,7 +32,7 @@
 export { OxArchive } from './client';
 
 // Exchange clients
-export { HyperliquidClient, LighterClient } from './exchanges';
+export { HyperliquidClient, Hip3Client, LighterClient } from './exchanges';
 
 // WebSocket client
 export { OxArchiveWs } from './websocket';

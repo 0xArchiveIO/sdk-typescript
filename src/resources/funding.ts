@@ -31,7 +31,11 @@ import { FundingRateResponseSchema, FundingRateArrayResponseSchema } from '../sc
  * ```
  */
 export class FundingResource {
-  constructor(private http: HttpClient, private basePath: string = '/v1') {}
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1',
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+  ) {}
 
   /**
    * Get funding rate history for a coin with cursor-based pagination
@@ -42,7 +46,7 @@ export class FundingResource {
    */
   async history(coin: string, params: FundingHistoryParams): Promise<CursorResponse<FundingRate[]>> {
     const response = await this.http.get<ApiResponse<FundingRate[]>>(
-      `${this.basePath}/funding/${coin.toUpperCase()}`,
+      `${this.basePath}/funding/${this.coinTransform(coin)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? FundingRateArrayResponseSchema : undefined
     );
@@ -60,7 +64,7 @@ export class FundingResource {
    */
   async current(coin: string): Promise<FundingRate> {
     const response = await this.http.get<ApiResponse<FundingRate>>(
-      `/v1/funding/${coin.toUpperCase()}/current`,
+      `${this.basePath}/funding/${this.coinTransform(coin)}/current`,
       undefined,
       this.http.validationEnabled ? FundingRateResponseSchema : undefined
     );

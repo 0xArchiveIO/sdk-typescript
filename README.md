@@ -4,6 +4,7 @@ Official TypeScript/JavaScript SDK for [0xarchive](https://0xarchive.io) - Histo
 
 Supports multiple exchanges:
 - **Hyperliquid** - Perpetuals data from April 2023
+- **Hyperliquid HIP-3** - Builder-deployed perpetuals (Pro+ only, February 2026+)
 - **Lighter.xyz** - Perpetuals data (August 2025+ for fills, Jan 2026+ for OB, OI, Funding Rate)
 
 ## Installation
@@ -30,6 +31,12 @@ console.log(`Hyperliquid BTC mid price: ${hlOrderbook.midPrice}`);
 // Lighter.xyz data
 const lighterOrderbook = await client.lighter.orderbook.get('BTC');
 console.log(`Lighter BTC mid price: ${lighterOrderbook.midPrice}`);
+
+// HIP-3 builder perps (Pro+ only, February 2026+)
+const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('xyz:XYZ100');
+const hip3Trades = await client.hyperliquid.hip3.trades.recent('xyz:XYZ100');
+const hip3Funding = await client.hyperliquid.hip3.funding.current('xyz:XYZ100');
+const hip3Oi = await client.hyperliquid.hip3.openInterest.current('xyz:XYZ100');
 
 // Get historical order book snapshots
 const history = await client.hyperliquid.orderbook.history('ETH', {
