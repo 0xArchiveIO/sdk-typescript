@@ -31,7 +31,11 @@ import { TradeArrayResponseSchema } from '../schemas';
  * ```
  */
 export class TradesResource {
-  constructor(private http: HttpClient, private basePath: string = '/v1') {}
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1',
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+  ) {}
 
   /**
    * Get trade history for a coin using cursor-based pagination
@@ -65,7 +69,7 @@ export class TradesResource {
    */
   async list(coin: string, params: GetTradesCursorParams): Promise<CursorResponse<Trade[]>> {
     const response = await this.http.get<ApiResponse<Trade[]>>(
-      `${this.basePath}/trades/${coin.toUpperCase()}`,
+      `${this.basePath}/trades/${this.coinTransform(coin)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? TradeArrayResponseSchema : undefined
     );
@@ -78,9 +82,10 @@ export class TradesResource {
   /**
    * Get most recent trades for a coin.
    *
-   * Note: This method is only available for Lighter (client.lighter.trades.recent())
-   * which has real-time data ingestion. Hyperliquid uses hourly backfill so this
-   * endpoint is not available for Hyperliquid.
+   * Note: This method is available for Lighter (client.lighter.trades.recent())
+   * and HIP-3 (client.hyperliquid.hip3.trades.recent()) which have real-time data
+   * ingestion. Hyperliquid uses hourly backfill so this endpoint is not available
+   * for Hyperliquid.
    *
    * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
    * @param limit - Number of trades to return (default: 100)
@@ -88,7 +93,7 @@ export class TradesResource {
    */
   async recent(coin: string, limit?: number): Promise<Trade[]> {
     const response = await this.http.get<ApiResponse<Trade[]>>(
-      `${this.basePath}/trades/${coin.toUpperCase()}/recent`,
+      `${this.basePath}/trades/${this.coinTransform(coin)}/recent`,
       { limit },
       this.http.validationEnabled ? TradeArrayResponseSchema : undefined
     );

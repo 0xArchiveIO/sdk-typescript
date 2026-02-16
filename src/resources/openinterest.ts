@@ -31,7 +31,11 @@ import { OpenInterestResponseSchema, OpenInterestArrayResponseSchema } from '../
  * ```
  */
 export class OpenInterestResource {
-  constructor(private http: HttpClient, private basePath: string = '/v1') {}
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1',
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+  ) {}
 
   /**
    * Get open interest history for a coin with cursor-based pagination
@@ -42,7 +46,7 @@ export class OpenInterestResource {
    */
   async history(coin: string, params: OpenInterestHistoryParams): Promise<CursorResponse<OpenInterest[]>> {
     const response = await this.http.get<ApiResponse<OpenInterest[]>>(
-      `${this.basePath}/openinterest/${coin.toUpperCase()}`,
+      `${this.basePath}/openinterest/${this.coinTransform(coin)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OpenInterestArrayResponseSchema : undefined
     );
@@ -60,7 +64,7 @@ export class OpenInterestResource {
    */
   async current(coin: string): Promise<OpenInterest> {
     const response = await this.http.get<ApiResponse<OpenInterest>>(
-      `/v1/openinterest/${coin.toUpperCase()}/current`,
+      `${this.basePath}/openinterest/${this.coinTransform(coin)}/current`,
       undefined,
       this.http.validationEnabled ? OpenInterestResponseSchema : undefined
     );
