@@ -32,9 +32,10 @@ console.log(`Hyperliquid BTC mid price: ${hlOrderbook.midPrice}`);
 const lighterOrderbook = await client.lighter.orderbook.get('BTC');
 console.log(`Lighter BTC mid price: ${lighterOrderbook.midPrice}`);
 
-// HIP-3 builder perps (Pro+ only, February 2026+)
-const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('xyz:XYZ100');
-const hip3Trades = await client.hyperliquid.hip3.trades.recent('xyz:XYZ100');
+// HIP-3 builder perps (February 2026+)
+const hip3Instruments = await client.hyperliquid.hip3.instruments.list();
+const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('km:US500');
+const hip3Trades = await client.hyperliquid.hip3.trades.recent('km:US500');
 const hip3Funding = await client.hyperliquid.hip3.funding.current('xyz:XYZ100');
 const hip3Oi = await client.hyperliquid.hip3.openInterest.current('xyz:XYZ100');
 
@@ -268,6 +269,28 @@ console.log(`ETH min base amount: ${eth.minBaseAmount}`);
 | Fee info | Not available | `takerFee`, `makerFee`, `liquidationFee` |
 | Market ID | Not available | `marketId` |
 | Min amounts | Not available | `minBaseAmount`, `minQuoteAmount` |
+
+#### HIP-3 Instruments
+
+HIP-3 instruments are derived from live market data and include mark price, open interest, and mid price:
+
+```typescript
+// List all HIP-3 instruments (no tier restriction)
+const hip3Instruments = await client.hyperliquid.hip3.instruments.list();
+for (const inst of hip3Instruments) {
+  console.log(`${inst.coin} (${inst.namespace}:${inst.ticker}): mark=${inst.markPrice}, OI=${inst.openInterest}`);
+}
+
+// Get specific HIP-3 instrument (case-sensitive)
+const us500 = await client.hyperliquid.hip3.instruments.get('km:US500');
+console.log(`Mark price: ${us500.markPrice}`);
+```
+
+**Available HIP-3 Coins:**
+| Builder | Coins |
+|---------|-------|
+| xyz (Hyperliquid) | `xyz:XYZ100` |
+| km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
 
 ### Funding Rates
 
@@ -660,6 +683,8 @@ const ws = new OxArchiveWs({
 
 ### Available Channels
 
+#### Hyperliquid Channels
+
 | Channel | Description | Requires Coin | Historical Support |
 |---------|-------------|---------------|-------------------|
 | `orderbook` | L2 order book updates | Yes | Yes |
@@ -668,6 +693,23 @@ const ws = new OxArchiveWs({
 | `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
+
+#### HIP-3 Builder Perps Channels
+
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
+| `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
+
+> **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
+
+#### Lighter.xyz Channels
+
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | Yes |
+| `lighter_trades` | Lighter trade/fill updates | Yes | Yes |
+| `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
 
 #### Candle Replay/Stream
 
@@ -693,6 +735,24 @@ ws.replay('lighter_candles', 'BTC', {
   start: Date.now() - 86400000,
   speed: 10,
   interval: '5m'
+});
+```
+
+#### HIP-3 Replay/Stream
+
+```typescript
+// Replay HIP-3 orderbook at 50x speed
+ws.replay('hip3_orderbook', 'km:US500', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  speed: 50,
+});
+
+// Bulk stream HIP-3 trades
+ws.stream('hip3_trades', 'xyz:XYZ100', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  batchSize: 1000,
 });
 ```
 
@@ -756,6 +816,7 @@ import type {
   Candle,
   Instrument,
   LighterInstrument,
+  Hip3Instrument,
   LighterGranularity,
   FundingRate,
   OpenInterest,

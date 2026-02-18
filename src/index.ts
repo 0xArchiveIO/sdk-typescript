@@ -141,6 +141,7 @@ export type {
   // Instruments
   Instrument,
   LighterInstrument,
+  Hip3Instrument,
   InstrumentType,
   // Funding
   FundingRate,

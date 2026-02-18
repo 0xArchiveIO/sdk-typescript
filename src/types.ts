@@ -244,6 +244,27 @@ export interface LighterInstrument {
   isActive: boolean;
 }
 
+/**
+ * HIP-3 Builder Perps instrument with latest market data.
+ * Derived from live open interest data.
+ */
+export interface Hip3Instrument {
+  /** Full coin name (e.g., km:US500, xyz:XYZ100) */
+  coin: string;
+  /** Builder namespace (e.g., km, xyz) */
+  namespace: string;
+  /** Ticker within the namespace (e.g., US500, XYZ100) */
+  ticker: string;
+  /** Latest mark price */
+  markPrice?: number;
+  /** Latest open interest */
+  openInterest?: number;
+  /** Latest mid price */
+  midPrice?: number;
+  /** Timestamp of latest data point */
+  latestTimestamp?: string;
+}
+
 // =============================================================================
 // Funding Types
 // =============================================================================
@@ -391,7 +412,10 @@ export interface CandleHistoryParams extends CursorPaginationParams {
 // =============================================================================
 
 /** WebSocket channel types. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+). */
-export type WsChannel = 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers';
+export type WsChannel =
+  | 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers'
+  | 'lighter_orderbook' | 'lighter_trades' | 'lighter_candles'
+  | 'hip3_orderbook' | 'hip3_trades';
 
 /** Subscribe message from client */
 export interface WsSubscribe {

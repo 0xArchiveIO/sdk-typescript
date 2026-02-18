@@ -4,6 +4,7 @@ import {
   TradesResource,
   InstrumentsResource,
   LighterInstrumentsResource,
+  Hip3InstrumentsResource,
   FundingResource,
   OpenInterestResource,
   CandlesResource,
@@ -91,6 +92,11 @@ export class HyperliquidClient {
  */
 export class Hip3Client {
   /**
+   * HIP-3 instruments with latest market data
+   */
+  public readonly instruments: Hip3InstrumentsResource;
+
+  /**
    * Order book snapshots (February 2026+)
    */
   public readonly orderbook: OrderBookResource;
@@ -114,6 +120,7 @@ export class Hip3Client {
     const basePath = '/v1/hyperliquid/hip3';
     // HIP-3 coins use case-sensitive symbols like 'xyz:XYZ100' — do not uppercase
     const coinTransform = (c: string) => c;
+    this.instruments = new Hip3InstrumentsResource(http, basePath, coinTransform);
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.funding = new FundingResource(http, basePath, coinTransform);
