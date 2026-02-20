@@ -700,6 +700,7 @@ const ws = new OxArchiveWs({
 |---------|-------------|---------------|-------------------|
 | `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
 | `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
+| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -753,6 +754,14 @@ ws.stream('hip3_trades', 'xyz:XYZ100', {
   start: Date.now() - 86400000,
   end: Date.now(),
   batchSize: 1000,
+});
+
+// HIP-3 candles
+ws.replay('hip3_candles', 'km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  speed: 100,
+  interval: '1h'
 });
 ```
 

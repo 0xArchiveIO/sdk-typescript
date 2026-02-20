@@ -35,7 +35,11 @@ import { CandleArrayResponseSchema } from '../schemas';
  * ```
  */
 export class CandlesResource {
-  constructor(private http: HttpClient, private basePath: string = '/v1') {}
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1',
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+  ) {}
 
   /**
    * Get historical OHLCV candle data with cursor-based pagination
@@ -46,7 +50,7 @@ export class CandlesResource {
    */
   async history(coin: string, params: CandleHistoryParams): Promise<CursorResponse<Candle[]>> {
     const response = await this.http.get<ApiResponse<Candle[]>>(
-      `${this.basePath}/candles/${coin.toUpperCase()}`,
+      `${this.basePath}/candles/${this.coinTransform(coin)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? CandleArrayResponseSchema : undefined
     );

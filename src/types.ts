@@ -415,7 +415,7 @@ export interface CandleHistoryParams extends CursorPaginationParams {
 export type WsChannel =
   | 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers'
   | 'lighter_orderbook' | 'lighter_trades' | 'lighter_candles'
-  | 'hip3_orderbook' | 'hip3_trades';
+  | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles';
 
 /** Subscribe message from client */
 export interface WsSubscribe {
