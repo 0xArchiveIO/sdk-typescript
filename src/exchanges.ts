@@ -60,7 +60,7 @@ export class HyperliquidClient {
   public readonly liquidations: LiquidationsResource;
 
   /**
-   * HIP-3 builder-deployed perpetuals (Pro+ only, February 2026+)
+   * HIP-3 builder-deployed perpetuals (February 2026+)
    */
   public readonly hip3: Hip3Client;
 
@@ -81,7 +81,7 @@ export class HyperliquidClient {
  * HIP-3 builder-deployed perpetuals client
  *
  * Access Hyperliquid HIP-3 builder perps data through the 0xarchive API.
- * Requires Pro tier or higher.
+ * Free: km:US500 only. Build+: all coins. Orderbook: Pro+.
  *
  * @example
  * ```typescript
@@ -116,6 +116,11 @@ export class Hip3Client {
    */
   public readonly openInterest: OpenInterestResource;
 
+  /**
+   * OHLCV candle data
+   */
+  public readonly candles: CandlesResource;
+
   constructor(http: HttpClient) {
     const basePath = '/v1/hyperliquid/hip3';
     // HIP-3 coins use case-sensitive symbols like 'xyz:XYZ100' — do not uppercase
@@ -125,6 +130,7 @@ export class Hip3Client {
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.funding = new FundingResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
+    this.candles = new CandlesResource(http, basePath, coinTransform);
   }
 }
 
