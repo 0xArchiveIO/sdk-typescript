@@ -22,7 +22,7 @@ pnpm add @0xarchive/sdk
 ```typescript
 import { OxArchive } from '@0xarchive/sdk';
 
-const client = new OxArchive({ apiKey: 'ox_your_api_key' });
+const client = new OxArchive({ apiKey: '0xa_your_api_key' });
 
 // Hyperliquid data
 const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
@@ -51,7 +51,7 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 
 ```typescript
 const client = new OxArchive({
-  apiKey: 'ox_your_api_key',       // Required
+  apiKey: '0xa_your_api_key',       // Required
   baseUrl: 'https://api.0xarchive.io',  // Optional
   timeout: 30000,                   // Optional, request timeout in ms (default: 30000)
   validate: false,                  // Optional, enable Zod schema validation
@@ -489,7 +489,7 @@ console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatu
 
 ```typescript
 const client = new OxArchive({
-  apiKey: 'ox_your_api_key',
+  apiKey: '0xa_your_api_key',
   timeout: 60000  // 60 seconds for data quality endpoints
 });
 ```
@@ -513,7 +513,7 @@ The WebSocket client supports three modes: real-time streaming, historical repla
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
 
-const ws = new OxArchiveWs({ apiKey: 'ox_your_api_key' });
+const ws = new OxArchiveWs({ apiKey: '0xa_your_api_key' });
 ```
 
 ### Real-time Streaming
@@ -672,7 +672,7 @@ Gap thresholds vary by channel:
 
 ```typescript
 const ws = new OxArchiveWs({
-  apiKey: 'ox_your_api_key',          // Required
+  apiKey: '0xa_your_api_key',          // Required
   wsUrl: 'wss://api.0xarchive.io/ws', // Optional
   autoReconnect: true,                // Auto-reconnect on disconnect (default: true)
   reconnectDelay: 1000,               // Initial reconnect delay in ms (default: 1000)
@@ -852,7 +852,7 @@ Enable Zod schema validation for API responses:
 
 ```typescript
 const client = new OxArchive({
-  apiKey: 'ox_your_api_key',
+  apiKey: '0xa_your_api_key',
   validate: true  // Enable runtime validation
 });
 ```
