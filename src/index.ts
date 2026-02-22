@@ -10,7 +10,7 @@
  * ```typescript
  * import { OxArchive } from '@0xarchive/sdk';
  *
- * const client = new OxArchive({ apiKey: 'ox_your_api_key' });
+ * const client = new OxArchive({ apiKey: '0xa_your_api_key' });
  *
  * // Hyperliquid data
  * const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
