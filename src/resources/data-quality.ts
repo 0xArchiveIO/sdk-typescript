@@ -143,7 +143,7 @@ export class DataQualityResource {
     options?: SymbolCoverageOptions,
   ): Promise<SymbolCoverageResponse> {
     return this.http.get<SymbolCoverageResponse>(
-      `${this.basePath}/coverage/${exchange.toLowerCase()}/${symbol.toUpperCase()}`,
+      `${this.basePath}/coverage/${exchange.toLowerCase()}/${symbol}`,
       options as unknown as Record<string, unknown>
     );
   }

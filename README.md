@@ -303,7 +303,24 @@ const history = await client.hyperliquid.funding.history('ETH', {
   start: Date.now() - 86400000 * 7,
   end: Date.now()
 });
+
+// Get funding rate history with aggregation interval
+const hourly = await client.hyperliquid.funding.history('BTC', {
+  start: Date.now() - 86400000 * 7,
+  end: Date.now(),
+  interval: '1h'
+});
 ```
+
+#### Funding History Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `start` | `number \| string` | Yes | Start timestamp (Unix ms or ISO string) |
+| `end` | `number \| string` | Yes | End timestamp (Unix ms or ISO string) |
+| `cursor` | `number \| string` | No | Cursor from previous response for pagination |
+| `limit` | `number` | No | Max results (default: 100, max: 1000) |
+| `interval` | `OiFundingInterval` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
 
 ### Open Interest
 
@@ -317,7 +334,24 @@ const history = await client.hyperliquid.openInterest.history('ETH', {
   end: Date.now(),
   limit: 100
 });
+
+// Get open interest history with aggregation interval
+const hourly = await client.hyperliquid.openInterest.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h'
+});
 ```
+
+#### Open Interest History Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `start` | `number \| string` | Yes | Start timestamp (Unix ms or ISO string) |
+| `end` | `number \| string` | Yes | End timestamp (Unix ms or ISO string) |
+| `cursor` | `number \| string` | No | Cursor from previous response for pagination |
+| `limit` | `number` | No | Max results (default: 100, max: 1000) |
+| `interval` | `OiFundingInterval` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
 
 ### Liquidations (Hyperliquid only)
 
@@ -349,6 +383,85 @@ const userLiquidations = await client.hyperliquid.liquidations.byUser('0x1234...
   end: Date.now(),
   coin: 'BTC'  // optional filter
 });
+```
+
+### Liquidation Volume (Hyperliquid only)
+
+Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records.
+
+```typescript
+// Get hourly liquidation volume for the last week
+const volume = await client.hyperliquid.liquidations.volume('BTC', {
+  start: Date.now() - 86400000 * 7,
+  end: Date.now(),
+  interval: '1h'  // 5m, 15m, 30m, 1h, 4h, 1d
+});
+
+for (const bucket of volume.data) {
+  console.log(`${bucket.timestamp}: total=$${bucket.totalUsd}, long=$${bucket.longUsd}, short=$${bucket.shortUsd}`);
+}
+```
+
+### Freshness (Hyperliquid only)
+
+Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it.
+
+```typescript
+const freshness = await client.hyperliquid.freshness('BTC');
+console.log(`Orderbook last updated: ${freshness.orderbook.lastUpdated}, lag: ${freshness.orderbook.lagMs}ms`);
+console.log(`Trades last updated: ${freshness.trades.lastUpdated}, lag: ${freshness.trades.lagMs}ms`);
+console.log(`Funding last updated: ${freshness.funding.lastUpdated}`);
+console.log(`OI last updated: ${freshness.openInterest.lastUpdated}`);
+```
+
+### Summary (Hyperliquid only)
+
+Get a combined market snapshot in a single call -- mark/oracle price, funding rate, open interest, 24h volume, and 24h liquidation volumes.
+
+```typescript
+const summary = await client.hyperliquid.summary('BTC');
+console.log(`Mark price: ${summary.markPrice}`);
+console.log(`Oracle price: ${summary.oraclePrice}`);
+console.log(`Funding rate: ${summary.fundingRate}`);
+console.log(`Open interest: ${summary.openInterest}`);
+console.log(`24h volume: ${summary.volume24h}`);
+console.log(`24h liquidation volume: $${summary.liquidationVolume24h}`);
+console.log(`  Long: $${summary.longLiquidationVolume24h}`);
+console.log(`  Short: $${summary.shortLiquidationVolume24h}`);
+```
+
+### Price History (Hyperliquid only)
+
+Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records (available from May 2023).
+
+```typescript
+// Get hourly price history for the last 24 hours
+const prices = await client.hyperliquid.priceHistory('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h'  // 5m, 15m, 30m, 1h, 4h, 1d
+});
+
+for (const snapshot of prices.data) {
+  console.log(`${snapshot.timestamp}: mark=${snapshot.markPrice}, oracle=${snapshot.oraclePrice}, mid=${snapshot.midPrice}`);
+}
+
+// Paginate for larger ranges
+let result = await client.hyperliquid.priceHistory('BTC', {
+  start: Date.now() - 86400000 * 30,
+  end: Date.now(),
+  interval: '4h',
+  limit: 1000
+});
+while (result.nextCursor) {
+  result = await client.hyperliquid.priceHistory('BTC', {
+    start: Date.now() - 86400000 * 30,
+    end: Date.now(),
+    interval: '4h',
+    cursor: result.nextCursor,
+    limit: 1000
+  });
+}
 ```
 
 ### Candles (OHLCV)
@@ -691,6 +804,8 @@ const ws = new OxArchiveWs({
 | `trades` | Trade/fill updates | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
 | `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
+| `open_interest` | Open interest snapshots | Yes | Replay/stream only |
+| `funding` | Funding rate snapshots | Yes | Replay/stream only |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
 
@@ -701,6 +816,8 @@ const ws = new OxArchiveWs({
 | `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
 | `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
+| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Replay/stream only |
+| `hip3_funding` | HIP-3 funding rate snapshots | Yes | Replay/stream only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -711,6 +828,8 @@ const ws = new OxArchiveWs({
 | `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | Yes |
 | `lighter_trades` | Lighter trade/fill updates | Yes | Yes |
 | `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
+| `lighter_open_interest` | Lighter open interest snapshots | Yes | Replay/stream only |
+| `lighter_funding` | Lighter funding rate snapshots | Yes | Replay/stream only |
 
 #### Candle Replay/Stream
 
@@ -764,6 +883,88 @@ ws.replay('hip3_candles', 'km:US500', {
   interval: '1h'
 });
 ```
+
+### Multi-Channel Replay
+
+Replay multiple data channels simultaneously with synchronized timing. Data from all channels is interleaved chronologically. Before the timeline begins, `replay_snapshot` messages provide the initial state for each channel at the start timestamp.
+
+```typescript
+const ws = new OxArchiveWs({ apiKey: 'ox_...' });
+await ws.connect();
+
+// Handle initial snapshots (sent before timeline data)
+ws.onReplaySnapshot((channel, coin, timestamp, data) => {
+  console.log(`Initial ${channel} state at ${new Date(timestamp).toISOString()}`);
+  if (channel === 'orderbook') {
+    currentOrderbook = data;
+  } else if (channel === 'funding') {
+    currentFundingRate = data;
+  } else if (channel === 'open_interest') {
+    currentOI = data;
+  }
+});
+
+// Handle interleaved historical data
+ws.onHistoricalData((coin, timestamp, data) => {
+  // The `channel` field on the raw message indicates which channel
+  // this data point belongs to
+  console.log(`${new Date(timestamp).toISOString()}: data received`);
+});
+
+ws.onReplayComplete((channel, coin, count) => {
+  console.log(`Replay complete: ${count} records`);
+});
+
+// Start multi-channel replay
+ws.multiReplay(['orderbook', 'trades', 'funding'], 'BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  speed: 10
+});
+
+// Playback controls work the same as single-channel
+ws.replayPause();
+ws.replayResume();
+ws.replaySeek(1704067200000);
+ws.replayStop();
+```
+
+### Multi-Channel Bulk Stream
+
+Stream multiple channels simultaneously for fast bulk download.
+
+```typescript
+const ws = new OxArchiveWs({ apiKey: 'ox_...' });
+await ws.connect();
+
+// Handle initial snapshots
+ws.onReplaySnapshot((channel, coin, timestamp, data) => {
+  console.log(`Initial ${channel} snapshot`);
+});
+
+// Handle batched data from all channels
+ws.onBatch((coin, records) => {
+  for (const record of records) {
+    // Process interleaved data from all channels
+  }
+});
+
+ws.onStreamComplete((channel, coin, count) => {
+  console.log(`Stream complete: ${count} records`);
+});
+
+// Start multi-channel stream
+ws.multiStream(['orderbook', 'trades', 'open_interest', 'funding'], 'ETH', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  batchSize: 1000
+});
+
+// Stop if needed
+ws.streamStop();
+```
+
+**Channels available for multi-channel mode:** All historical channels can be combined in a single multi-channel replay or stream. This includes `orderbook`, `trades`, `candles`, `liquidations`, `open_interest`, `funding`, and their `lighter_*` and `hip3_*` variants.
 
 ### WebSocket Connection States
 
@@ -830,10 +1031,15 @@ import type {
   FundingRate,
   OpenInterest,
   Liquidation,
+  LiquidationVolume,
+  CoinFreshness,
+  CoinSummary,
+  PriceSnapshot,
   CursorResponse,
   WsOptions,
   WsChannel,
   WsConnectionState,
+  WsReplaySnapshot,
   // Orderbook reconstruction (Enterprise)
   OrderbookDelta,
   TickData,

@@ -1,4 +1,5 @@
 import type { HttpClient } from './http';
+import type { ApiResponse, CursorResponse, CoinFreshness, CoinSummary, PriceSnapshot, PriceHistoryParams } from './types';
 import {
   OrderBookResource,
   TradesResource,
@@ -10,6 +11,11 @@ import {
   CandlesResource,
   LiquidationsResource,
 } from './resources';
+import {
+  CoinFreshnessResponseSchema,
+  CoinSummaryResponseSchema,
+  PriceSnapshotArrayResponseSchema,
+} from './schemas';
 
 /**
  * Hyperliquid exchange client
@@ -64,7 +70,10 @@ export class HyperliquidClient {
    */
   public readonly hip3: Hip3Client;
 
+  private http: HttpClient;
+
   constructor(http: HttpClient) {
+    this.http = http;
     const basePath = '/v1/hyperliquid';
     this.orderbook = new OrderBookResource(http, basePath);
     this.trades = new TradesResource(http, basePath);
@@ -74,6 +83,55 @@ export class HyperliquidClient {
     this.candles = new CandlesResource(http, basePath);
     this.liquidations = new LiquidationsResource(http, basePath);
     this.hip3 = new Hip3Client(http);
+  }
+
+  /**
+   * Get per-coin data freshness across all data types
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @returns Per-coin freshness with last_updated and lag_ms for each data type
+   */
+  async freshness(coin: string): Promise<CoinFreshness> {
+    const response = await this.http.get<ApiResponse<CoinFreshness>>(
+      `/v1/hyperliquid/freshness/${coin.toUpperCase()}`,
+      undefined,
+      this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get combined market summary (price, funding, OI, volume, liquidations) in one call
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @returns Combined market summary
+   */
+  async summary(coin: string): Promise<CoinSummary> {
+    const response = await this.http.get<ApiResponse<CoinSummary>>(
+      `/v1/hyperliquid/summary/${coin.toUpperCase()}`,
+      undefined,
+      this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get mark/oracle/mid price history (projected from OI data)
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param params - Time range, cursor, and interval parameters
+   * @returns CursorResponse with price snapshots
+   */
+  async priceHistory(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+    const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
+      `/v1/hyperliquid/prices/${coin.toUpperCase()}`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
   }
 }
 

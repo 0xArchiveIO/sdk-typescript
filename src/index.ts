@@ -86,6 +86,18 @@ export {
   LiquidationSideSchema,
   LiquidationSchema,
   LiquidationArrayResponseSchema,
+  LiquidationVolumeSchema,
+  LiquidationVolumeArrayResponseSchema,
+  // Coin Freshness schemas
+  DataTypeFreshnessInfoSchema,
+  CoinFreshnessSchema,
+  CoinFreshnessResponseSchema,
+  // Coin Summary schemas
+  CoinSummarySchema,
+  CoinSummaryResponseSchema,
+  // Price Snapshot schemas
+  PriceSnapshotSchema,
+  PriceSnapshotArrayResponseSchema,
   // WebSocket schemas
   WsChannelSchema,
   WsConnectionStateSchema,
@@ -100,6 +112,7 @@ export {
   WsReplayResumedSchema,
   WsReplayCompletedSchema,
   WsReplayStoppedSchema,
+  WsReplaySnapshotSchema,
   WsHistoricalDataSchema,
   WsStreamStartedSchema,
   WsStreamProgressSchema,
@@ -145,8 +158,11 @@ export type {
   InstrumentType,
   // Funding
   FundingRate,
+  FundingHistoryParams,
   // Open Interest
   OpenInterest,
+  OpenInterestHistoryParams,
+  OiFundingInterval,
   // Candles
   Candle,
   CandleInterval,
@@ -155,6 +171,16 @@ export type {
   Liquidation,
   LiquidationHistoryParams,
   LiquidationsByUserParams,
+  LiquidationVolume,
+  LiquidationVolumeParams,
+  // Coin Freshness
+  DataTypeFreshnessInfo,
+  CoinFreshness,
+  // Coin Summary
+  CoinSummary,
+  // Price History
+  PriceSnapshot,
+  PriceHistoryParams,
   // Data Quality
   SystemStatusValue,
   ExchangeStatus,
@@ -210,6 +236,7 @@ export type {
   WsReplayResumed,
   WsReplayCompleted,
   WsReplayStopped,
+  WsReplaySnapshot,
   WsHistoricalData,
   WsHistoricalTickData,
   OrderbookDelta,
@@ -222,6 +249,7 @@ export type {
   WsHistoricalBatch,
   WsStreamCompleted,
   WsStreamStopped,
+  WsGapDetected,
   // Errors
   ApiError,
 } from './types';

@@ -1,6 +1,6 @@
 import type { HttpClient } from '../http';
-import type { ApiResponse, CursorResponse, Liquidation, LiquidationHistoryParams, LiquidationsByUserParams } from '../types';
-import { LiquidationArrayResponseSchema } from '../schemas';
+import type { ApiResponse, CursorResponse, Liquidation, LiquidationHistoryParams, LiquidationsByUserParams, LiquidationVolume, LiquidationVolumeParams } from '../types';
+import { LiquidationArrayResponseSchema, LiquidationVolumeArrayResponseSchema } from '../schemas';
 
 /**
  * Liquidations API resource
@@ -75,6 +75,28 @@ export class LiquidationsResource {
       `${this.basePath}/liquidations/user/${userAddress}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
+  }
+
+  /**
+   * Get aggregated liquidation volume in time-bucketed intervals
+   *
+   * Returns pre-aggregated data with total/long/short USD volumes per bucket,
+   * reducing data transfer by 100-1000x compared to individual liquidation records.
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param params - Time range, cursor, and interval parameters
+   * @returns CursorResponse with liquidation volume buckets
+   */
+  async volume(coin: string, params: LiquidationVolumeParams): Promise<CursorResponse<LiquidationVolume[]>> {
+    const response = await this.http.get<ApiResponse<LiquidationVolume[]>>(
+      `${this.basePath}/liquidations/${coin.toUpperCase()}/volume`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? LiquidationVolumeArrayResponseSchema as any : undefined
     );
     return {
       data: response.data,

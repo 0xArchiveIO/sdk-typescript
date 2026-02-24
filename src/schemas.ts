@@ -168,7 +168,14 @@ export const CandleSchema = z.object({
 // WebSocket Message Schemas
 // =============================================================================
 
-export const WsChannelSchema = z.enum(['orderbook', 'trades', 'candles', 'liquidations', 'ticker', 'all_tickers']);
+export const WsChannelSchema = z.enum([
+  'orderbook', 'trades', 'candles', 'liquidations', 'ticker', 'all_tickers',
+  'open_interest', 'funding',
+  'lighter_orderbook', 'lighter_trades', 'lighter_candles',
+  'lighter_open_interest', 'lighter_funding',
+  'hip3_orderbook', 'hip3_trades', 'hip3_candles',
+  'hip3_open_interest', 'hip3_funding',
+]);
 
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
 
@@ -213,19 +220,19 @@ export const WsReplayStartedSchema = z.object({
 
 export const WsReplayPausedSchema = z.object({
   type: z.literal('replay_paused'),
-  currentTimestamp: z.number(),
+  current_timestamp: z.number(),
 });
 
 export const WsReplayResumedSchema = z.object({
   type: z.literal('replay_resumed'),
-  currentTimestamp: z.number(),
+  current_timestamp: z.number(),
 });
 
 export const WsReplayCompletedSchema = z.object({
   type: z.literal('replay_completed'),
   channel: WsChannelSchema,
   coin: z.string(),
-  snapshotsSent: z.number(),
+  snapshots_sent: z.number(),
 });
 
 export const WsReplayStoppedSchema = z.object({
@@ -234,6 +241,14 @@ export const WsReplayStoppedSchema = z.object({
 
 export const WsHistoricalDataSchema = z.object({
   type: z.literal('historical_data'),
+  channel: WsChannelSchema,
+  coin: z.string(),
+  timestamp: z.number(),
+  data: z.unknown(),
+});
+
+export const WsReplaySnapshotSchema = z.object({
+  type: z.literal('replay_snapshot'),
   channel: WsChannelSchema,
   coin: z.string(),
   timestamp: z.number(),
@@ -251,7 +266,7 @@ export const WsStreamStartedSchema = z.object({
 
 export const WsStreamProgressSchema = z.object({
   type: z.literal('stream_progress'),
-  snapshotsSent: z.number(),
+  snapshots_sent: z.number(),
 });
 
 export const TimestampedRecordSchema = z.object({
@@ -270,12 +285,12 @@ export const WsStreamCompletedSchema = z.object({
   type: z.literal('stream_completed'),
   channel: WsChannelSchema,
   coin: z.string(),
-  snapshotsSent: z.number(),
+  snapshots_sent: z.number(),
 });
 
 export const WsStreamStoppedSchema = z.object({
   type: z.literal('stream_stopped'),
-  snapshotsSent: z.number(),
+  snapshots_sent: z.number(),
 });
 
 // Union of all server messages
@@ -290,6 +305,7 @@ export const WsServerMessageSchema = z.discriminatedUnion('type', [
   WsReplayResumedSchema,
   WsReplayCompletedSchema,
   WsReplayStoppedSchema,
+  WsReplaySnapshotSchema,
   WsHistoricalDataSchema,
   WsStreamStartedSchema,
   WsStreamProgressSchema,
@@ -313,6 +329,95 @@ export const OpenInterestResponseSchema = ApiResponseSchema(OpenInterestSchema);
 export const OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(OpenInterestSchema));
 export const CandleArrayResponseSchema = ApiResponseSchema(z.array(CandleSchema));
 export const LiquidationArrayResponseSchema = ApiResponseSchema(z.array(LiquidationSchema));
+
+// =============================================================================
+// Liquidation Volume Schemas
+// =============================================================================
+
+export const LiquidationVolumeSchema = z.object({
+  coin: z.string(),
+  timestamp: z.string(),
+  totalUsd: z.number(),
+  longUsd: z.number(),
+  shortUsd: z.number(),
+  count: z.number(),
+  longCount: z.number(),
+  shortCount: z.number(),
+});
+
+export const LiquidationVolumeArrayResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: z.array(LiquidationVolumeSchema),
+  meta: ApiMetaSchema.optional(),
+});
+
+// =============================================================================
+// Coin Freshness Schemas
+// =============================================================================
+
+export const DataTypeFreshnessInfoSchema = z.object({
+  lastUpdated: z.string().nullable().optional(),
+  lagMs: z.number().nullable().optional(),
+});
+
+export const CoinFreshnessSchema = z.object({
+  coin: z.string(),
+  exchange: z.string(),
+  measuredAt: z.string(),
+  orderbook: DataTypeFreshnessInfoSchema,
+  trades: DataTypeFreshnessInfoSchema,
+  funding: DataTypeFreshnessInfoSchema,
+  openInterest: DataTypeFreshnessInfoSchema,
+  liquidations: DataTypeFreshnessInfoSchema.optional(),
+});
+
+export const CoinFreshnessResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: CoinFreshnessSchema,
+  meta: ApiMetaSchema.optional(),
+});
+
+// =============================================================================
+// Coin Summary Schemas
+// =============================================================================
+
+export const CoinSummarySchema = z.object({
+  coin: z.string(),
+  timestamp: z.string(),
+  markPrice: z.string().nullable().optional(),
+  oraclePrice: z.string().nullable().optional(),
+  midPrice: z.string().nullable().optional(),
+  fundingRate: z.string().nullable().optional(),
+  premium: z.string().nullable().optional(),
+  openInterest: z.string().nullable().optional(),
+  volume24h: z.string().nullable().optional(),
+  liquidationVolume24h: z.number().nullable().optional(),
+  longLiquidationVolume24h: z.number().nullable().optional(),
+  shortLiquidationVolume24h: z.number().nullable().optional(),
+});
+
+export const CoinSummaryResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: CoinSummarySchema,
+  meta: ApiMetaSchema.optional(),
+});
+
+// =============================================================================
+// Price Snapshot Schemas
+// =============================================================================
+
+export const PriceSnapshotSchema = z.object({
+  timestamp: z.string(),
+  markPrice: z.string().nullable().optional(),
+  oraclePrice: z.string().nullable().optional(),
+  midPrice: z.string().nullable().optional(),
+});
+
+export const PriceSnapshotArrayResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: z.array(PriceSnapshotSchema),
+  meta: ApiMetaSchema.optional(),
+});
 
 // =============================================================================
 // Type exports (inferred from schemas)
