@@ -407,18 +407,26 @@ for (const bucket of volume.data) {
 Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it.
 
 ```typescript
+// Hyperliquid
 const freshness = await client.hyperliquid.freshness('BTC');
 console.log(`Orderbook last updated: ${freshness.orderbook.lastUpdated}, lag: ${freshness.orderbook.lagMs}ms`);
 console.log(`Trades last updated: ${freshness.trades.lastUpdated}, lag: ${freshness.trades.lagMs}ms`);
 console.log(`Funding last updated: ${freshness.funding.lastUpdated}`);
 console.log(`OI last updated: ${freshness.openInterest.lastUpdated}`);
+
+// Lighter.xyz
+const lighterFreshness = await client.lighter.freshness('BTC');
+
+// HIP-3 (case-sensitive coins)
+const hip3Freshness = await client.hyperliquid.hip3.freshness('km:US500');
 ```
 
-### Summary (Hyperliquid only)
+### Summary
 
 Get a combined market snapshot in a single call -- mark/oracle price, funding rate, open interest, 24h volume, and 24h liquidation volumes.
 
 ```typescript
+// Hyperliquid (includes volume + liquidation data)
 const summary = await client.hyperliquid.summary('BTC');
 console.log(`Mark price: ${summary.markPrice}`);
 console.log(`Oracle price: ${summary.oraclePrice}`);
@@ -428,14 +436,21 @@ console.log(`24h volume: ${summary.volume24h}`);
 console.log(`24h liquidation volume: $${summary.liquidationVolume24h}`);
 console.log(`  Long: $${summary.longLiquidationVolume24h}`);
 console.log(`  Short: $${summary.shortLiquidationVolume24h}`);
+
+// Lighter.xyz (price, funding, OI — no volume/liquidation data)
+const lighterSummary = await client.lighter.summary('BTC');
+
+// HIP-3 (includes mid_price — case-sensitive coins)
+const hip3Summary = await client.hyperliquid.hip3.summary('km:US500');
+console.log(`Mid price: ${hip3Summary.midPrice}`);
 ```
 
-### Price History (Hyperliquid only)
+### Price History
 
-Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records (available from May 2023).
+Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records.
 
 ```typescript
-// Get hourly price history for the last 24 hours
+// Hyperliquid — available from May 2023
 const prices = await client.hyperliquid.priceHistory('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -445,6 +460,20 @@ const prices = await client.hyperliquid.priceHistory('BTC', {
 for (const snapshot of prices.data) {
   console.log(`${snapshot.timestamp}: mark=${snapshot.markPrice}, oracle=${snapshot.oraclePrice}, mid=${snapshot.midPrice}`);
 }
+
+// Lighter.xyz
+const lighterPrices = await client.lighter.priceHistory('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h'
+});
+
+// HIP-3 (case-sensitive coins)
+const hip3Prices = await client.hyperliquid.hip3.priceHistory('km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1d'
+});
 
 // Paginate for larger ranges
 let result = await client.hyperliquid.priceHistory('BTC', {

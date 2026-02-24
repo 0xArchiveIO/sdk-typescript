@@ -179,7 +179,10 @@ export class Hip3Client {
    */
   public readonly candles: CandlesResource;
 
+  private http: HttpClient;
+
   constructor(http: HttpClient) {
+    this.http = http;
     const basePath = '/v1/hyperliquid/hip3';
     // HIP-3 coins use case-sensitive symbols like 'xyz:XYZ100' — do not uppercase
     const coinTransform = (c: string) => c;
@@ -189,6 +192,55 @@ export class Hip3Client {
     this.funding = new FundingResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
     this.candles = new CandlesResource(http, basePath, coinTransform);
+  }
+
+  /**
+   * Get per-coin data freshness across all data types
+   *
+   * @param coin - The coin symbol (case-sensitive, e.g., 'km:US500')
+   * @returns Per-coin freshness with last_updated and lag_ms for each data type
+   */
+  async freshness(coin: string): Promise<CoinFreshness> {
+    const response = await this.http.get<ApiResponse<CoinFreshness>>(
+      `/v1/hyperliquid/hip3/freshness/${coin}`,
+      undefined,
+      this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get combined market summary (price, funding, OI) in one call
+   *
+   * @param coin - The coin symbol (case-sensitive, e.g., 'km:US500')
+   * @returns Combined market summary
+   */
+  async summary(coin: string): Promise<CoinSummary> {
+    const response = await this.http.get<ApiResponse<CoinSummary>>(
+      `/v1/hyperliquid/hip3/summary/${coin}`,
+      undefined,
+      this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get mark/oracle/mid price history (projected from OI data)
+   *
+   * @param coin - The coin symbol (case-sensitive, e.g., 'km:US500')
+   * @param params - Time range, cursor, and interval parameters
+   * @returns CursorResponse with price snapshots
+   */
+  async priceHistory(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+    const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
+      `/v1/hyperliquid/hip3/prices/${coin}`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
   }
 }
 
@@ -237,7 +289,10 @@ export class LighterClient {
    */
   public readonly candles: CandlesResource;
 
+  private http: HttpClient;
+
   constructor(http: HttpClient) {
+    this.http = http;
     const basePath = '/v1/lighter';
     this.orderbook = new OrderBookResource(http, basePath);
     this.trades = new TradesResource(http, basePath);
@@ -245,5 +300,54 @@ export class LighterClient {
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
     this.candles = new CandlesResource(http, basePath);
+  }
+
+  /**
+   * Get per-coin data freshness across all data types
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @returns Per-coin freshness with last_updated and lag_ms for each data type
+   */
+  async freshness(coin: string): Promise<CoinFreshness> {
+    const response = await this.http.get<ApiResponse<CoinFreshness>>(
+      `/v1/lighter/freshness/${coin.toUpperCase()}`,
+      undefined,
+      this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get combined market summary (price, funding, OI) in one call
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @returns Combined market summary
+   */
+  async summary(coin: string): Promise<CoinSummary> {
+    const response = await this.http.get<ApiResponse<CoinSummary>>(
+      `/v1/lighter/summary/${coin.toUpperCase()}`,
+      undefined,
+      this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get mark/oracle price history (projected from OI data)
+   *
+   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param params - Time range, cursor, and interval parameters
+   * @returns CursorResponse with price snapshots
+   */
+  async priceHistory(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+    const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
+      `/v1/lighter/prices/${coin.toUpperCase()}`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
   }
 }
