@@ -417,6 +417,8 @@ export interface Candle {
 export interface CandleHistoryParams extends CursorPaginationParams {
   /** Candle interval (default: 1h) */
   interval?: CandleInterval;
+  /** Maximum number of results to return (default: 100, max: 10000 for candles) */
+  limit?: number;
 }
 
 // =============================================================================
