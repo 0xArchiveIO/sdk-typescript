@@ -284,9 +284,18 @@ export interface FundingRate {
 }
 
 /**
+ * Aggregation interval for OI and funding history.
+ * When omitted, raw ~1 min data is returned.
+ */
+export type OiFundingInterval = '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
+
+/**
  * Parameters for getting funding rate history
  */
-export interface FundingHistoryParams extends CursorPaginationParams {}
+export interface FundingHistoryParams extends CursorPaginationParams {
+  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  interval?: OiFundingInterval;
+}
 
 // =============================================================================
 // Open Interest Types
@@ -321,7 +330,10 @@ export interface OpenInterest {
 /**
  * Parameters for getting open interest history
  */
-export interface OpenInterestHistoryParams extends CursorPaginationParams {}
+export interface OpenInterestHistoryParams extends CursorPaginationParams {
+  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  interval?: OiFundingInterval;
+}
 
 // =============================================================================
 // Liquidation Types
@@ -408,14 +420,140 @@ export interface CandleHistoryParams extends CursorPaginationParams {
 }
 
 // =============================================================================
+// Aggregated Liquidation Volume Types
+// =============================================================================
+
+/** Pre-aggregated liquidation volume bucket */
+export interface LiquidationVolume {
+  /** Trading pair symbol */
+  coin: string;
+  /** Bucket timestamp (UTC) */
+  timestamp: string;
+  /** Total liquidation volume in USD (price * size) */
+  totalUsd: number;
+  /** Long liquidations volume */
+  longUsd: number;
+  /** Short liquidations volume */
+  shortUsd: number;
+  /** Total liquidation count */
+  count: number;
+  /** Long liquidation count */
+  longCount: number;
+  /** Short liquidation count */
+  shortCount: number;
+}
+
+/** Parameters for getting aggregated liquidation volume */
+export interface LiquidationVolumeParams extends CursorPaginationParams {
+  /** Aggregation interval (default: 1h). Valid: 5m, 15m, 30m, 1h, 4h, 1d */
+  interval?: OiFundingInterval;
+}
+
+// =============================================================================
+// Per-Coin Freshness Types
+// =============================================================================
+
+/** Freshness data for a single data type */
+export interface DataTypeFreshnessInfo {
+  /** Last update timestamp */
+  lastUpdated?: string;
+  /** Lag in milliseconds */
+  lagMs?: number;
+}
+
+/** Per-coin freshness across all data types */
+export interface CoinFreshness {
+  /** Coin symbol */
+  coin: string;
+  /** Exchange name */
+  exchange: string;
+  /** When this measurement was taken */
+  measuredAt: string;
+  /** Orderbook freshness */
+  orderbook: DataTypeFreshnessInfo;
+  /** Trades freshness */
+  trades: DataTypeFreshnessInfo;
+  /** Funding freshness */
+  funding: DataTypeFreshnessInfo;
+  /** Open interest freshness */
+  openInterest: DataTypeFreshnessInfo;
+  /** Liquidations freshness (Hyperliquid only) */
+  liquidations?: DataTypeFreshnessInfo;
+}
+
+// =============================================================================
+// Coin Summary Types
+// =============================================================================
+
+/** Combined market summary for a coin */
+export interface CoinSummary {
+  /** Trading pair symbol */
+  coin: string;
+  /** Timestamp (UTC) */
+  timestamp: string;
+  /** Latest mark price */
+  markPrice?: string;
+  /** Latest oracle price */
+  oraclePrice?: string;
+  /** Latest mid price */
+  midPrice?: string;
+  /** Current funding rate */
+  fundingRate?: string;
+  /** Funding premium */
+  premium?: string;
+  /** Current open interest */
+  openInterest?: string;
+  /** 24h notional trading volume */
+  volume24h?: string;
+  /** 24h total liquidation volume in USD */
+  liquidationVolume24h?: number;
+  /** 24h long liquidation volume in USD */
+  longLiquidationVolume24h?: number;
+  /** 24h short liquidation volume in USD */
+  shortLiquidationVolume24h?: number;
+}
+
+// =============================================================================
+// Price History Types
+// =============================================================================
+
+/** Price snapshot from OI data */
+export interface PriceSnapshot {
+  /** Timestamp (UTC) */
+  timestamp: string;
+  /** Mark price */
+  markPrice?: string;
+  /** Oracle price */
+  oraclePrice?: string;
+  /** Mid price */
+  midPrice?: string;
+}
+
+/** Parameters for price history */
+export interface PriceHistoryParams extends CursorPaginationParams {
+  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  interval?: OiFundingInterval;
+}
+
+// =============================================================================
 // WebSocket Types
 // =============================================================================
 
-/** WebSocket channel types. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+). */
+/**
+ * WebSocket channel types.
+ *
+ * - ticker/all_tickers: real-time only
+ * - liquidations: historical only (May 2025+)
+ * - open_interest, funding, lighter_open_interest, lighter_funding,
+ *   hip3_open_interest, hip3_funding: historical only (replay/stream)
+ */
 export type WsChannel =
   | 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers'
+  | 'open_interest' | 'funding'
   | 'lighter_orderbook' | 'lighter_trades' | 'lighter_candles'
-  | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles';
+  | 'lighter_open_interest' | 'lighter_funding'
+  | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles'
+  | 'hip3_open_interest' | 'hip3_funding';
 
 /** Subscribe message from client */
 export interface WsSubscribe {
@@ -439,7 +577,10 @@ export interface WsPing {
 /** Replay message from client - replays historical data with timing preserved */
 export interface WsReplay {
   op: 'replay';
-  channel: WsChannel;
+  /** Single channel for replay. Mutually exclusive with `channels`. */
+  channel?: WsChannel;
+  /** Multiple channels for multi-channel replay. Mutually exclusive with `channel`. */
+  channels?: WsChannel[];
   coin?: string;
   /** Start timestamp (Unix ms) */
   start: number;
@@ -462,7 +603,10 @@ export interface WsReplayStop { op: 'replay.stop'; }
 /** Stream message from client - bulk download historical data */
 export interface WsStream {
   op: 'stream';
-  channel: WsChannel;
+  /** Single channel for streaming. Mutually exclusive with `channels`. */
+  channel?: WsChannel;
+  /** Multiple channels for multi-channel streaming. Mutually exclusive with `channel`. */
+  channels?: WsChannel[];
   coin?: string;
   /** Start timestamp (Unix ms) */
   start: number;
@@ -572,6 +716,21 @@ export interface WsHistoricalData<T = unknown> {
   data: T;
 }
 
+/**
+ * Replay snapshot providing initial state for a channel before the timeline starts.
+ * Sent in multi-channel replay/stream mode to provide the most recent data point
+ * for each channel at the replay start time. This allows clients to initialize
+ * their state (e.g., current orderbook, latest funding rate) before timeline
+ * data begins arriving via `historical_data` messages.
+ */
+export interface WsReplaySnapshot<T = unknown> {
+  type: 'replay_snapshot';
+  channel: WsChannel;
+  coin: string;
+  timestamp: number;
+  data: T;
+}
+
 /** Orderbook delta for tick-level data */
 export interface OrderbookDelta {
   /** Timestamp in milliseconds */
@@ -671,6 +830,7 @@ export type WsServerMessage =
   | WsReplayResumed
   | WsReplayCompleted
   | WsReplayStopped
+  | WsReplaySnapshot
   | WsHistoricalData
   | WsHistoricalTickData
   | WsStreamStarted

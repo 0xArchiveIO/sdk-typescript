@@ -57,6 +57,7 @@ import type {
   WsHistoricalBatch,
   WsReplayStarted,
   WsReplayCompleted,
+  WsReplaySnapshot,
   WsStreamStarted,
   WsStreamCompleted,
   WsStreamProgress,
@@ -205,6 +206,7 @@ export class OxArchiveWs {
   private batchHandlers: Array<(coin: string, records: Array<{ timestamp: number; data: unknown }>) => void> = [];
   private replayStartHandlers: Array<(channel: WsChannel, coin: string, start: number, end: number, speed: number) => void> = [];
   private replayCompleteHandlers: Array<(channel: WsChannel, coin: string, snapshotsSent: number) => void> = [];
+  private replaySnapshotHandlers: Array<(channel: WsChannel, coin: string, timestamp: number, data: unknown) => void> = [];
   private streamStartHandlers: Array<(channel: WsChannel, coin: string, start: number, end: number) => void> = [];
   private streamProgressHandlers: Array<(snapshotsSent: number) => void> = [];
   private streamCompleteHandlers: Array<(channel: WsChannel, coin: string, snapshotsSent: number) => void> = [];
@@ -428,6 +430,52 @@ export class OxArchiveWs {
   }
 
   /**
+   * Start a multi-channel historical replay with timing preserved.
+   * Data from all channels is interleaved chronologically. Before the timeline
+   * begins, `replay_snapshot` messages provide initial state for each channel.
+   *
+   * @param channels - Array of data channels to replay simultaneously
+   * @param coin - Trading pair (e.g., 'BTC', 'ETH')
+   * @param options - Replay options
+   *
+   * @example
+   * ```typescript
+   * ws.onReplaySnapshot((channel, coin, timestamp, data) => {
+   *   console.log(`Initial ${channel} state at ${new Date(timestamp).toISOString()}`);
+   * });
+   * ws.onHistoricalData((coin, timestamp, data) => {
+   *   // Interleaved data from all channels
+   * });
+   * ws.multiReplay(['orderbook', 'trades', 'funding'], 'BTC', {
+   *   start: Date.now() - 86400000,
+   *   speed: 10
+   * });
+   * ```
+   */
+  multiReplay(
+    channels: WsChannel[],
+    coin: string,
+    options: {
+      start: number;
+      end?: number;
+      speed?: number;
+      granularity?: string;
+      interval?: string;
+    }
+  ): void {
+    this.send({
+      op: 'replay',
+      channels,
+      coin,
+      start: options.start,
+      end: options.end,
+      speed: options.speed ?? 1,
+      granularity: options.granularity,
+      interval: options.interval,
+    });
+  }
+
+  /**
    * Pause the current replay
    */
   replayPause(): void {
@@ -501,6 +549,54 @@ export class OxArchiveWs {
   }
 
   /**
+   * Start a multi-channel bulk stream for fast data download.
+   * Data from all channels arrives in batches without timing delays.
+   * Before batches begin, `replay_snapshot` messages provide initial state
+   * for each channel.
+   *
+   * @param channels - Array of data channels to stream simultaneously
+   * @param coin - Trading pair (e.g., 'BTC', 'ETH')
+   * @param options - Stream options
+   *
+   * @example
+   * ```typescript
+   * ws.onReplaySnapshot((channel, coin, timestamp, data) => {
+   *   console.log(`Initial ${channel} state`);
+   * });
+   * ws.onBatch((coin, records) => {
+   *   // Batches contain data from all requested channels
+   * });
+   * ws.multiStream(['orderbook', 'trades', 'open_interest'], 'BTC', {
+   *   start: Date.now() - 3600000,
+   *   end: Date.now(),
+   *   batchSize: 1000
+   * });
+   * ```
+   */
+  multiStream(
+    channels: WsChannel[],
+    coin: string,
+    options: {
+      start: number;
+      end: number;
+      batchSize?: number;
+      granularity?: string;
+      interval?: string;
+    }
+  ): void {
+    this.send({
+      op: 'stream',
+      channels,
+      coin,
+      start: options.start,
+      end: options.end,
+      batch_size: options.batchSize ?? 1000,
+      granularity: options.granularity,
+      interval: options.interval,
+    });
+  }
+
+  /**
    * Stop the current bulk stream
    */
   streamStop(): void {
@@ -556,6 +652,32 @@ export class OxArchiveWs {
     handler: (channel: WsChannel, coin: string, snapshotsSent: number) => void
   ): void {
     this.replayCompleteHandlers.push(handler);
+  }
+
+  /**
+   * Handle replay snapshot events (multi-channel mode).
+   * Called with the initial state for each channel before the replay/stream
+   * timeline begins. Use this to initialize local state (e.g., set the current
+   * orderbook or latest funding rate) before `historical_data` messages start
+   * arriving.
+   *
+   * @param handler - Callback receiving channel, coin, timestamp (ms), and data payload
+   *
+   * @example
+   * ```typescript
+   * ws.onReplaySnapshot((channel, coin, timestamp, data) => {
+   *   if (channel === 'orderbook') {
+   *     currentOrderbook = data;
+   *   } else if (channel === 'funding') {
+   *     currentFundingRate = data;
+   *   }
+   * });
+   * ```
+   */
+  onReplaySnapshot<T = unknown>(
+    handler: (channel: WsChannel, coin: string, timestamp: number, data: T) => void
+  ): void {
+    this.replaySnapshotHandlers.push(handler as (channel: WsChannel, coin: string, timestamp: number, data: unknown) => void);
   }
 
   /**
@@ -747,6 +869,13 @@ export class OxArchiveWs {
         const msg = message as WsReplayCompleted;
         for (const handler of this.replayCompleteHandlers) {
           handler(msg.channel, msg.coin, msg.snapshots_sent);
+        }
+        break;
+      }
+      case 'replay_snapshot': {
+        const msg = message as WsReplaySnapshot;
+        for (const handler of this.replaySnapshotHandlers) {
+          handler(msg.channel, msg.coin, msg.timestamp, msg.data);
         }
         break;
       }
