@@ -877,6 +877,88 @@ export interface WsEventHandlers {
 }
 
 // =============================================================================
+// Web3 Authentication Types
+// =============================================================================
+
+/** SIWE challenge message returned by the challenge endpoint */
+export interface SiweChallenge {
+  /** The SIWE message to sign with personal_sign (EIP-191) */
+  message: string;
+  /** Single-use nonce (expires after 10 minutes) */
+  nonce: string;
+}
+
+/** Result of creating a free-tier account via wallet signature */
+export interface Web3SignupResult {
+  /** The generated API key */
+  apiKey: string;
+  /** Account tier (e.g., 'free') */
+  tier: string;
+  /** The wallet address that owns this key */
+  walletAddress: string;
+}
+
+/** An API key record returned by the keys endpoint */
+export interface Web3ApiKey {
+  /** Unique key ID (UUID) */
+  id: string;
+  /** Key name */
+  name: string;
+  /** First characters of the key for identification */
+  keyPrefix: string;
+  /** Whether the key is currently active */
+  isActive: boolean;
+  /** Last usage timestamp (ISO 8601) */
+  lastUsedAt?: string;
+  /** Creation timestamp (ISO 8601) */
+  createdAt: string;
+}
+
+/** List of API keys for a wallet */
+export interface Web3KeysList {
+  /** All API keys belonging to this wallet */
+  keys: Web3ApiKey[];
+  /** The wallet address */
+  walletAddress: string;
+}
+
+/** Result of revoking an API key */
+export interface Web3RevokeResult {
+  /** Confirmation message */
+  message: string;
+  /** The wallet address that owned the key */
+  walletAddress: string;
+}
+
+/** x402 payment details returned by subscribe (402 response) */
+export interface Web3PaymentRequired {
+  /** Amount in smallest unit (e.g., "49000000" for $49 USDC) */
+  amount: string;
+  /** Payment asset (e.g., "USDC") */
+  asset: string;
+  /** Blockchain network (e.g., "base") */
+  network: string;
+  /** Address to send payment to */
+  payTo: string;
+  /** Token contract address */
+  assetAddress: string;
+}
+
+/** Result of a successful x402 subscription */
+export interface Web3SubscribeResult {
+  /** The generated API key */
+  apiKey: string;
+  /** Subscription tier */
+  tier: string;
+  /** Expiration timestamp (ISO 8601) */
+  expiresAt: string;
+  /** The wallet address that owns the subscription */
+  walletAddress: string;
+  /** On-chain transaction hash */
+  txHash?: string;
+}
+
+// =============================================================================
 // Error Types
 // =============================================================================
 

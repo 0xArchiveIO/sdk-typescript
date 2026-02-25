@@ -210,6 +210,14 @@ export type {
   SlaResponse,
   ListIncidentsParams,
   SlaParams,
+  // Web3 Auth
+  SiweChallenge,
+  Web3SignupResult,
+  Web3ApiKey,
+  Web3KeysList,
+  Web3RevokeResult,
+  Web3PaymentRequired,
+  Web3SubscribeResult,
   // WebSocket
   WsChannel,
   WsOptions,

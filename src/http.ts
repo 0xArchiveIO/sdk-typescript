@@ -63,6 +63,16 @@ export class HttpClient {
     return this.validate;
   }
 
+  /** Base URL for raw requests (used by web3 subscribe) */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /** Timeout in ms for raw requests (used by web3 subscribe) */
+  getTimeout(): number {
+    return this.timeout;
+  }
+
   /**
    * Make a GET request to the API
    *
@@ -120,6 +130,81 @@ export class HttpClient {
       }
 
       // Validate response if validation is enabled and schema is provided
+      if (this.validate && schema) {
+        const result = schema.safeParse(data);
+        if (!result.success) {
+          const apiResponse = data as unknown as ApiResponse<unknown>;
+          throw new OxArchiveError(
+            `Response validation failed: ${result.error.message}`,
+            422,
+            apiResponse.meta?.requestId
+          );
+        }
+        return result.data;
+      }
+
+      return data as T;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof OxArchiveError) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new OxArchiveError(`Request timeout after ${this.timeout}ms`, 408);
+      }
+
+      throw new OxArchiveError(
+        error instanceof Error ? error.message : 'Unknown error',
+        500
+      );
+    }
+  }
+
+  /**
+   * Make a POST request to the API
+   *
+   * @param path - API endpoint path
+   * @param body - JSON request body
+   * @param schema - Optional Zod schema for validation (used when validation is enabled)
+   */
+  async post<T>(
+    path: string,
+    body?: Record<string, unknown>,
+    schema?: z.ZodType<T>
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-API-Key': this.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const rawData = await response.json();
+      const data = transformKeys(rawData) as Record<string, unknown>;
+
+      if (!response.ok) {
+        const error = data as unknown as ApiError;
+        const apiResponse = data as unknown as ApiResponse<unknown>;
+        throw new OxArchiveError(
+          error.error || `Request failed with status ${response.status}`,
+          response.status,
+          apiResponse.meta?.requestId
+        );
+      }
+
       if (this.validate && schema) {
         const result = schema.safeParse(data);
         if (!result.success) {
