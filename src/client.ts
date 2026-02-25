@@ -8,6 +8,7 @@ import {
   FundingResource,
   OpenInterestResource,
   DataQualityResource,
+  Web3Resource,
 } from './resources';
 
 const DEFAULT_BASE_URL = 'https://api.0xarchive.io';
@@ -69,6 +70,11 @@ export class OxArchive {
   public readonly dataQuality: DataQualityResource;
 
   /**
+   * Wallet-based auth: get API keys via SIWE signature
+   */
+  public readonly web3: Web3Resource;
+
+  /**
    * @deprecated Use client.hyperliquid.orderbook instead
    */
   public readonly orderbook: OrderBookResource;
@@ -116,6 +122,9 @@ export class OxArchive {
 
     // Data quality monitoring (cross-exchange)
     this.dataQuality = new DataQualityResource(this.http);
+
+    // Web3 wallet-based authentication
+    this.web3 = new Web3Resource(this.http);
 
     // Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
     // These will be removed in v2.0

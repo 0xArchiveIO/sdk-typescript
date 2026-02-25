@@ -636,6 +636,110 @@ const client = new OxArchive({
 });
 ```
 
+### Web3 Authentication
+
+Get API keys programmatically using an Ethereum wallet — no browser or email required.
+
+#### Free Tier (SIWE)
+
+```typescript
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { mainnet } from 'viem/chains';
+
+const account = privateKeyToAccount('0xYOUR_PRIVATE_KEY');
+const walletClient = createWalletClient({ account, chain: mainnet, transport: http() });
+
+// 1. Get SIWE challenge
+const challenge = await client.web3.challenge(account.address);
+
+// 2. Sign with personal_sign (EIP-191)
+const signature = await walletClient.signMessage({ message: challenge.message });
+
+// 3. Submit → receive API key
+const result = await client.web3.signup(challenge.message, signature);
+console.log(result.apiKey); // "0xa_..."
+```
+
+#### Paid Tier (x402 USDC on Base)
+
+```typescript
+import { createWalletClient, http, encodePacked } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
+import crypto from 'crypto';
+
+const account = privateKeyToAccount('0xYOUR_PRIVATE_KEY');
+const walletClient = createWalletClient({ account, chain: base, transport: http() });
+
+const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
+// 1. Get pricing
+const quote = await client.web3.subscribeQuote('build');
+// quote.amount = "49000000" ($49 USDC), quote.payTo = "0x..."
+
+// 2. Build & sign EIP-3009 transferWithAuthorization
+const nonce = `0x${crypto.randomBytes(32).toString('hex')}` as `0x${string}`;
+const validAfter = 0n;
+const validBefore = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+const signature = await walletClient.signTypedData({
+  domain: {
+    name: 'USD Coin',
+    version: '2',
+    chainId: 8453,
+    verifyingContract: USDC_ADDRESS,
+  },
+  types: {
+    TransferWithAuthorization: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' },
+      { name: 'validBefore', type: 'uint256' },
+      { name: 'nonce', type: 'bytes32' },
+    ],
+  },
+  primaryType: 'TransferWithAuthorization',
+  message: {
+    from: account.address,
+    to: quote.payTo as `0x${string}`,
+    value: BigInt(quote.amount),
+    validAfter,
+    validBefore,
+    nonce,
+  },
+});
+
+// 3. Build x402 payment envelope and base64-encode
+const paymentPayload = btoa(JSON.stringify({
+  x402Version: 2,
+  payload: {
+    signature,
+    authorization: {
+      from: account.address,
+      to: quote.payTo,
+      value: quote.amount,
+      validAfter: '0',
+      validBefore: validBefore.toString(),
+      nonce,
+    },
+  },
+}));
+
+// 4. Submit payment → receive API key + subscription
+const sub = await client.web3.subscribe('build', paymentPayload);
+console.log(sub.apiKey, sub.tier, sub.expiresAt);
+```
+
+#### Key Management
+
+```typescript
+// List and revoke keys (requires a fresh SIWE signature)
+const keys = await client.web3.listKeys(challenge.message, signature);
+await client.web3.revokeKey(challenge.message, signature, keys.keys[0].id);
+```
+
 ### Legacy API (Deprecated)
 
 The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:
