@@ -44,13 +44,13 @@ export class CandlesResource {
   /**
    * Get historical OHLCV candle data with cursor-based pagination
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range, interval, and cursor pagination parameters (start and end are required)
    * @returns CursorResponse with candle records and nextCursor for pagination
    */
-  async history(coin: string, params: CandleHistoryParams): Promise<CursorResponse<Candle[]>> {
+  async history(symbol: string, params: CandleHistoryParams): Promise<CursorResponse<Candle[]>> {
     const response = await this.http.get<ApiResponse<Candle[]>>(
-      `${this.basePath}/candles/${this.coinTransform(coin)}`,
+      `${this.basePath}/candles/${this.coinTransform(symbol)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? CandleArrayResponseSchema : undefined
     );

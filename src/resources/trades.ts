@@ -38,12 +38,12 @@ export class TradesResource {
   ) {}
 
   /**
-   * Get trade history for a coin using cursor-based pagination
+   * Get trade history for a symbol using cursor-based pagination
    *
    * Uses cursor-based pagination by default, which is more efficient for large datasets.
    * Use the `nextCursor` from the response as the `cursor` parameter to get the next page.
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range and cursor pagination parameters (start and end are required)
    * @returns Object with trades array and nextCursor for pagination
    *
@@ -67,9 +67,9 @@ export class TradesResource {
    * }
    * ```
    */
-  async list(coin: string, params: GetTradesCursorParams): Promise<CursorResponse<Trade[]>> {
+  async list(symbol: string, params: GetTradesCursorParams): Promise<CursorResponse<Trade[]>> {
     const response = await this.http.get<ApiResponse<Trade[]>>(
-      `${this.basePath}/trades/${this.coinTransform(coin)}`,
+      `${this.basePath}/trades/${this.coinTransform(symbol)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? TradeArrayResponseSchema : undefined
     );
@@ -80,20 +80,20 @@ export class TradesResource {
   }
 
   /**
-   * Get most recent trades for a coin.
+   * Get most recent trades for a symbol.
    *
    * Note: This method is available for Lighter (client.lighter.trades.recent())
    * and HIP-3 (client.hyperliquid.hip3.trades.recent()) which have real-time data
    * ingestion. Hyperliquid uses hourly backfill so this endpoint is not available
    * for Hyperliquid.
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param limit - Number of trades to return (default: 100)
    * @returns Array of recent trades
    */
-  async recent(coin: string, limit?: number): Promise<Trade[]> {
+  async recent(symbol: string, limit?: number): Promise<Trade[]> {
     const response = await this.http.get<ApiResponse<Trade[]>>(
-      `${this.basePath}/trades/${this.coinTransform(coin)}/recent`,
+      `${this.basePath}/trades/${this.coinTransform(symbol)}/recent`,
       { limit },
       this.http.validationEnabled ? TradeArrayResponseSchema : undefined
     );

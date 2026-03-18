@@ -38,18 +38,22 @@ import { LiquidationArrayResponseSchema, LiquidationVolumeArrayResponseSchema } 
  * ```
  */
 export class LiquidationsResource {
-  constructor(private http: HttpClient, private basePath: string = '/v1') {}
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1',
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+  ) {}
 
   /**
-   * Get liquidation history for a coin with cursor-based pagination
+   * Get liquidation history for a symbol with cursor-based pagination
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range and cursor pagination parameters (start and end are required)
    * @returns CursorResponse with liquidation records and nextCursor for pagination
    */
-  async history(coin: string, params: LiquidationHistoryParams): Promise<CursorResponse<Liquidation[]>> {
+  async history(symbol: string, params: LiquidationHistoryParams): Promise<CursorResponse<Liquidation[]>> {
     const response = await this.http.get<ApiResponse<Liquidation[]>>(
-      `${this.basePath}/liquidations/${coin.toUpperCase()}`,
+      `${this.basePath}/liquidations/${this.coinTransform(symbol)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
     );
@@ -88,13 +92,13 @@ export class LiquidationsResource {
    * Returns pre-aggregated data with total/long/short USD volumes per bucket,
    * reducing data transfer by 100-1000x compared to individual liquidation records.
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range, cursor, and interval parameters
    * @returns CursorResponse with liquidation volume buckets
    */
-  async volume(coin: string, params: LiquidationVolumeParams): Promise<CursorResponse<LiquidationVolume[]>> {
+  async volume(symbol: string, params: LiquidationVolumeParams): Promise<CursorResponse<LiquidationVolume[]>> {
     const response = await this.http.get<ApiResponse<LiquidationVolume[]>>(
-      `${this.basePath}/liquidations/${coin.toUpperCase()}/volume`,
+      `${this.basePath}/liquidations/${this.coinTransform(symbol)}/volume`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationVolumeArrayResponseSchema as any : undefined
     );

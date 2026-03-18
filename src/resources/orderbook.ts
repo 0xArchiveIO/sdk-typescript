@@ -69,15 +69,15 @@ export class OrderBookResource {
   ) {}
 
   /**
-   * Get order book snapshot for a coin
+   * Get order book snapshot for a symbol
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Optional parameters
    * @returns Order book snapshot
    */
-  async get(coin: string, params?: GetOrderBookParams): Promise<OrderBook> {
+  async get(symbol: string, params?: GetOrderBookParams): Promise<OrderBook> {
     const response = await this.http.get<ApiResponse<OrderBook>>(
-      `${this.basePath}/orderbook/${this.coinTransform(coin)}`,
+      `${this.basePath}/orderbook/${this.coinTransform(symbol)}`,
       params as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookResponseSchema : undefined
     );
@@ -87,7 +87,7 @@ export class OrderBookResource {
   /**
    * Get historical order book snapshots with cursor-based pagination
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range and cursor pagination parameters (start and end are required)
    * @returns CursorResponse with order book snapshots and nextCursor for pagination
    *
@@ -112,11 +112,11 @@ export class OrderBookResource {
    * ```
    */
   async history(
-    coin: string,
+    symbol: string,
     params: OrderBookHistoryParams
   ): Promise<CursorResponse<OrderBook[]>> {
     const response = await this.http.get<ApiResponse<OrderBook[]>>(
-      `${this.basePath}/orderbook/${this.coinTransform(coin)}/history`,
+      `${this.basePath}/orderbook/${this.coinTransform(symbol)}/history`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookArrayResponseSchema : undefined
     );
@@ -135,7 +135,7 @@ export class OrderBookResource {
    *
    * For automatic reconstruction, use `historyReconstructed()` instead.
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range parameters
    * @returns Tick data with checkpoint and deltas
    *
@@ -156,7 +156,7 @@ export class OrderBookResource {
    * ```
    */
   async historyTick(
-    coin: string,
+    symbol: string,
     params: TickHistoryParams
   ): Promise<TickData> {
     const response = await this.http.get<{
@@ -169,7 +169,7 @@ export class OrderBookResource {
       error?: string;
       message?: string;
     }>(
-      `${this.basePath}/orderbook/${this.coinTransform(coin)}/history`,
+      `${this.basePath}/orderbook/${this.coinTransform(symbol)}/history`,
       {
         ...params,
         granularity: 'tick',
@@ -200,7 +200,7 @@ export class OrderBookResource {
    * For large time ranges, consider using `historyTick()` with the
    * `OrderBookReconstructor.iterate()` method for memory efficiency.
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range parameters
    * @param options - Reconstruction options
    * @returns Array of reconstructed orderbook snapshots
@@ -225,11 +225,11 @@ export class OrderBookResource {
    * ```
    */
   async historyReconstructed(
-    coin: string,
+    symbol: string,
     params: TickHistoryParams,
     options: ReconstructOptions = {}
   ): Promise<ReconstructedOrderBook[]> {
-    const tickData = await this.historyTick(coin, params);
+    const tickData = await this.historyTick(symbol, params);
     const reconstructor = new OrderBookReconstructor();
     return reconstructor.reconstructAll(tickData.checkpoint, tickData.deltas, options);
   }
@@ -271,7 +271,7 @@ export class OrderBookResource {
    * per API request and yielding reconstructed orderbook snapshots one at a time.
    * Memory-efficient for processing large time ranges.
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range parameters
    * @param depth - Maximum price levels to include in output snapshots
    * @yields Reconstructed orderbook snapshots
@@ -295,7 +295,7 @@ export class OrderBookResource {
    * ```
    */
   async *iterateTickHistory(
-    coin: string,
+    symbol: string,
     params: TickHistoryParams,
     depth?: number
   ): AsyncGenerator<ReconstructedOrderBook, void, undefined> {
@@ -308,7 +308,7 @@ export class OrderBookResource {
     let isFirstPage = true;
 
     while (cursor < endTs) {
-      const tickData = await this.historyTick(coin, {
+      const tickData = await this.historyTick(symbol, {
         start: cursor,
         end: endTs,
         depth: params.depth,
