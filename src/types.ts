@@ -546,6 +546,7 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  *
  * - ticker/all_tickers: real-time only
  * - liquidations: historical only (May 2025+)
+ * - hip3_liquidations: historical only (Feb 2026+)
  * - open_interest, funding, lighter_open_interest, lighter_funding,
  *   hip3_open_interest, hip3_funding: historical only (replay/stream)
  */
@@ -553,9 +554,10 @@ export type WsChannel =
   | 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers'
   | 'open_interest' | 'funding'
   | 'lighter_orderbook' | 'lighter_trades' | 'lighter_candles'
-  | 'lighter_open_interest' | 'lighter_funding'
+  | 'lighter_open_interest' | 'lighter_funding' | 'lighter_l3_orderbook'
   | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles'
-  | 'hip3_open_interest' | 'hip3_funding';
+  | 'hip3_open_interest' | 'hip3_funding' | 'hip3_liquidations'
+  | 'l4_diffs' | 'l4_orders' | 'hip3_l4_diffs' | 'hip3_l4_orders';
 
 /** Subscribe message from client */
 export interface WsSubscribe {
@@ -820,6 +822,24 @@ export interface WsGapDetected {
   duration_minutes: number;
 }
 
+/** L4 snapshot (sent on l4_diffs/hip3_l4_diffs subscription) */
+export interface WsL4Snapshot {
+  type: 'l4_snapshot';
+  channel: WsChannel;
+  coin: string;
+  last_block_number: number;
+  timestamp: number;
+  data: any;
+}
+
+/** L4 batched data (all L4 channels) */
+export interface WsL4Batch {
+  type: 'l4_batch';
+  channel: WsChannel;
+  coin: string;
+  data: any[];
+}
+
 /** Server message union type */
 export type WsServerMessage =
   | WsSubscribed
@@ -840,7 +860,9 @@ export type WsServerMessage =
   | WsHistoricalBatch
   | WsStreamCompleted
   | WsStreamStopped
-  | WsGapDetected;
+  | WsGapDetected
+  | WsL4Snapshot
+  | WsL4Batch;
 
 /**
  * WebSocket connection options.

@@ -10,6 +10,9 @@ import {
   OpenInterestResource,
   CandlesResource,
   LiquidationsResource,
+  OrdersResource,
+  L4OrderBookResource,
+  L3OrderBookResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -66,6 +69,16 @@ export class HyperliquidClient {
   public readonly liquidations: LiquidationsResource;
 
   /**
+   * Order history, flow, and TP/SL
+   */
+  public readonly orders: OrdersResource;
+
+  /**
+   * L4 order book (snapshots, diffs, history)
+   */
+  public readonly l4Orderbook: L4OrderBookResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (February 2026+)
    */
   public readonly hip3: Hip3Client;
@@ -82,18 +95,20 @@ export class HyperliquidClient {
     this.openInterest = new OpenInterestResource(http, basePath);
     this.candles = new CandlesResource(http, basePath);
     this.liquidations = new LiquidationsResource(http, basePath);
+    this.orders = new OrdersResource(http, basePath);
+    this.l4Orderbook = new L4OrderBookResource(http, basePath);
     this.hip3 = new Hip3Client(http);
   }
 
   /**
-   * Get per-coin data freshness across all data types
+   * Get per-symbol data freshness across all data types
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
-   * @returns Per-coin freshness with last_updated and lag_ms for each data type
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
+   * @returns Per-symbol freshness with last_updated and lag_ms for each data type
    */
-  async freshness(coin: string): Promise<CoinFreshness> {
+  async freshness(symbol: string): Promise<CoinFreshness> {
     const response = await this.http.get<ApiResponse<CoinFreshness>>(
-      `/v1/hyperliquid/freshness/${coin.toUpperCase()}`,
+      `/v1/hyperliquid/freshness/${symbol.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
     );
@@ -103,12 +118,12 @@ export class HyperliquidClient {
   /**
    * Get combined market summary (price, funding, OI, volume, liquidations) in one call
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @returns Combined market summary
    */
-  async summary(coin: string): Promise<CoinSummary> {
+  async summary(symbol: string): Promise<CoinSummary> {
     const response = await this.http.get<ApiResponse<CoinSummary>>(
-      `/v1/hyperliquid/summary/${coin.toUpperCase()}`,
+      `/v1/hyperliquid/summary/${symbol.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
     );
@@ -118,13 +133,13 @@ export class HyperliquidClient {
   /**
    * Get mark/oracle/mid price history (projected from OI data)
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range, cursor, and interval parameters
    * @returns CursorResponse with price snapshots
    */
-  async priceHistory(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+  async priceHistory(symbol: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
     const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
-      `/v1/hyperliquid/prices/${coin.toUpperCase()}`,
+      `/v1/hyperliquid/prices/${symbol.toUpperCase()}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
@@ -179,6 +194,21 @@ export class Hip3Client {
    */
   public readonly candles: CandlesResource;
 
+  /**
+   * Liquidation events
+   */
+  public readonly liquidations: LiquidationsResource;
+
+  /**
+   * Order history, flow, and TP/SL
+   */
+  public readonly orders: OrdersResource;
+
+  /**
+   * L4 order book (snapshots, diffs, history)
+   */
+  public readonly l4Orderbook: L4OrderBookResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -192,17 +222,20 @@ export class Hip3Client {
     this.funding = new FundingResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
     this.candles = new CandlesResource(http, basePath, coinTransform);
+    this.liquidations = new LiquidationsResource(http, basePath, coinTransform);
+    this.orders = new OrdersResource(http, basePath, coinTransform);
+    this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
   }
 
   /**
-   * Get per-coin data freshness across all data types
+   * Get per-symbol data freshness across all data types
    *
-   * @param coin - The coin symbol (case-sensitive, e.g., 'km:US500')
-   * @returns Per-coin freshness with last_updated and lag_ms for each data type
+   * @param symbol - The symbol (case-sensitive, e.g., 'km:US500')
+   * @returns Per-symbol freshness with last_updated and lag_ms for each data type
    */
-  async freshness(coin: string): Promise<CoinFreshness> {
+  async freshness(symbol: string): Promise<CoinFreshness> {
     const response = await this.http.get<ApiResponse<CoinFreshness>>(
-      `/v1/hyperliquid/hip3/freshness/${coin}`,
+      `/v1/hyperliquid/hip3/freshness/${symbol}`,
       undefined,
       this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
     );
@@ -212,12 +245,12 @@ export class Hip3Client {
   /**
    * Get combined market summary (price, funding, OI) in one call
    *
-   * @param coin - The coin symbol (case-sensitive, e.g., 'km:US500')
+   * @param symbol - The symbol (case-sensitive, e.g., 'km:US500')
    * @returns Combined market summary
    */
-  async summary(coin: string): Promise<CoinSummary> {
+  async summary(symbol: string): Promise<CoinSummary> {
     const response = await this.http.get<ApiResponse<CoinSummary>>(
-      `/v1/hyperliquid/hip3/summary/${coin}`,
+      `/v1/hyperliquid/hip3/summary/${symbol}`,
       undefined,
       this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
     );
@@ -227,13 +260,13 @@ export class Hip3Client {
   /**
    * Get mark/oracle/mid price history (projected from OI data)
    *
-   * @param coin - The coin symbol (case-sensitive, e.g., 'km:US500')
+   * @param symbol - The symbol (case-sensitive, e.g., 'km:US500')
    * @param params - Time range, cursor, and interval parameters
    * @returns CursorResponse with price snapshots
    */
-  async priceHistory(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+  async priceHistory(symbol: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
     const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
-      `/v1/hyperliquid/hip3/prices/${coin}`,
+      `/v1/hyperliquid/hip3/prices/${symbol}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
@@ -289,6 +322,11 @@ export class LighterClient {
    */
   public readonly candles: CandlesResource;
 
+  /**
+   * L3 order book (Lighter only)
+   */
+  public readonly l3Orderbook: L3OrderBookResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -300,17 +338,18 @@ export class LighterClient {
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
     this.candles = new CandlesResource(http, basePath);
+    this.l3Orderbook = new L3OrderBookResource(http, basePath);
   }
 
   /**
-   * Get per-coin data freshness across all data types
+   * Get per-symbol data freshness across all data types
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
-   * @returns Per-coin freshness with last_updated and lag_ms for each data type
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
+   * @returns Per-symbol freshness with last_updated and lag_ms for each data type
    */
-  async freshness(coin: string): Promise<CoinFreshness> {
+  async freshness(symbol: string): Promise<CoinFreshness> {
     const response = await this.http.get<ApiResponse<CoinFreshness>>(
-      `/v1/lighter/freshness/${coin.toUpperCase()}`,
+      `/v1/lighter/freshness/${symbol.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
     );
@@ -320,12 +359,12 @@ export class LighterClient {
   /**
    * Get combined market summary (price, funding, OI) in one call
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @returns Combined market summary
    */
-  async summary(coin: string): Promise<CoinSummary> {
+  async summary(symbol: string): Promise<CoinSummary> {
     const response = await this.http.get<ApiResponse<CoinSummary>>(
-      `/v1/lighter/summary/${coin.toUpperCase()}`,
+      `/v1/lighter/summary/${symbol.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
     );
@@ -335,13 +374,13 @@ export class LighterClient {
   /**
    * Get mark/oracle price history (projected from OI data)
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range, cursor, and interval parameters
    * @returns CursorResponse with price snapshots
    */
-  async priceHistory(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+  async priceHistory(symbol: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
     const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
-      `/v1/lighter/prices/${coin.toUpperCase()}`,
+      `/v1/lighter/prices/${symbol.toUpperCase()}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );

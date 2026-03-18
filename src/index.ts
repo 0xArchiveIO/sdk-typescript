@@ -258,6 +258,9 @@ export type {
   WsStreamCompleted,
   WsStreamStopped,
   WsGapDetected,
+  // L4 WebSocket types
+  WsL4Snapshot,
+  WsL4Batch,
   // Errors
   ApiError,
 } from './types';

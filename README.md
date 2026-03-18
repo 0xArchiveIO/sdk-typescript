@@ -4,7 +4,7 @@ Official TypeScript/JavaScript SDK for [0xarchive](https://0xarchive.io) - Histo
 
 Supports multiple exchanges:
 - **Hyperliquid** - Perpetuals data from April 2023
-- **Hyperliquid HIP-3** - Builder-deployed perpetuals (Pro+ only, February 2026+)
+- **Hyperliquid HIP-3** - Builder-deployed perpetuals (February 2026+, free tier: km:US500, Build+: all symbols, Pro+: orderbook history)
 - **Lighter.xyz** - Perpetuals data (August 2025+ for fills, Jan 2026+ for OB, OI, Funding Rate)
 
 ## Installation
@@ -60,7 +60,7 @@ const client = new OxArchive({
 
 ## REST API Reference
 
-All examples use `client.hyperliquid.*` but the same methods are available on `client.lighter.*` for Lighter.xyz data.
+Core resources (orderbook, trades, instruments, funding, openInterest, candles, freshness, summary, priceHistory) are available on both `client.hyperliquid.*` and `client.lighter.*`. Some resources are exchange-specific -- see each section for details.
 
 ### Order Book
 
@@ -232,7 +232,7 @@ while (result.nextCursor) {
 const recent = await client.lighter.trades.recent('BTC', 100);
 ```
 
-**Note:** The `recent()` method is only available for Lighter.xyz (`client.lighter.trades.recent()`). Hyperliquid does not have a recent trades endpoint - use `list()` with a time range instead.
+**Note:** The `recent()` method is available for Lighter.xyz (`client.lighter.trades.recent()`) and HIP-3 (`client.hyperliquid.hip3.trades.recent()`). Hyperliquid does not have a recent trades endpoint -- use `list()` with a time range instead.
 
 ### Instruments
 
@@ -353,12 +353,12 @@ const hourly = await client.hyperliquid.openInterest.history('BTC', {
 | `limit` | `number` | No | Max results (default: 100, max: 1000) |
 | `interval` | `OiFundingInterval` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
 
-### Liquidations (Hyperliquid only)
+### Liquidations
 
-Get historical liquidation events. Data available from May 2025 onwards.
+Get historical liquidation events. Data available from May 2025 onwards for Hyperliquid, and from February 2026 for HIP-3.
 
 ```typescript
-// Get liquidation history for a coin
+// Get liquidation history for a coin (Hyperliquid)
 const liquidations = await client.hyperliquid.liquidations.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -383,14 +383,21 @@ const userLiquidations = await client.hyperliquid.liquidations.byUser('0x1234...
   end: Date.now(),
   coin: 'BTC'  // optional filter
 });
+
+// HIP-3 liquidations (case-sensitive coins)
+const hip3Liquidations = await client.hyperliquid.hip3.liquidations.history('km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 100
+});
 ```
 
-### Liquidation Volume (Hyperliquid only)
+### Liquidation Volume
 
 Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records.
 
 ```typescript
-// Get hourly liquidation volume for the last week
+// Get hourly liquidation volume for the last week (Hyperliquid)
 const volume = await client.hyperliquid.liquidations.volume('BTC', {
   start: Date.now() - 86400000 * 7,
   end: Date.now(),
@@ -400,11 +407,170 @@ const volume = await client.hyperliquid.liquidations.volume('BTC', {
 for (const bucket of volume.data) {
   console.log(`${bucket.timestamp}: total=$${bucket.totalUsd}, long=$${bucket.longUsd}, short=$${bucket.shortUsd}`);
 }
+
+// HIP-3 liquidation volume (case-sensitive coins)
+const hip3Volume = await client.hyperliquid.hip3.liquidations.volume('km:US500', {
+  start: Date.now() - 86400000 * 7,
+  end: Date.now(),
+  interval: '1h'
+});
 ```
 
-### Freshness (Hyperliquid only)
+### Orders
 
-Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it.
+Access order history, order flow aggregations, and TP/SL (take-profit/stop-loss) orders. Available for Hyperliquid and HIP-3.
+
+```typescript
+// Get order history for a coin
+const orders = await client.hyperliquid.orders.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000,
+  user: '0x1234...',    // optional: filter by user address
+  status: 'filled',     // optional: filter by status
+  order_type: 'limit',  // optional: filter by order type
+});
+
+// Paginate through all results
+const allOrders = [...orders.data];
+while (orders.nextCursor) {
+  const next = await client.hyperliquid.orders.history('BTC', {
+    start: Date.now() - 86400000,
+    end: Date.now(),
+    cursor: orders.nextCursor,
+    limit: 1000
+  });
+  allOrders.push(...next.data);
+}
+
+// Get order flow (aggregated order activity over time)
+const flow = await client.hyperliquid.orders.flow('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h',  // optional aggregation interval
+  limit: 100
+});
+
+// Get TP/SL orders
+const tpsl = await client.hyperliquid.orders.tpsl('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  user: '0x1234...',  // optional: filter by user
+  triggered: true,    // optional: filter by triggered status
+});
+
+// HIP-3 orders (case-sensitive coins)
+const hip3Orders = await client.hyperliquid.hip3.orders.history('km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000
+});
+
+const hip3Flow = await client.hyperliquid.hip3.orders.flow('km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h'
+});
+
+const hip3Tpsl = await client.hyperliquid.hip3.orders.tpsl('km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now()
+});
+```
+
+### L4 Order Book
+
+Access L4 orderbook snapshots, diffs, and history. L4 data includes user attribution (who placed each order). Available for Hyperliquid and HIP-3.
+
+```typescript
+// Get current L4 orderbook snapshot
+const l4Ob = await client.hyperliquid.l4Orderbook.get('BTC');
+
+// Get L4 orderbook at a specific timestamp with custom depth
+const l4Historical = await client.hyperliquid.l4Orderbook.get('BTC', {
+  timestamp: 1704067200000,
+  depth: 20
+});
+
+// Get L4 orderbook diffs (incremental updates)
+const diffs = await client.hyperliquid.l4Orderbook.diffs('BTC', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  limit: 1000
+});
+
+// Paginate through diffs
+const allDiffs = [...diffs.data];
+while (diffs.nextCursor) {
+  const next = await client.hyperliquid.l4Orderbook.diffs('BTC', {
+    start: Date.now() - 3600000,
+    end: Date.now(),
+    cursor: diffs.nextCursor,
+    limit: 1000
+  });
+  allDiffs.push(...next.data);
+}
+
+// Get L4 orderbook history (full snapshots over time)
+const l4History = await client.hyperliquid.l4Orderbook.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000
+});
+
+// HIP-3 L4 orderbook (case-sensitive coins)
+const hip3L4 = await client.hyperliquid.hip3.l4Orderbook.get('km:US500');
+
+const hip3L4Diffs = await client.hyperliquid.hip3.l4Orderbook.diffs('km:US500', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  limit: 1000
+});
+
+const hip3L4History = await client.hyperliquid.hip3.l4Orderbook.history('km:US500', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000
+});
+```
+
+### L3 Order Book (Lighter only)
+
+Access L3 orderbook snapshots and history from Lighter.xyz. L3 data includes individual order-level detail.
+
+```typescript
+// Get current L3 orderbook
+const l3Ob = await client.lighter.l3Orderbook.get('BTC');
+
+// Get L3 orderbook at a specific timestamp with custom depth
+const l3Historical = await client.lighter.l3Orderbook.get('BTC', {
+  timestamp: 1704067200000,
+  depth: 20
+});
+
+// Get L3 orderbook history
+const l3History = await client.lighter.l3Orderbook.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000
+});
+
+// Paginate through L3 history
+const allL3 = [...l3History.data];
+while (l3History.nextCursor) {
+  const next = await client.lighter.l3Orderbook.history('BTC', {
+    start: Date.now() - 86400000,
+    end: Date.now(),
+    cursor: l3History.nextCursor,
+    limit: 1000
+  });
+  allL3.push(...next.data);
+}
+```
+
+### Freshness
+
+Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it. Available for all exchanges.
 
 ```typescript
 // Hyperliquid
@@ -754,7 +920,7 @@ const trades = await client.trades.list('BTC', { start, end });
 
 ## WebSocket Client
 
-The WebSocket client supports three modes: real-time streaming, historical replay, and bulk streaming.
+The WebSocket client supports two modes: real-time streaming and historical replay. For bulk data downloads, use the S3 Parquet bulk export via the [Data Explorer](https://0xarchive.io/data).
 
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
@@ -848,53 +1014,12 @@ ws.replaySeek(1704067200000);  // Jump to timestamp
 ws.replayStop();
 ```
 
-### Bulk Streaming
-
-Fast bulk download for data pipelines. Data arrives in batches without timing delays.
-
-```typescript
-const ws = new OxArchiveWs({ apiKey: 'ox_...' });
-ws.connect();
-
-const allData: OrderBook[] = [];
-
-// Handle batched data
-ws.onBatch((coin, records) => {
-  allData.push(...records.map(r => r.data));
-});
-
-ws.onStreamProgress((snapshotsSent) => {
-  console.log(`Progress: ${snapshotsSent} snapshots`);
-});
-
-ws.onStreamComplete((channel, coin, recordsSent) => {
-  console.log(`Downloaded ${recordsSent} records`);
-});
-
-// Start bulk stream
-ws.stream('orderbook', 'ETH', {
-  start: Date.now() - 3600000,  // 1 hour ago
-  end: Date.now(),
-  batchSize: 1000               // Optional, defaults to 1000
-});
-
-// Lighter.xyz stream with granularity (tier restrictions apply)
-ws.stream('orderbook', 'BTC', {
-  start: Date.now() - 3600000,
-  end: Date.now(),
-  granularity: '10s'  // Options: 'checkpoint', '30s', '10s', '1s', 'tick'
-});
-
-// Stop if needed
-ws.streamStop();
-```
-
 ### Gap Detection
 
-During historical replay and bulk streaming, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
+During historical replay, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
 
 ```typescript
-// Handle gap notifications during replay/stream
+// Handle gap notifications during replay
 ws.onGap((channel, coin, gapStart, gapEnd, durationMinutes) => {
   console.log(`Gap detected in ${channel}/${coin}:`);
   console.log(`  From: ${new Date(gapStart).toISOString()}`);
@@ -935,8 +1060,8 @@ const ws = new OxArchiveWs({
 |---------|-------------|---------------|-------------------|
 | `orderbook` | L2 order book updates | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes |
-| `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
+| `candles` | OHLCV candle data | Yes | Yes (replay only) |
+| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay only) |
 | `open_interest` | Open interest snapshots | Yes | Replay/stream only |
 | `funding` | Funding rate snapshots | Yes | Replay/stream only |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
@@ -951,6 +1076,7 @@ const ws = new OxArchiveWs({
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Replay/stream only |
 | `hip3_funding` | HIP-3 funding rate snapshots | Yes | Replay/stream only |
+| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes (replay only) |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -963,6 +1089,7 @@ const ws = new OxArchiveWs({
 | `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
 | `lighter_open_interest` | Lighter open interest snapshots | Yes | Replay/stream only |
 | `lighter_funding` | Lighter funding rate snapshots | Yes | Replay/stream only |
+| `lighter_l3_orderbook` | Lighter L3 order-level orderbook (Pro+) | Yes | Yes |
 
 #### Candle Replay/Stream
 
@@ -975,14 +1102,6 @@ ws.replay('candles', 'BTC', {
   interval: '15m'  // 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
 });
 
-// Bulk stream candles
-ws.stream('candles', 'ETH', {
-  start: Date.now() - 3600000,
-  end: Date.now(),
-  batchSize: 1000,
-  interval: '1h'
-});
-
 // Lighter.xyz candles
 ws.replay('lighter_candles', 'BTC', {
   start: Date.now() - 86400000,
@@ -991,7 +1110,7 @@ ws.replay('lighter_candles', 'BTC', {
 });
 ```
 
-#### HIP-3 Replay/Stream
+#### HIP-3 Replay
 
 ```typescript
 // Replay HIP-3 orderbook at 50x speed
@@ -999,13 +1118,6 @@ ws.replay('hip3_orderbook', 'km:US500', {
   start: Date.now() - 3600000,
   end: Date.now(),
   speed: 50,
-});
-
-// Bulk stream HIP-3 trades
-ws.stream('hip3_trades', 'xyz:XYZ100', {
-  start: Date.now() - 86400000,
-  end: Date.now(),
-  batchSize: 1000,
 });
 
 // HIP-3 candles
@@ -1062,42 +1174,7 @@ ws.replaySeek(1704067200000);
 ws.replayStop();
 ```
 
-### Multi-Channel Bulk Stream
-
-Stream multiple channels simultaneously for fast bulk download.
-
-```typescript
-const ws = new OxArchiveWs({ apiKey: 'ox_...' });
-await ws.connect();
-
-// Handle initial snapshots
-ws.onReplaySnapshot((channel, coin, timestamp, data) => {
-  console.log(`Initial ${channel} snapshot`);
-});
-
-// Handle batched data from all channels
-ws.onBatch((coin, records) => {
-  for (const record of records) {
-    // Process interleaved data from all channels
-  }
-});
-
-ws.onStreamComplete((channel, coin, count) => {
-  console.log(`Stream complete: ${count} records`);
-});
-
-// Start multi-channel stream
-ws.multiStream(['orderbook', 'trades', 'open_interest', 'funding'], 'ETH', {
-  start: Date.now() - 3600000,
-  end: Date.now(),
-  batchSize: 1000
-});
-
-// Stop if needed
-ws.streamStop();
-```
-
-**Channels available for multi-channel mode:** All historical channels can be combined in a single multi-channel replay or stream. This includes `orderbook`, `trades`, `candles`, `liquidations`, `open_interest`, `funding`, and their `lighter_*` and `hip3_*` variants.
+**Channels available for multi-channel replay:** All historical channels can be combined in a single multi-channel replay. This includes `orderbook`, `trades`, `candles`, `liquidations`, `open_interest`, `funding`, and their `lighter_*` and `hip3_*` variants.
 
 ### WebSocket Connection States
 
@@ -1112,18 +1189,18 @@ The SDK accepts timestamps as Unix milliseconds or Date objects:
 
 ```typescript
 // Unix milliseconds (recommended)
-client.orderbook.history('BTC', {
+client.hyperliquid.orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now()
 });
 
 // Date objects (converted automatically)
-client.orderbook.history('BTC', {
+client.hyperliquid.orderbook.history('BTC', {
   start: new Date('2024-01-01'),
   end: new Date('2024-01-02')
 });
 
-// WebSocket replay/stream also accepts both
+// WebSocket replay also accepts both
 ws.replay('orderbook', 'BTC', {
   start: Date.now() - 3600000,
   end: Date.now(),
@@ -1197,6 +1274,10 @@ const client = new OxArchive({
 ```
 
 When enabled, responses are validated against Zod schemas and throw `OxArchiveError` with status 422 if validation fails.
+
+## Bulk Data Downloads
+
+For large-scale data exports (full order books, complete trade history, etc.), use the S3 Parquet bulk export available at [0xarchive.io/data](https://0xarchive.io/data). The Data Explorer lets you select time ranges, symbols, and data types, then download compressed Parquet files directly.
 
 ## Requirements
 

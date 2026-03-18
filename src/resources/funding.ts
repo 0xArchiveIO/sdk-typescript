@@ -38,15 +38,15 @@ export class FundingResource {
   ) {}
 
   /**
-   * Get funding rate history for a coin with cursor-based pagination
+   * Get funding rate history for a symbol with cursor-based pagination
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range and cursor pagination parameters (start and end are required)
    * @returns CursorResponse with funding rate records and nextCursor for pagination
    */
-  async history(coin: string, params: FundingHistoryParams): Promise<CursorResponse<FundingRate[]>> {
+  async history(symbol: string, params: FundingHistoryParams): Promise<CursorResponse<FundingRate[]>> {
     const response = await this.http.get<ApiResponse<FundingRate[]>>(
-      `${this.basePath}/funding/${this.coinTransform(coin)}`,
+      `${this.basePath}/funding/${this.coinTransform(symbol)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? FundingRateArrayResponseSchema : undefined
     );
@@ -57,14 +57,14 @@ export class FundingResource {
   }
 
   /**
-   * Get current funding rate for a coin
+   * Get current funding rate for a symbol
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @returns Current funding rate
    */
-  async current(coin: string): Promise<FundingRate> {
+  async current(symbol: string): Promise<FundingRate> {
     const response = await this.http.get<ApiResponse<FundingRate>>(
-      `${this.basePath}/funding/${this.coinTransform(coin)}/current`,
+      `${this.basePath}/funding/${this.coinTransform(symbol)}/current`,
       undefined,
       this.http.validationEnabled ? FundingRateResponseSchema : undefined
     );

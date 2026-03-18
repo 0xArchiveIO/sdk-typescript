@@ -38,15 +38,15 @@ export class OpenInterestResource {
   ) {}
 
   /**
-   * Get open interest history for a coin with cursor-based pagination
+   * Get open interest history for a symbol with cursor-based pagination
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range and cursor pagination parameters (start and end are required)
    * @returns CursorResponse with open interest records and nextCursor for pagination
    */
-  async history(coin: string, params: OpenInterestHistoryParams): Promise<CursorResponse<OpenInterest[]>> {
+  async history(symbol: string, params: OpenInterestHistoryParams): Promise<CursorResponse<OpenInterest[]>> {
     const response = await this.http.get<ApiResponse<OpenInterest[]>>(
-      `${this.basePath}/openinterest/${this.coinTransform(coin)}`,
+      `${this.basePath}/openinterest/${this.coinTransform(symbol)}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OpenInterestArrayResponseSchema : undefined
     );
@@ -57,14 +57,14 @@ export class OpenInterestResource {
   }
 
   /**
-   * Get current open interest for a coin
+   * Get current open interest for a symbol
    *
-   * @param coin - The coin symbol (e.g., 'BTC', 'ETH')
+   * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @returns Current open interest
    */
-  async current(coin: string): Promise<OpenInterest> {
+  async current(symbol: string): Promise<OpenInterest> {
     const response = await this.http.get<ApiResponse<OpenInterest>>(
-      `${this.basePath}/openinterest/${this.coinTransform(coin)}/current`,
+      `${this.basePath}/openinterest/${this.coinTransform(symbol)}/current`,
       undefined,
       this.http.validationEnabled ? OpenInterestResponseSchema : undefined
     );
