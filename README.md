@@ -568,6 +568,38 @@ while (l3History.nextCursor) {
 }
 ```
 
+### L2 Order Book (Full-Depth)
+
+Access L2 full-depth orderbook derived from L4 data. Available for Hyperliquid and HIP-3.
+
+```typescript
+// L2 full-depth orderbook (Build+ tier)
+const l2 = await client.hyperliquid.l2Orderbook.get('BTC');
+
+// L2 orderbook at a specific timestamp with depth
+const l2Historical = await client.hyperliquid.l2Orderbook.get('BTC', {
+  timestamp: 1704067200000,
+  depth: 50
+});
+
+// L2 orderbook history (Build+ tier)
+const l2History = await client.hyperliquid.l2Orderbook.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000
+});
+
+// L2 tick-level diffs (Pro+ tier)
+const l2Diffs = await client.hyperliquid.l2Orderbook.diffs('BTC', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  limit: 1000
+});
+
+// HIP-3 L2 orderbook
+const hip3L2 = await client.hyperliquid.hip3.l2Orderbook.get('km:US500');
+```
+
 ### Freshness
 
 Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it. Available for all exchanges.
@@ -1066,6 +1098,8 @@ const ws = new OxArchiveWs({
 | `funding` | Funding rate snapshots | Yes | Replay/stream only |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
+| `l4_diffs` | L4 orderbook diffs with user attribution (Pro+) | Yes | Real-time only |
+| `l4_orders` | Order lifecycle events with user attribution (Pro+) | Yes | Real-time only |
 
 #### HIP-3 Builder Perps Channels
 
@@ -1077,6 +1111,8 @@ const ws = new OxArchiveWs({
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Replay/stream only |
 | `hip3_funding` | HIP-3 funding rate snapshots | Yes | Replay/stream only |
 | `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes (replay only) |
+| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs (Pro+) | Yes | Real-time only |
+| `hip3_l4_orders` | HIP-3 order lifecycle events (Pro+) | Yes | Real-time only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 

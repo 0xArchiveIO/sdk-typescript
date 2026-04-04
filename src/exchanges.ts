@@ -12,6 +12,7 @@ import {
   LiquidationsResource,
   OrdersResource,
   L4OrderBookResource,
+  L2OrderBookResource,
   L3OrderBookResource,
 } from './resources';
 import {
@@ -79,6 +80,11 @@ export class HyperliquidClient {
   public readonly l4Orderbook: L4OrderBookResource;
 
   /**
+   * L2 full-depth order book (derived from L4)
+   */
+  public readonly l2Orderbook: L2OrderBookResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (February 2026+)
    */
   public readonly hip3: Hip3Client;
@@ -97,6 +103,7 @@ export class HyperliquidClient {
     this.liquidations = new LiquidationsResource(http, basePath);
     this.orders = new OrdersResource(http, basePath);
     this.l4Orderbook = new L4OrderBookResource(http, basePath);
+    this.l2Orderbook = new L2OrderBookResource(http, basePath);
     this.hip3 = new Hip3Client(http);
   }
 
@@ -209,6 +216,11 @@ export class Hip3Client {
    */
   public readonly l4Orderbook: L4OrderBookResource;
 
+  /**
+   * L2 full-depth order book (derived from L4)
+   */
+  public readonly l2Orderbook: L2OrderBookResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -225,6 +237,7 @@ export class Hip3Client {
     this.liquidations = new LiquidationsResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
+    this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
   }
 
   /**
