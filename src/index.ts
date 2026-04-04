@@ -37,7 +37,7 @@ export { HyperliquidClient, Hip3Client, LighterClient } from './exchanges';
 // WebSocket client
 export { OxArchiveWs } from './websocket';
 
-// Orderbook Reconstructor (for tick-level data)
+// Orderbook Reconstructor — Lighter tick-level (Enterprise)
 export {
   OrderBookReconstructor,
   reconstructOrderBook,
@@ -46,6 +46,18 @@ export {
   type ReconstructedOrderBook,
   type ReconstructOptions,
 } from './orderbook-reconstructor';
+
+// L4 Orderbook Reconstructor — Hyperliquid / HIP-3 (Pro+)
+export {
+  L4OrderBookReconstructor,
+  type L4Order,
+  type L2Level,
+  type L4Diff,
+  type L4Checkpoint,
+} from './l4-reconstructor';
+
+// L2 Full-Depth Orderbook resource
+export { L2OrderBookResource, type L2OrderBookParams } from './resources/l2-orderbook';
 
 // Tick-level history params
 export type { TickHistoryParams } from './resources/orderbook';
