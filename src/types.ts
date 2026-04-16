@@ -149,6 +149,18 @@ export interface Trade {
   makerAddress?: string;
   /** Taker's wallet address (for market-level WebSocket trades) */
   takerAddress?: string;
+  /** Builder address that routed this order. Present only when the order was placed through a builder. */
+  builderAddress?: string;
+  /** Builder fee charged on this fill, paid to the builder (in quote currency, typically USDC). Present only when builderAddress is set. */
+  builderFee?: string;
+  /** HIP-3 deployer fee share on this fill (in quote currency). Negative for the maker side (rebate), positive for the taker side. Present only on HIP-3 fills. */
+  deployerFee?: string;
+  /** Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builderFee and deployerFee — paid to the network, not to a builder or deployer. Present only when the order paid for priority. */
+  priorityGas?: number;
+  /** Client order ID */
+  cloid?: string;
+  /** TWAP execution ID */
+  twapId?: number;
 }
 
 /**
