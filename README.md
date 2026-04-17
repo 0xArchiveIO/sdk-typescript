@@ -92,11 +92,11 @@ The `depth` parameter controls how many price levels are returned per side. Tier
 | Tier | Max Depth |
 |------|-----------|
 | Free | 20 |
-| Build | 50 |
-| Pro | 100 |
+| Build | 200 |
+| Pro | Full Depth |
 | Enterprise | Full Depth |
 
-**Note:** Hyperliquid source data only contains 20 levels. Higher limits apply to Lighter.xyz data.
+**Note:** Hyperliquid L2 source data contains 20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth on Pro+. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
 
 #### Lighter Orderbook Granularity
 
