@@ -1,6 +1,6 @@
 {
   "name": "@0xarchive/sdk",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Official TypeScript SDK for 0xarchive - Historical Market Data API (Hyperliquid, Lighter.xyz, HIP-3)",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

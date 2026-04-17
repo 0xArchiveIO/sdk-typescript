@@ -81,6 +81,12 @@ export const TradeSchema = z.object({
   userAddress: z.string().optional(),
   makerAddress: z.string().optional(),
   takerAddress: z.string().optional(),
+  builderAddress: z.string().optional(),
+  builderFee: z.string().optional(),
+  deployerFee: z.string().optional(),
+  priorityGas: z.number().optional(),
+  cloid: z.string().optional(),
+  twapId: z.number().optional(),
 });
 
 // =============================================================================

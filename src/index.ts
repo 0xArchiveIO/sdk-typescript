@@ -3,7 +3,7 @@
  *
  * Historical Market Data API for multiple exchanges:
  * - Hyperliquid (perpetuals data from April 2023)
- * - Hyperliquid HIP-3 builder perps (Pro+ only, February 2026+)
+ * - Hyperliquid HIP-3 builder perps (Free: km:US500, Build+: all symbols, February 2026+)
  * - Lighter.xyz (perpetuals data)
  *
  * @example
