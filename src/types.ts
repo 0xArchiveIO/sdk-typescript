@@ -1089,7 +1089,7 @@ export interface ExchangeCoverage {
 
 /** Overall coverage response */
 export interface CoverageResponse {
-  /** Coverage for all exchanges */
+  /** Coverage for supported venue APIs */
   exchanges: ExchangeCoverage[];
 }
 

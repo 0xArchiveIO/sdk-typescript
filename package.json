@@ -1,7 +1,7 @@
 {
   "name": "@0xarchive/sdk",
   "version": "1.4.0",
-  "description": "Official TypeScript SDK for 0xarchive - Historical Market Data API (Hyperliquid, Lighter.xyz, HIP-3)",
+  "description": "TypeScript SDK for the 0xArchive market data API for Hyperliquid and Lighter.xyz",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -26,10 +26,14 @@
   },
   "keywords": [
     "0xarchive",
+    "market-data",
     "hyperliquid",
-    "lighter",
+    "lighterxyz",
     "trading",
     "orderbook",
+    "trades",
+    "replay",
+    "agents",
     "historical-data",
     "api",
     "sdk"
@@ -38,11 +42,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/0xarchiveIO/sdk-typescript"
+    "url": "https://github.com/0xArchiveIO/sdk-typescript"
   },
-  "homepage": "https://0xarchive.io/docs/sdks",
+  "homepage": "https://www.0xarchive.io/github-typescript",
   "bugs": {
-    "url": "https://github.com/0xarchiveIO/sdk-typescript/issues"
+    "url": "https://github.com/0xArchiveIO/sdk-typescript/issues"
   },
   "engines": {
     "node": ">=18"

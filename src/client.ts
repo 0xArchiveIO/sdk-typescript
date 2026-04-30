@@ -17,8 +17,9 @@ const DEFAULT_TIMEOUT = 30000;
 /**
  * 0xarchive API client
  *
- * Supports multiple exchanges:
+ * Supports two top-level venue APIs:
  * - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
+ *   - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
  * - `client.lighter` - Lighter.xyz perpetuals
  *
  * @example
@@ -33,6 +34,9 @@ const DEFAULT_TIMEOUT = 30000;
  *
  * // Lighter.xyz data
  * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
+ *
+ * // Hyperliquid HIP-3 data
+ * const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('km:US500');
  *
  * // Get historical data
  * const history = await client.hyperliquid.orderbook.history('ETH', {
