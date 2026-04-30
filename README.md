@@ -1,11 +1,10 @@
 # @0xarchive/sdk
 
-Official TypeScript/JavaScript SDK for [0xarchive](https://0xarchive.io) - Historical Market Data API.
+TypeScript client for 0xArchive market data in Node services, dashboards, coding-agent workflows, and agent backends.
 
-Supports multiple exchanges:
-- **Hyperliquid** - Perpetuals data from April 2023
-- **Hyperliquid HIP-3** - Builder-deployed perpetuals (February 2026+, free tier: km:US500, Build+: all symbols, Pro+: orderbook history)
-- **Lighter.xyz** - Perpetuals data (August 2025+ for fills, Jan 2026+ for OB, OI, Funding Rate)
+0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`.
+
+Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, and order-book reconstruction utilities.
 
 ## Installation
 
@@ -24,15 +23,15 @@ import { OxArchive } from '@0xarchive/sdk';
 
 const client = new OxArchive({ apiKey: '0xa_your_api_key' });
 
-// Hyperliquid data
+// First successful call: Hyperliquid BTC order book
 const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
 console.log(`Hyperliquid BTC mid price: ${hlOrderbook.midPrice}`);
 
-// Lighter.xyz data
+// Lighter.xyz uses its own venue client
 const lighterOrderbook = await client.lighter.orderbook.get('BTC');
 console.log(`Lighter BTC mid price: ${lighterOrderbook.midPrice}`);
 
-// HIP-3 builder perps (February 2026+)
+// Hyperliquid HIP-3 builder perps stay under client.hyperliquid.hip3
 const hip3Instruments = await client.hyperliquid.hip3.instruments.list();
 const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('km:US500');
 const hip3Trades = await client.hyperliquid.hip3.trades.recent('km:US500');
@@ -46,6 +45,25 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
   limit: 100
 });
 ```
+
+## Choose Your Next Path
+
+| Need | Link |
+| --- | --- |
+| First authenticated route | [Quick Start](https://www.0xarchive.io/docs/quick-start) |
+| SDK install and route docs | [SDK docs](https://www.0xarchive.io/docs/sdks) |
+| Claude Code, GPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
+| Example notebooks | [Examples](https://github.com/0xArchiveIO/examples) |
+| File-based historical pulls | [Data Catalog](https://www.0xarchive.io/data) |
+| Route contract and machine context | [OpenAPI](https://www.0xarchive.io/openapi.json), [llms.txt](https://www.0xarchive.io/llms.txt) |
+
+## Data Coverage
+
+| Venue | Coverage | Notes |
+| --- | --- | --- |
+| Hyperliquid | April 2023+ | Perpetuals across the full venue |
+| Hyperliquid HIP-3 | February 2026+ | Free tier: `km:US500`. Build+: all HIP-3 symbols. Pro+: orderbook history. |
+| Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
 
 ## Configuration
 
@@ -602,7 +620,7 @@ const hip3L2 = await client.hyperliquid.hip3.l2Orderbook.get('km:US500');
 
 ### Freshness
 
-Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it. Available for all exchanges.
+Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it. Available across venue APIs.
 
 ```typescript
 // Hyperliquid
@@ -751,7 +769,7 @@ const lighterCandles = await client.lighter.candles.history('BTC', {
 
 ### Data Quality Monitoring
 
-Monitor data coverage, incidents, latency, and SLA compliance across all exchanges.
+Monitor data coverage, incidents, latency, and SLA compliance across venue APIs.
 
 ```typescript
 // Get overall system health status
@@ -761,7 +779,7 @@ for (const [exchange, info] of Object.entries(status.exchanges)) {
   console.log(`  ${exchange}: ${info.status}`);
 }
 
-// Get data coverage summary for all exchanges
+// Get data coverage summary for venue APIs
 const coverage = await client.dataQuality.coverage();
 for (const exchange of coverage.exchanges) {
   console.log(`${exchange.exchange}:`);
@@ -817,7 +835,7 @@ console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatu
 | Method | Description |
 |--------|-------------|
 | `status()` | Overall system health and per-exchange status |
-| `coverage()` | Data coverage summary for all exchanges |
+| `coverage()` | Data coverage summary for venue APIs |
 | `exchangeCoverage(exchange)` | Coverage details for a specific exchange |
 | `symbolCoverage(exchange, symbol, options?)` | Coverage with gap detection, cadence, and historical coverage |
 | `listIncidents(params)` | List incidents with filtering and pagination |
@@ -952,7 +970,7 @@ const trades = await client.trades.list('BTC', { start, end });
 
 ## WebSocket Client
 
-The WebSocket client supports two modes: real-time streaming and historical replay. For bulk data downloads, use the S3 Parquet bulk export via the [Data Explorer](https://0xarchive.io/data).
+The WebSocket client supports two modes: real-time streaming and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
 
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
@@ -1311,9 +1329,9 @@ const client = new OxArchive({
 
 When enabled, responses are validated against Zod schemas and throw `OxArchiveError` with status 422 if validation fails.
 
-## Bulk Data Downloads
+## Data Catalog
 
-For large-scale data exports (full order books, complete trade history, etc.), use the S3 Parquet bulk export available at [0xarchive.io/data](https://0xarchive.io/data). The Data Explorer lets you select time ranges, symbols, and data types, then download compressed Parquet files directly.
+For large-scale data exports (full order books, complete trade history, etc.), use the [Data Catalog](https://www.0xarchive.io/data). It lets you choose markets, datasets, and date ranges, see a live quote, and export zstd-compressed Parquet.
 
 ## Requirements
 

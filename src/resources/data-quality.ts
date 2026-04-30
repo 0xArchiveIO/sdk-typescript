@@ -24,7 +24,7 @@ import type {
  * const status = await client.dataQuality.status();
  * console.log(`System status: ${status.status}`);
  *
- * // Get coverage for all exchanges
+ * // Get coverage across venue APIs
  * const coverage = await client.dataQuality.coverage();
  *
  * // Get symbol-specific coverage with gap detection
@@ -45,7 +45,7 @@ export class DataQualityResource {
   /**
    * Get overall system health status
    *
-   * @returns StatusResponse with overall status, per-exchange status,
+   * @returns StatusResponse with overall status, per-scope status,
    *          per-data-type status, and active incident count
    *
    * @example
@@ -66,9 +66,9 @@ export class DataQualityResource {
   // ===========================================================================
 
   /**
-   * Get data coverage summary for all exchanges
+   * Get data coverage summary across venue APIs
    *
-   * @returns CoverageResponse with coverage info for all exchanges and data types
+   * @returns CoverageResponse with coverage info for supported venue APIs and data types
    *
    * @example
    * ```typescript
@@ -86,10 +86,10 @@ export class DataQualityResource {
   }
 
   /**
-   * Get data coverage for a specific exchange
+   * Get data coverage for a specific venue scope
    *
-   * @param exchange - Exchange name ('hyperliquid', 'lighter', or 'hip3')
-   * @returns ExchangeCoverage with coverage info for all data types on this exchange
+   * @param exchange - Venue scope ('hyperliquid', 'lighter', or 'hip3')
+   * @returns ExchangeCoverage with coverage info for all data types on this venue scope
    *
    * @example
    * ```typescript
@@ -104,12 +104,12 @@ export class DataQualityResource {
   }
 
   /**
-   * Get data coverage for a specific symbol on an exchange
+   * Get data coverage for a specific symbol on a venue scope
    *
    * Includes gap detection, empirical data cadence, and hour-level historical coverage.
    * Supports optional time bounds for gap detection (default: last 30 days).
    *
-   * @param exchange - Exchange name ('hyperliquid', 'lighter', or 'hip3')
+   * @param exchange - Venue scope ('hyperliquid', 'lighter', or 'hip3')
    * @param symbol - Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
    * @param options - Optional time bounds for gap detection window
    * @returns SymbolCoverageResponse with per-data-type coverage including gaps, cadence, and historical coverage
@@ -196,7 +196,7 @@ export class DataQualityResource {
   // ===========================================================================
 
   /**
-   * Get current latency metrics for all exchanges
+   * Get current latency metrics for supported venue APIs
    *
    * @returns LatencyResponse with WebSocket, REST API, and data freshness metrics
    *

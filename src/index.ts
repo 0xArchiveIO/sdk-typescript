@@ -1,9 +1,9 @@
 /**
  * @0xarchive/sdk - Official TypeScript SDK for 0xarchive
  *
- * Historical Market Data API for multiple exchanges:
+ * Historical Market Data API for two top-level venue APIs:
  * - Hyperliquid (perpetuals data from April 2023)
- * - Hyperliquid HIP-3 builder perps (Free: km:US500, Build+: all symbols, February 2026+)
+ * - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
  * - Lighter.xyz (perpetuals data)
  *
  * @example
@@ -17,6 +17,9 @@
  *
  * // Lighter.xyz data
  * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
+ *
+ * // Hyperliquid HIP-3 data
+ * const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('km:US500');
  *
  * // Get historical snapshots
  * const history = await client.hyperliquid.orderbook.history('ETH', {
