@@ -752,6 +752,10 @@ export type WsChannel =
 export interface WsSubscribe {
   op: 'subscribe';
   channel: WsChannel;
+  /** Wire field for coin/symbol. The server accepts `symbol` (canonical)
+   * and `coin` (deprecated alias) during the migration period. */
+  symbol?: string;
+  /** @deprecated Use `symbol`. The server still accepts `coin` for now. */
   coin?: string;
 }
 
@@ -759,6 +763,8 @@ export interface WsSubscribe {
 export interface WsUnsubscribe {
   op: 'unsubscribe';
   channel: WsChannel;
+  symbol?: string;
+  /** @deprecated Use `symbol`. */
   coin?: string;
 }
 
@@ -774,6 +780,8 @@ export interface WsReplay {
   channel?: WsChannel;
   /** Multiple channels for multi-channel replay. Mutually exclusive with `channel`. */
   channels?: WsChannel[];
+  symbol?: string;
+  /** @deprecated Use `symbol`. */
   coin?: string;
   /** Start timestamp (Unix ms) */
   start: number;
@@ -800,6 +808,8 @@ export interface WsStream {
   channel?: WsChannel;
   /** Multiple channels for multi-channel streaming. Mutually exclusive with `channel`. */
   channels?: WsChannel[];
+  symbol?: string;
+  /** @deprecated Use `symbol`. */
   coin?: string;
   /** Start timestamp (Unix ms) */
   start: number;
