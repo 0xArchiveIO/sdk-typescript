@@ -178,9 +178,13 @@ export const WsChannelSchema = z.enum([
   'orderbook', 'trades', 'candles', 'liquidations', 'ticker', 'all_tickers',
   'open_interest', 'funding',
   'lighter_orderbook', 'lighter_trades', 'lighter_candles',
-  'lighter_open_interest', 'lighter_funding',
+  'lighter_open_interest', 'lighter_funding', 'lighter_l3_orderbook',
   'hip3_orderbook', 'hip3_trades', 'hip3_candles',
-  'hip3_open_interest', 'hip3_funding',
+  'hip3_open_interest', 'hip3_funding', 'hip3_liquidations',
+  'hip4_orderbook', 'hip4_trades', 'hip4_open_interest',
+  'l4_diffs', 'l4_orders',
+  'hip3_l4_diffs', 'hip3_l4_orders',
+  'hip4_l4_diffs', 'hip4_l4_orders',
 ]);
 
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
@@ -299,6 +303,20 @@ export const WsStreamStoppedSchema = z.object({
   snapshots_sent: z.number(),
 });
 
+/**
+ * HIP-4 outcome settlement event. Fired once per `(outcome_id, side)` when the
+ * outcome flips to settled. After delivery the server unsubscribes the client
+ * from every hip4_* subscription on this coin — treat as a terminal signal.
+ */
+export const WsOutcomeSettledSchema = z.object({
+  type: z.literal('outcome_settled'),
+  coin: z.string(),
+  outcome_id: z.number(),
+  side: z.number(),
+  settlement_value: z.number().optional(),
+  settlement_at: z.string().optional(),
+});
+
 // Union of all server messages
 export const WsServerMessageSchema = z.discriminatedUnion('type', [
   WsSubscribedSchema,
@@ -318,6 +336,7 @@ export const WsServerMessageSchema = z.discriminatedUnion('type', [
   WsHistoricalBatchSchema,
   WsStreamCompletedSchema,
   WsStreamStoppedSchema,
+  WsOutcomeSettledSchema,
 ]);
 
 // =============================================================================

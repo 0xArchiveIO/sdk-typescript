@@ -45,7 +45,7 @@ export class L2OrderBookResource {
     if (params?.depth != null) query.depth = params.depth;
 
     const resp: ApiResponse<any> = await this.http.get(
-      `${this.basePath}/orderbook/${encodeURIComponent(coin)}/l2`,
+      `${this.basePath}/orderbook/${coin}/l2`,
       query,
     );
     return resp.data;
@@ -59,7 +59,7 @@ export class L2OrderBookResource {
     const coin = this.coinTransform(symbol);
     const resp: ApiResponse<any[]> & { meta?: { next_cursor?: string } } =
       await this.http.get(
-        `${this.basePath}/orderbook/${encodeURIComponent(coin)}/l2/history`,
+        `${this.basePath}/orderbook/${coin}/l2/history`,
         params as unknown as Record<string, unknown>,
       );
     return {
@@ -76,7 +76,7 @@ export class L2OrderBookResource {
     const coin = this.coinTransform(symbol);
     const resp: ApiResponse<any[]> & { meta?: { next_cursor?: string } } =
       await this.http.get(
-        `${this.basePath}/orderbook/${encodeURIComponent(coin)}/l2/diffs`,
+        `${this.basePath}/orderbook/${coin}/l2/diffs`,
         params as unknown as Record<string, unknown>,
       );
     return {

@@ -277,6 +277,173 @@ export interface Hip3Instrument {
   latestTimestamp?: string;
 }
 
+/**
+ * HIP-4 outcome-market per-side instrument metadata.
+ *
+ * Returned from `/v1/hyperliquid/hip4/instruments` and
+ * `/v1/hyperliquid/hip4/instruments/{symbol}`. One row per side (`#0`, `#1`, ...).
+ * Coin format: `#<10*outcome_id + side>` (e.g. `#0` = outcome 0 / Yes, `#1` = outcome 0 / No).
+ *
+ * Symbol path encoding: the backend accepts both the bare numeric form (`0`, `1`)
+ * and the on-chain `#`-prefixed form (`#0`, `#1`). The bare form is recommended in
+ * URLs to avoid `%23` encoding hassles. The SDK passes the value through as-is —
+ * it does NOT auto-encode `#`.
+ *
+ * Note: HIP-4 `mark_price` / `midPrice` on related endpoints (open interest,
+ * prices, summary) are implied probabilities in [0, 1], not USD prices.
+ */
+export interface Hip4Outcome {
+  /** Numeric outcome id (groups two sides under a single market). */
+  outcomeId: number;
+  /** Side index within the outcome (0 = Yes, 1 = No). */
+  side: number;
+  /** Public asset_id: 100_000_000 + 10*outcome_id + side. */
+  assetId: number;
+  /** Coin string with leading `#` (e.g. `#0`). Backend also accepts the bare numeric form. */
+  coin: string;
+  /** Same as `coin` for HIP-4. */
+  symbol: string;
+  /** Human-readable market name including side suffix. */
+  name?: string;
+  /** Raw description string from upstream (pipe-delimited key:value pairs). */
+  description?: string;
+  /** Side label (e.g. "Yes", "No"). */
+  sideName?: string;
+  /** Recurring class (e.g. "priceBinary"). */
+  recurringClass?: string;
+  /** Underlying asset for recurring markets (e.g. "BTC"). */
+  recurringUnderlying?: string;
+  /** Expiry timestamp ISO-8601 for recurring markets. */
+  recurringExpiry?: string;
+  /** Target price strike for recurring price-binary markets. */
+  recurringTargetPx?: number;
+  /** Cadence for recurring markets (e.g. "1d"). */
+  recurringPeriod?: string;
+  /** Builder/deployer wallet address. */
+  builderAddress?: string;
+  /** True after settlement; ingester unsubscribes settled markets. */
+  isSettled?: boolean;
+  /** Settlement value (typically 1.0 = Yes won, 0.0 = No won). Set when isSettled=true. */
+  settlementValue?: number;
+  /** Settlement timestamp (ISO-8601). Set when isSettled=true. */
+  settlementAt?: string;
+  /** Per-side human-readable title (e.g. "BTC above 78,213 on May 4 at 06:00 UTC? — Yes"). */
+  displayTitle?: string;
+  /** Per-side URL slug (e.g. "btc-above-78213-yes-may-04-0600"). */
+  slug?: string;
+  /** When this outcome was first observed in upstream metadata. */
+  firstSeenAt?: string;
+  /** When this outcome metadata row was last updated. */
+  lastUpdatedAt?: string;
+}
+
+/**
+ * HIP-4 aggregated open-interest snapshot for a single outcome.
+ * Populated only on the detail variant `/outcomes/{outcome_id}`; omitted on the list variant.
+ */
+export interface Hip4AggregatedOi {
+  /** Latest open interest contracts on side 0 (Yes). */
+  side0OpenInterestContracts?: number;
+  /** Latest open interest contracts on side 1 (No). */
+  side1OpenInterestContracts?: number;
+  /** Display sum of both sides' open interest contracts. */
+  outcomeDisplayOpenInterestContracts?: number;
+  /** Number of fully-paired YES+NO sets outstanding. */
+  pairedSetSupplyContracts?: number;
+  /** True if both sides report identical supply (sanity check). */
+  sideSupplyParity?: boolean;
+  /** Quote currency (always "USDH" today). */
+  currency?: string;
+  /** When this aggregate was computed. */
+  asOf?: string;
+  /** Source timestamp for side 0 OI. */
+  side0AsOf?: string;
+  /** Source timestamp for side 1 OI. */
+  side1AsOf?: string;
+}
+
+/**
+ * HIP-4 outcome-market per-outcome aggregate metadata.
+ *
+ * Returned from `/v1/hyperliquid/hip4/outcomes` (list, no `aggregatedOi`),
+ * `/v1/hyperliquid/hip4/outcomes/{outcome_id}` (detail, includes `aggregatedOi`),
+ * and `/v1/hyperliquid/hip4/outcomes/by-slug/{slug}` (detail, includes `aggregatedOi`).
+ * One row per outcome (combines both sides into a single market view).
+ *
+ * Note: HIP-4 mark/mid prices on related endpoints are implied probabilities
+ * in [0, 1], not USD prices.
+ */
+export interface Hip4OutcomeAggregate {
+  /** Numeric outcome id. */
+  outcomeId: number;
+  /** Underlying market name (without side suffix). */
+  name?: string;
+  /** Raw description string from upstream. */
+  descriptionRaw?: string;
+  /** Outcome class (e.g. "priceBinary"). */
+  class?: string;
+  /** Underlying asset (e.g. "BTC"). */
+  underlying?: string;
+  /** Expiry timestamp ISO-8601. */
+  expiry?: string;
+  /** Strike price for price-binary markets (USD, not a probability). */
+  targetPrice?: number;
+  /** Cadence (e.g. "1d"). */
+  period?: string;
+  /** Per-side specs for this outcome. */
+  sideSpecs?: Hip4OutcomeSideSpec[];
+  /** True after settlement. */
+  isSettled?: boolean;
+  /** Status (e.g. "live", "settled"). */
+  status?: string;
+  /** Source seen-at timestamp. */
+  sourceSeenAt?: string;
+  /** Outcome-level human-readable title (no side suffix). e.g. "BTC above 78,213 on May 4 at 06:00 UTC?" */
+  displayTitle?: string;
+  /** Outcome-level URL slug (e.g. "btc-above-78213-may-04-0600"). */
+  slug?: string;
+  /**
+   * Two-element pair of side coins, ordered by side (`[#side0, #side1]`).
+   * Convenience for clients that just want to know which `#N` codes belong to
+   * this outcome without iterating `sideSpecs`.
+   */
+  outcomePair?: [string, string];
+  /** Latest aggregated OI (detail endpoint only). */
+  aggregatedOi?: Hip4AggregatedOi;
+}
+
+/** Per-side spec embedded in `Hip4OutcomeAggregate.sideSpecs`. */
+export interface Hip4OutcomeSideSpec {
+  /** Side index (0 = Yes, 1 = No). */
+  side: number;
+  /** Side label. */
+  name?: string;
+  /** Coin string (e.g. `#0`). */
+  coin: string;
+  /** Public asset_id. */
+  assetId?: number;
+  /** Per-side human-readable title. */
+  displayTitle?: string;
+  /** Per-side URL slug. */
+  slug?: string;
+}
+
+/** Filter params for `/v1/hyperliquid/hip4/outcomes`. */
+export interface Hip4ListOutcomesParams {
+  /** Filter by settlement state. Omit to return all. */
+  isSettled?: boolean;
+  /**
+   * Slug filter. When provided, the response is a single-element list (or empty)
+   * containing the outcome whose per-outcome OR per-side slug matches. Composes
+   * with `isSettled`.
+   */
+  slug?: string;
+  /** Cursor for next page. */
+  cursor?: number | string;
+  /** Max results per page. */
+  limit?: number;
+}
+
 // =============================================================================
 // Funding Types
 // =============================================================================
@@ -557,10 +724,17 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  * WebSocket channel types.
  *
  * - ticker/all_tickers: real-time only
- * - liquidations: historical only (May 2025+)
- * - hip3_liquidations: historical only (Feb 2026+)
+ * - liquidations: realtime + replay (Hyperliquid; live as of 1.6.0)
+ * - hip3_liquidations: realtime + replay (HIP-3; live as of 1.6.0)
  * - open_interest, funding, lighter_open_interest, lighter_funding,
  *   hip3_open_interest, hip3_funding: historical only (replay/stream)
+ *
+ * HIP-4 channels (outcome contracts; no funding, no liquidations, no candles):
+ * - hip4_orderbook, hip4_trades, hip4_open_interest: realtime + replay
+ * - hip4_l4_diffs, hip4_l4_orders: real-time only (Pro+)
+ *
+ * Liquidation messages share the trade wire format: each item is a fill row
+ * with `is_liquidation: true`.
  */
 export type WsChannel =
   | 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers'
@@ -569,7 +743,10 @@ export type WsChannel =
   | 'lighter_open_interest' | 'lighter_funding' | 'lighter_l3_orderbook'
   | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles'
   | 'hip3_open_interest' | 'hip3_funding' | 'hip3_liquidations'
-  | 'l4_diffs' | 'l4_orders' | 'hip3_l4_diffs' | 'hip3_l4_orders';
+  | 'hip4_orderbook' | 'hip4_trades' | 'hip4_open_interest'
+  | 'l4_diffs' | 'l4_orders'
+  | 'hip3_l4_diffs' | 'hip3_l4_orders'
+  | 'hip4_l4_diffs' | 'hip4_l4_orders';
 
 /** Subscribe message from client */
 export interface WsSubscribe {
@@ -852,6 +1029,28 @@ export interface WsL4Batch {
   data: any[];
 }
 
+/**
+ * HIP-4 outcome settlement notification.
+ *
+ * Pushed once per `(outcome_id, side)` when `hip4_outcome_metadata.is_settled`
+ * flips to true. After delivering this message the server proactively
+ * unsubscribes the client from every hip4_* subscription on the settled coin —
+ * treat this as a terminal signal for the coin.
+ */
+export interface WsOutcomeSettled {
+  type: 'outcome_settled';
+  /** HIP-4 coin (e.g. `#55850`). */
+  coin: string;
+  /** Numeric outcome id. */
+  outcome_id: number;
+  /** Side index (0 = Yes, 1 = No). */
+  side: number;
+  /** Settlement value (typically 1.0 for the winning side, 0.0 for the losing side). */
+  settlement_value?: number;
+  /** Settlement timestamp (ISO-8601). */
+  settlement_at?: string;
+}
+
 /** Server message union type */
 export type WsServerMessage =
   | WsSubscribed
@@ -874,7 +1073,8 @@ export type WsServerMessage =
   | WsStreamStopped
   | WsGapDetected
   | WsL4Snapshot
-  | WsL4Batch;
+  | WsL4Batch
+  | WsOutcomeSettled;
 
 /**
  * WebSocket connection options.

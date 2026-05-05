@@ -1,5 +1,6 @@
 import type { HttpClient } from '../http';
 import type { ApiResponse, Trade, GetTradesCursorParams, CursorResponse } from '../types';
+import { OxArchiveError } from '../types';
 import { TradeArrayResponseSchema } from '../schemas';
 
 /**
@@ -82,16 +83,34 @@ export class TradesResource {
   /**
    * Get most recent trades for a symbol.
    *
-   * Note: This method is available for Lighter (client.lighter.trades.recent())
-   * and HIP-3 (client.hyperliquid.hip3.trades.recent()) which have real-time data
-   * ingestion. Hyperliquid uses hourly backfill so this endpoint is not available
-   * for Hyperliquid.
+   * Note: This method is available on Lighter (`client.lighter.trades.recent()`),
+   * HIP-3 (`client.hyperliquid.hip3.trades.recent()`), and HIP-4
+   * (`client.hyperliquid.hip4.trades.recent()`) which have real-time ingestion.
+   * Hyperliquid uses hourly S3 backfill and does NOT expose a recent endpoint —
+   * calling `client.hyperliquid.trades.recent()` (or the legacy
+   * `client.trades.recent()`) throws a structured `OxArchiveError` rather than
+   * letting the request fail with an opaque JSON parse error.
    *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param limit - Number of trades to return (default: 100)
    * @returns Array of recent trades
+   * @throws {OxArchiveError} When called on the bare Hyperliquid namespace.
    */
   async recent(symbol: string, limit?: number): Promise<Trade[]> {
+    // Guard: Hyperliquid (bare namespace) does not expose `/trades/{symbol}/recent`.
+    // Only HIP-3 (`/v1/hyperliquid/hip3`), HIP-4 (`/v1/hyperliquid/hip4`), and
+    // Lighter (`/v1/lighter`) have real-time recent endpoints. Without this
+    // check, callers get a 404-with-empty-body that surfaces as
+    // "Unexpected end of JSON input" — confusing and unhelpful.
+    if (this.basePath === '/v1/hyperliquid' || this.basePath === '/v1') {
+      throw new OxArchiveError(
+        'trades.recent() is not available on Hyperliquid (no real-time ingestion). ' +
+          'Use client.hyperliquid.trades.list(symbol, { start, end }) with a time range, ' +
+          'or call recent() on a real-time namespace: client.hyperliquid.hip3.trades.recent(), ' +
+          'client.hyperliquid.hip4.trades.recent(), or client.lighter.trades.recent().',
+        404
+      );
+    }
     const response = await this.http.get<ApiResponse<Trade[]>>(
       `${this.basePath}/trades/${this.coinTransform(symbol)}/recent`,
       { limit },
