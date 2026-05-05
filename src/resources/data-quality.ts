@@ -88,7 +88,7 @@ export class DataQualityResource {
   /**
    * Get data coverage for a specific venue scope
    *
-   * @param exchange - Venue scope ('hyperliquid', 'lighter', or 'hip3')
+   * @param exchange - Venue scope ('hyperliquid', 'lighter', 'hip3', or 'hip4')
    * @returns ExchangeCoverage with coverage info for all data types on this venue scope
    *
    * @example
@@ -109,7 +109,7 @@ export class DataQualityResource {
    * Includes gap detection, empirical data cadence, and hour-level historical coverage.
    * Supports optional time bounds for gap detection (default: last 30 days).
    *
-   * @param exchange - Venue scope ('hyperliquid', 'lighter', or 'hip3')
+   * @param exchange - Venue scope ('hyperliquid', 'lighter', 'hip3', or 'hip4')
    * @param symbol - Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
    * @param options - Optional time bounds for gap detection window
    * @returns SymbolCoverageResponse with per-data-type coverage including gaps, cadence, and historical coverage

@@ -35,7 +35,7 @@
 export { OxArchive } from './client';
 
 // Exchange clients
-export { HyperliquidClient, Hip3Client, LighterClient } from './exchanges';
+export { HyperliquidClient, Hip3Client, Hip4Client, LighterClient } from './exchanges';
 
 // WebSocket client
 export { OxArchiveWs } from './websocket';
@@ -135,6 +135,7 @@ export {
   WsHistoricalBatchSchema,
   WsStreamCompletedSchema,
   WsStreamStoppedSchema,
+  WsOutcomeSettledSchema,
   // Validated types (inferred from schemas)
   type ValidatedApiMeta,
   type ValidatedPriceLevel,
@@ -170,6 +171,11 @@ export type {
   Instrument,
   LighterInstrument,
   Hip3Instrument,
+  Hip4Outcome,
+  Hip4OutcomeAggregate,
+  Hip4OutcomeSideSpec,
+  Hip4AggregatedOi,
+  Hip4ListOutcomesParams,
   InstrumentType,
   // Funding
   FundingRate,
@@ -276,6 +282,8 @@ export type {
   // L4 WebSocket types
   WsL4Snapshot,
   WsL4Batch,
+  // HIP-4 settlement event
+  WsOutcomeSettled,
   // Errors
   ApiError,
 } from './types';

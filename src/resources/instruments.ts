@@ -1,5 +1,14 @@
 import type { HttpClient } from '../http';
-import type { ApiResponse, Hip3Instrument, Instrument, LighterInstrument } from '../types';
+import type {
+  ApiResponse,
+  CursorResponse,
+  Hip3Instrument,
+  Hip4ListOutcomesParams,
+  Hip4Outcome,
+  Hip4OutcomeAggregate,
+  Instrument,
+  LighterInstrument,
+} from '../types';
 import { InstrumentResponseSchema, InstrumentArrayResponseSchema } from '../schemas';
 
 /**
@@ -141,6 +150,108 @@ export class Hip3InstrumentsResource {
     coin = this.coinTransform(coin);
     const response = await this.http.get<ApiResponse<Hip3Instrument>>(
       `${this.basePath}/instruments/${coin}`
+    );
+    return response.data;
+  }
+}
+
+/**
+ * HIP-4 Outcome-Market Per-Side Instruments resource.
+ *
+ * Returns one row per `#N` coin (each outcome has 2 sides). For per-outcome
+ * aggregate metadata (with both sides combined), use `Hip4OutcomesResource`.
+ *
+ * The backend accepts both the bare numeric form (`'0'`, `'1'`) and the
+ * `#`-prefixed form (`'#0'`, `'#1'`). The SDK URL-encodes `#` to `%23` so the
+ * `#`-prefixed form (which is the canonical form returned by the API in
+ * `coin` fields) survives `fetch`'s URL-fragment parsing.
+ *
+ * @example
+ * ```typescript
+ * // List all HIP-4 per-side instruments
+ * const instruments = await client.hyperliquid.hip4.instruments.list();
+ *
+ * // Both forms work (SDK encodes `#` on the wire)
+ * const yes = await client.hyperliquid.hip4.instruments.get('#0');
+ * const yesAlt = await client.hyperliquid.hip4.instruments.get('0');
+ * ```
+ */
+export class Hip4InstrumentsResource {
+  private coinTransform: (c: string) => string;
+
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1/hyperliquid/hip4',
+    coinTransform?: (c: string) => string
+  ) {
+    this.coinTransform = coinTransform || ((c) => encodeURIComponent(c));
+  }
+
+  async list(): Promise<Hip4Outcome[]> {
+    const response = await this.http.get<ApiResponse<Hip4Outcome[]>>(
+      `${this.basePath}/instruments`
+    );
+    return response.data;
+  }
+
+  async get(coin: string): Promise<Hip4Outcome> {
+    const response = await this.http.get<ApiResponse<Hip4Outcome>>(
+      `${this.basePath}/instruments/${this.coinTransform(coin)}`
+    );
+    return response.data;
+  }
+}
+
+/**
+ * HIP-4 Outcome aggregates resource (per-outcome view).
+ *
+ * No HIP-3 analog. List endpoint excludes `aggregatedOi`; detail endpoint
+ * populates it with the latest both-sides OI snapshot.
+ *
+ * @example
+ * ```typescript
+ * // List live (unsettled) outcomes
+ * const live = await client.hyperliquid.hip4.outcomes.list({ isSettled: false });
+ *
+ * // Get a single outcome with aggregated OI
+ * const detail = await client.hyperliquid.hip4.outcomes.get(0);
+ * console.log(detail.aggregatedOi?.outcomeDisplayOpenInterestContracts);
+ * ```
+ */
+export class Hip4OutcomesResource {
+  constructor(
+    private http: HttpClient,
+    private basePath: string = '/v1/hyperliquid/hip4'
+  ) {}
+
+  /** List per-outcome aggregates. `aggregatedOi` is omitted on list responses. */
+  async list(params?: Hip4ListOutcomesParams): Promise<CursorResponse<Hip4OutcomeAggregate[]>> {
+    const response = await this.http.get<ApiResponse<Hip4OutcomeAggregate[]>>(
+      `${this.basePath}/outcomes`,
+      params as unknown as Record<string, unknown>
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
+  }
+
+  /** Get a single outcome aggregate. Response includes `aggregatedOi`. */
+  async get(outcomeId: number | string): Promise<Hip4OutcomeAggregate> {
+    const response = await this.http.get<ApiResponse<Hip4OutcomeAggregate>>(
+      `${this.basePath}/outcomes/${outcomeId}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Look up an outcome aggregate by its synthesized slug. Accepts the
+   * per-outcome slug (`btc-above-78213-may-04-0600`) OR a per-side slug
+   * (`btc-above-78213-yes-may-04-0600`). Response includes `aggregatedOi`.
+   */
+  async getBySlug(slug: string): Promise<Hip4OutcomeAggregate> {
+    const response = await this.http.get<ApiResponse<Hip4OutcomeAggregate>>(
+      `${this.basePath}/outcomes/by-slug/${slug}`
     );
     return response.data;
   }

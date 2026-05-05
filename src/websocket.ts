@@ -62,6 +62,7 @@ import type {
   WsStreamCompleted,
   WsStreamProgress,
   WsGapDetected,
+  WsOutcomeSettled,
 } from './types';
 
 const DEFAULT_WS_URL = 'wss://api.0xarchive.io/ws';
@@ -212,7 +213,9 @@ export class OxArchiveWs {
   private streamCompleteHandlers: Array<(channel: WsChannel, coin: string, snapshotsSent: number) => void> = [];
   private orderbookHandlers: Array<(coin: string, data: OrderBook) => void> = [];
   private tradesHandlers: Array<(coin: string, data: Trade[]) => void> = [];
+  private liquidationsHandlers: Array<(channel: WsChannel, coin: string, data: Trade[]) => void> = [];
   private gapHandlers: Array<(channel: WsChannel, coin: string, gapStart: number, gapEnd: number, durationMinutes: number) => void> = [];
+  private outcomeSettledHandlers: Array<(coin: string, outcomeId: number, side: number, settlementValue?: number, settlementAt?: string) => void> = [];
 
   constructor(options: WsOptions) {
     this.options = {
@@ -314,7 +317,9 @@ export class OxArchiveWs {
     this.subscriptions.add(key);
 
     if (this.isConnected()) {
-      this.send({ op: 'subscribe', channel, coin });
+      // Wire field is `symbol`; `coin` is the deprecated alias kept on the
+      // SDK surface for backward compatibility.
+      this.send({ op: 'subscribe', channel, symbol: coin });
     }
   }
 
@@ -354,7 +359,7 @@ export class OxArchiveWs {
     this.subscriptions.delete(key);
 
     if (this.isConnected()) {
-      this.send({ op: 'unsubscribe', channel, coin });
+      this.send({ op: 'unsubscribe', channel, symbol: coin });
     }
   }
 
@@ -384,6 +389,65 @@ export class OxArchiveWs {
    */
   unsubscribeAllTickers(): void {
     this.unsubscribe('all_tickers');
+  }
+
+  /**
+   * Subscribe to live liquidation events for a coin (Hyperliquid).
+   *
+   * Each message is a fill row with `is_liquidation: true`. Same wire shape as
+   * trades. Live as of v1.6.0 (Hyperliquid + HIP-3 nodes); historical replay
+   * also supported via `replay('liquidations', ...)`.
+   */
+  subscribeLiquidations(coin: string): void {
+    this.subscribe('liquidations', coin);
+  }
+
+  /** Unsubscribe from live liquidation events (Hyperliquid). */
+  unsubscribeLiquidations(coin: string): void {
+    this.unsubscribe('liquidations', coin);
+  }
+
+  /**
+   * Subscribe to live HIP-3 liquidation events for a coin.
+   * Each message is a fill row with `is_liquidation: true`.
+   */
+  subscribeHip3Liquidations(coin: string): void {
+    this.subscribe('hip3_liquidations', coin);
+  }
+
+  /** Unsubscribe from live HIP-3 liquidation events. */
+  unsubscribeHip3Liquidations(coin: string): void {
+    this.unsubscribe('hip3_liquidations', coin);
+  }
+
+  /**
+   * Subscribe to a HIP-4 channel for a given outcome coin.
+   *
+   * @param channel One of `hip4_orderbook`, `hip4_trades`, `hip4_open_interest`,
+   *   `hip4_l4_diffs`, `hip4_l4_orders`.
+   * @param coin HIP-4 coin (e.g. `'#0'` or `'0'`). The bare numeric form is
+   *   recommended; both are accepted by the backend.
+   */
+  subscribeHip4(
+    channel:
+      | 'orderbook' | 'trades' | 'open_interest' | 'l4_diffs' | 'l4_orders'
+      | 'hip4_orderbook' | 'hip4_trades' | 'hip4_open_interest' | 'hip4_l4_diffs' | 'hip4_l4_orders',
+    coin: string
+  ): void {
+    const fullChannel = (channel.startsWith('hip4_') ? channel : `hip4_${channel}`) as WsChannel;
+    this.subscribe(fullChannel, coin);
+  }
+
+  /** Unsubscribe from a HIP-4 channel for a given outcome coin. Accepts the
+   * short channel form (`'orderbook'`) or the full form (`'hip4_orderbook'`). */
+  unsubscribeHip4(
+    channel:
+      | 'orderbook' | 'trades' | 'open_interest' | 'l4_diffs' | 'l4_orders'
+      | 'hip4_orderbook' | 'hip4_trades' | 'hip4_open_interest' | 'hip4_l4_diffs' | 'hip4_l4_orders',
+    coin: string
+  ): void {
+    const fullChannel = (channel.startsWith('hip4_') ? channel : `hip4_${channel}`) as WsChannel;
+    this.unsubscribe(fullChannel, coin);
   }
 
   // ==========================================================================
@@ -420,7 +484,7 @@ export class OxArchiveWs {
     this.send({
       op: 'replay',
       channel,
-      coin,
+      symbol: coin,
       start: options.start,
       end: options.end,
       speed: options.speed ?? 1,
@@ -466,7 +530,7 @@ export class OxArchiveWs {
     this.send({
       op: 'replay',
       channels,
-      coin,
+      symbol: coin,
       start: options.start,
       end: options.end,
       speed: options.speed ?? 1,
@@ -539,7 +603,7 @@ export class OxArchiveWs {
     this.send({
       op: 'stream',
       channel,
-      coin,
+      symbol: coin,
       start: options.start,
       end: options.end,
       batch_size: options.batchSize ?? 1000,
@@ -587,7 +651,7 @@ export class OxArchiveWs {
     this.send({
       op: 'stream',
       channels,
-      coin,
+      symbol: coin,
       start: options.start,
       end: options.end,
       batch_size: options.batchSize ?? 1000,
@@ -764,6 +828,48 @@ export class OxArchiveWs {
     this.tradesHandlers.push(handler);
   }
 
+  /**
+   * Helper to handle live liquidation events for both `liquidations` and
+   * `hip3_liquidations` channels. Each item is a fill row with
+   * `is_liquidation: true`, surfaced as a `Trade` (the wire shape matches
+   * trades exactly).
+   *
+   * @param handler Called with the channel, coin, and parsed Trade array.
+   *
+   * @example
+   * ```typescript
+   * ws.onLiquidations((channel, coin, fills) => {
+   *   for (const f of fills) {
+   *     console.log(`${channel} ${coin} liq: ${f.side} ${f.size}@${f.price}`);
+   *   }
+   * });
+   * ws.subscribeLiquidations('BTC');
+   * ws.subscribeHip3Liquidations('hyna:BTC');
+   * ```
+   */
+  onLiquidations(handler: (channel: WsChannel, coin: string, data: Trade[]) => void): void {
+    this.liquidationsHandlers.push(handler);
+  }
+
+  /**
+   * Handle HIP-4 outcome settlement events. Pushed once per `(outcome_id, side)`
+   * when the outcome flips to settled. After this event the server proactively
+   * unsubscribes the client from every hip4_* subscription on the settled coin —
+   * treat the event as a terminal signal for that coin.
+   *
+   * @example
+   * ```typescript
+   * ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
+   *   console.log(`${coin} (outcome ${outcomeId} side ${side}) settled to ${value} at ${at}`);
+   * });
+   * ```
+   */
+  onOutcomeSettled(
+    handler: (coin: string, outcomeId: number, side: number, settlementValue?: number, settlementAt?: string) => void
+  ): void {
+    this.outcomeSettledHandlers.push(handler);
+  }
+
   // Private methods
 
   private send(message: WsClientMessage): void {
@@ -908,18 +1014,47 @@ export class OxArchiveWs {
         break;
       }
       case 'data': {
-        if (message.channel === 'orderbook') {
-          // Transform raw Hyperliquid format to SDK OrderBook type
+        if (
+          message.channel === 'orderbook' ||
+          message.channel === 'hip3_orderbook' ||
+          message.channel === 'hip4_orderbook' ||
+          message.channel === 'lighter_orderbook'
+        ) {
+          // Transform raw orderbook payload to SDK OrderBook type. Covers the
+          // bare `orderbook` channel plus all per-venue variants so a single
+          // `onOrderbook` handler works regardless of which subscribe* helper
+          // produced the data.
           const orderbook = transformOrderbook(message.coin, message.data as Record<string, unknown>);
           for (const handler of this.orderbookHandlers) {
             handler(message.coin, orderbook);
           }
-        } else if (message.channel === 'trades') {
-          // Transform raw Hyperliquid format to SDK Trade type
+        } else if (
+          message.channel === 'trades' ||
+          message.channel === 'hip3_trades' ||
+          message.channel === 'hip4_trades' ||
+          message.channel === 'lighter_trades'
+        ) {
+          // Transform raw trade payload to SDK Trade type. Covers the bare
+          // `trades` channel plus all per-venue variants.
           const trades = transformTrades(message.coin, message.data);
           for (const handler of this.tradesHandlers) {
             handler(message.coin, trades);
           }
+        } else if (message.channel === 'liquidations' || message.channel === 'hip3_liquidations') {
+          // Liquidation messages share the trades wire shape (fill row with
+          // is_liquidation: true). Reuse the trade transformer so consumers
+          // get the same `Trade` type they already know.
+          const fills = transformTrades(message.coin, message.data);
+          for (const handler of this.liquidationsHandlers) {
+            handler(message.channel, message.coin, fills);
+          }
+        }
+        break;
+      }
+      case 'outcome_settled': {
+        const msg = message as WsOutcomeSettled;
+        for (const handler of this.outcomeSettledHandlers) {
+          handler(msg.coin, msg.outcome_id, msg.side, msg.settlement_value, msg.settlement_at);
         }
         break;
       }

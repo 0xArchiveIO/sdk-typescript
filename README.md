@@ -2,7 +2,7 @@
 
 TypeScript client for 0xArchive market data in Node services, dashboards, coding-agent workflows, and agent backends.
 
-0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`.
+0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`. HIP-4 binary outcome markets live at `/v1/hyperliquid/hip4` and `client.hyperliquid.hip4`.
 
 Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, and order-book reconstruction utilities.
 
@@ -250,7 +250,7 @@ while (result.nextCursor) {
 const recent = await client.lighter.trades.recent('BTC', 100);
 ```
 
-**Note:** The `recent()` method is available for Lighter.xyz (`client.lighter.trades.recent()`) and HIP-3 (`client.hyperliquid.hip3.trades.recent()`). Hyperliquid does not have a recent trades endpoint -- use `list()` with a time range instead.
+**Note:** The `recent()` method is available for Lighter.xyz (`client.lighter.trades.recent()`), HIP-3 (`client.hyperliquid.hip3.trades.recent()`), and HIP-4 (`client.hyperliquid.hip4.trades.recent()` / `getTradesRecent()`) -- all three have real-time ingestion. Hyperliquid does not have a recent trades endpoint (it uses hourly S3 backfill); calling `client.hyperliquid.trades.recent()` throws a structured `OxArchiveError` directing you to use `list()` with a time range instead.
 
 ### Instruments
 
@@ -309,6 +309,66 @@ console.log(`Mark price: ${us500.markPrice}`);
 |---------|-------|
 | xyz (Hyperliquid) | `xyz:XYZ100` |
 | km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
+
+#### HIP-4 Outcome Markets
+
+HIP-4 is Hyperliquid's binary outcome-market namespace. Each outcome has 2 sides (`#0` = Yes / side 0, `#1` = No / side 1, etc.). Markets are fully collateralized so there are no funding rates, no liquidations, and no candles by design. `mark_price` and `midPrice` are implied probabilities in `[0, 1]`, not USD prices.
+
+**Path encoding:** the backend accepts both the bare numeric form (`'0'`, `'1'`, ...) and the on-chain `#`-prefixed form (`'#0'`, `'#1'`, ...) — and `#`-prefixed is the canonical form returned by the API in `coin` fields. The SDK URL-encodes the value on the wire (`#` becomes `%23`) so the `#` form survives `fetch` (the WHATWG `URL` parser would otherwise treat `#` as a fragment delimiter and silently drop the rest of the path). Both forms are equivalent at the API; pass whichever is convenient.
+
+```typescript
+// Per-side instruments (one row per #N coin)
+const sides = await client.hyperliquid.hip4.instruments.list();
+for (const s of sides) {
+  console.log(`${s.symbol} (outcome ${s.outcomeId}/${s.side}): ${s.displayTitle}`);
+  console.log(`  slug: ${s.slug}, settled: ${s.isSettled}`);
+}
+
+// Per-outcome aggregates (one row per outcome)
+const outcomes = await client.hyperliquid.hip4.listOutcomes({ isSettled: false, limit: 50 });
+for (const o of outcomes.data) {
+  console.log(`outcome ${o.outcomeId}: ${o.displayTitle}`);
+  console.log(`  pair: ${o.outcomePair?.[0]} / ${o.outcomePair?.[1]}`);
+  console.log(`  expiry: ${o.expiry}, target: ${o.targetPrice}`);
+}
+
+// Detail (includes aggregatedOi)
+const detail = await client.hyperliquid.hip4.getOutcome(0);
+console.log(detail.aggregatedOi?.outcomeDisplayOpenInterestContracts);
+
+// Slug-based lookup (per-outcome OR per-side slug)
+const bySlug = await client.hyperliquid.hip4.getOutcomeBySlug('btc-above-78213-may-04-0600');
+
+// Slug-filter on listOutcomes
+const filtered = await client.hyperliquid.hip4.listOutcomes({
+  slug: 'btc-above-78213-may-04-0600',
+});
+
+// Orderbook (Pro+). Bare numeric form is recommended.
+const ob = await client.hyperliquid.hip4.getOrderbook('0');
+// ob.midPrice is a probability ∈ [0, 1] — implied YES probability for #0.
+
+// Trades, OI, and prices
+const trades = await client.hyperliquid.hip4.getTradesRecent('0', 50);
+const oiNow = await client.hyperliquid.hip4.getOpenInterestCurrent('0');
+const prices = await client.hyperliquid.hip4.getPrices('0', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+});
+
+// Convenience
+const summary = await client.hyperliquid.hip4.getSummary('0');
+const fresh = await client.hyperliquid.hip4.getFreshness('0');
+
+// Pro+: L4
+const l4 = await client.hyperliquid.hip4.getL4Orderbook('0');
+const orders = await client.hyperliquid.hip4.getOrderHistory('0', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+});
+```
+
+> **No HIP-4 funding, liquidations, or candles.** These methods do not exist on `client.hyperliquid.hip4` by design. Don't expect them.
 
 ### Funding Rates
 
@@ -1106,12 +1166,12 @@ const ws = new OxArchiveWs({
 
 #### Hyperliquid Channels
 
-| Channel | Description | Requires Coin | Historical Support |
+| Channel | Description | Requires Coin | Mode |
 |---------|-------------|---------------|-------------------|
-| `orderbook` | L2 order book updates | Yes | Yes |
-| `trades` | Trade/fill updates | Yes | Yes |
-| `candles` | OHLCV candle data | Yes | Yes (replay only) |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay only) |
+| `orderbook` | L2 order book updates | Yes | Realtime + replay |
+| `trades` | Trade/fill updates | Yes | Realtime + replay |
+| `candles` | OHLCV candle data | Yes | Replay only |
+| `liquidations` | Liquidation events (May 2025+) | Yes | Realtime + replay (live as of 1.6.0) |
 | `open_interest` | Open interest snapshots | Yes | Replay/stream only |
 | `funding` | Funding rate snapshots | Yes | Replay/stream only |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
@@ -1119,20 +1179,67 @@ const ws = new OxArchiveWs({
 | `l4_diffs` | L4 orderbook diffs with user attribution (Pro+) | Yes | Real-time only |
 | `l4_orders` | Order lifecycle events with user attribution (Pro+) | Yes | Real-time only |
 
+Each `liquidations` data message is a fill row with `is_liquidation: true` — the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
+
 #### HIP-3 Builder Perps Channels
 
-| Channel | Description | Requires Coin | Historical Support |
+| Channel | Description | Requires Coin | Mode |
 |---------|-------------|---------------|-------------------|
-| `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
-| `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
-| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
+| `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Realtime + replay |
+| `hip3_trades` | HIP-3 trade/fill updates | Yes | Realtime + replay |
+| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Realtime + replay |
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Replay/stream only |
 | `hip3_funding` | HIP-3 funding rate snapshots | Yes | Replay/stream only |
-| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes (replay only) |
+| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Realtime + replay (live as of 1.6.0) |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs (Pro+) | Yes | Real-time only |
 | `hip3_l4_orders` | HIP-3 order lifecycle events (Pro+) | Yes | Real-time only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
+
+#### HIP-4 Outcome-Market Channels
+
+| Channel | Description | Requires Coin | Mode |
+|---------|-------------|---------------|-------------------|
+| `hip4_orderbook` | HIP-4 L2 order book snapshots (Pro+) | Yes | Realtime + replay |
+| `hip4_trades` | HIP-4 trade/fill updates | Yes | Realtime + replay |
+| `hip4_open_interest` | HIP-4 open interest (per side) | Yes | Realtime + replay |
+| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs (Pro+) | Yes | Real-time only |
+| `hip4_l4_orders` | HIP-4 order lifecycle events (Pro+) | Yes | Real-time only |
+
+HIP-4 has no funding, no liquidations, no candles by design (markets settle to 0/1 at expiry). HIP-4 `mark_price` and `midPrice` are implied probabilities in `[0, 1]`, not USD prices.
+
+HIP-4 coins can be passed in either the bare numeric form (`'0'`, `'1'`) or the canonical `#`-prefixed form (`'#0'`, `'#1'`). The SDK URL-encodes `#` to `%23` on the wire so the path survives `fetch` parsing — pass whichever form is convenient.
+
+```typescript
+ws.onOrderbook((coin, ob) => {
+  // For HIP-4, ob.midPrice is a probability ∈ [0, 1]
+  console.log(`${coin} implied probability: ${ob.midPrice}`);
+});
+ws.subscribeHip4('hip4_orderbook', '0');
+ws.subscribeHip4('hip4_trades', '#1');
+
+// Settlement signal — terminal for the coin
+ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
+  console.log(`${coin} (outcome ${outcomeId} side ${side}) settled: ${value} at ${at}`);
+});
+```
+
+#### Live Liquidations
+
+```typescript
+import { OxArchiveWs } from '@0xarchive/sdk';
+
+const ws = new OxArchiveWs({ apiKey: 'ox_...' });
+ws.onLiquidations((channel, coin, fills) => {
+  for (const f of fills) {
+    console.log(`${channel} ${coin}: ${f.side} ${f.size}@${f.price} liq`);
+  }
+});
+await ws.connect();
+
+ws.subscribeLiquidations('BTC');
+ws.subscribeHip3Liquidations('hyna:BTC');
+```
 
 #### Lighter.xyz Channels
 

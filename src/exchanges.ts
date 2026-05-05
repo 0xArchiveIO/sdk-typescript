@@ -6,6 +6,8 @@ import {
   InstrumentsResource,
   LighterInstrumentsResource,
   Hip3InstrumentsResource,
+  Hip4InstrumentsResource,
+  Hip4OutcomesResource,
   FundingResource,
   OpenInterestResource,
   CandlesResource,
@@ -89,6 +91,11 @@ export class HyperliquidClient {
    */
   public readonly hip3: Hip3Client;
 
+  /**
+   * HIP-4 outcome markets (binary YES/NO; May 2026+)
+   */
+  public readonly hip4: Hip4Client;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -105,6 +112,7 @@ export class HyperliquidClient {
     this.l4Orderbook = new L4OrderBookResource(http, basePath);
     this.l2Orderbook = new L2OrderBookResource(http, basePath);
     this.hip3 = new Hip3Client(http);
+    this.hip4 = new Hip4Client(http);
   }
 
   /**
@@ -287,6 +295,277 @@ export class Hip3Client {
       data: response.data,
       nextCursor: response.meta.nextCursor,
     };
+  }
+}
+
+/**
+ * HIP-4 outcome-market client
+ *
+ * Access Hyperliquid HIP-4 binary outcome markets through the 0xarchive API.
+ *
+ * Coin format: `#<10*outcome_id + side>` (e.g. `#0` is outcome 0 / Yes, `#1` is outcome 0 / No).
+ * The backend accepts both the bare numeric form (`0`, `1`) and the on-chain
+ * `#`-prefixed form (`#0`, `#1`). The SDK URL-encodes coins on the wire so that
+ * the `#`-prefixed form survives transit (`#` is the URL-fragment delimiter and
+ * would otherwise be stripped by `fetch`). Either form works; pass whichever is
+ * convenient.
+ *
+ * `mark_price` (and `midPrice`) for HIP-4 is an implied probability in [0, 1],
+ * not a USD price. HIP-4 markets are fully collateralized so there are no
+ * funding rates, no liquidations, and no candles by design.
+ *
+ * Tier gating mirrors HIP-3: Pro+ for L4 / full orderbook / orders, Build+ for everything else.
+ *
+ * @example
+ * ```typescript
+ * const client = new OxArchive({ apiKey: '...' });
+ *
+ * // Both forms work — the SDK encodes `#` to `%23` on the wire so the
+ * // path makes it through `fetch` intact.
+ * const orderbook = await client.hyperliquid.hip4.getOrderbook('#0');
+ * const orderbookAlt = await client.hyperliquid.hip4.getOrderbook('0');
+ *
+ * // Filter outcomes by slug
+ * const outcomes = await client.hyperliquid.hip4.listOutcomes({ isSettled: false });
+ * const bySlug = await client.hyperliquid.hip4.getOutcomeBySlug('btc-above-78213-may-04-0600');
+ * ```
+ */
+export class Hip4Client {
+  /**
+   * HIP-4 per-side instruments (one row per `#N`).
+   */
+  public readonly instruments: Hip4InstrumentsResource;
+
+  /**
+   * HIP-4 per-outcome aggregates (one row per outcome). HIP-4-specific, no HIP-3 analog.
+   */
+  public readonly outcomes: Hip4OutcomesResource;
+
+  /**
+   * L2 orderbook snapshots (Pro+).
+   */
+  public readonly orderbook: OrderBookResource;
+
+  /**
+   * Trade/fill history.
+   */
+  public readonly trades: TradesResource;
+
+  /**
+   * Open interest (per side).
+   */
+  public readonly openInterest: OpenInterestResource;
+
+  /**
+   * Order history, flow, and TP/SL (Pro+).
+   */
+  public readonly orders: OrdersResource;
+
+  /**
+   * L4 orderbook (snapshots, diffs, history).
+   */
+  public readonly l4Orderbook: L4OrderBookResource;
+
+  /**
+   * L2 full-depth orderbook (derived from L4).
+   */
+  public readonly l2Orderbook: L2OrderBookResource;
+
+  private http: HttpClient;
+
+  constructor(http: HttpClient) {
+    this.http = http;
+    const basePath = '/v1/hyperliquid/hip4';
+    // HIP-4 coins like `#0` contain `#`, which `fetch` (and the WHATWG URL
+    // parser underneath it) treats as a URL fragment delimiter. Without
+    // encoding, the path `/v1/.../trades/#0/recent` arrives at the server as
+    // `/v1/.../trades/` and the rest is silently dropped — the user gets a
+    // 404 with an empty body and a confusing `Unexpected end of JSON input`
+    // from the JSON parser. Encoding `#` to `%23` makes both the bare form
+    // (`'0'`) and the canonical `#`-prefixed form (`'#0'`, the form the API
+    // returns in `coin` fields) work. `encodeURIComponent` is a no-op for
+    // the bare-numeric form, so this is purely additive.
+    const coinTransform = (c: string) => encodeURIComponent(c);
+    this.instruments = new Hip4InstrumentsResource(http, basePath, coinTransform);
+    this.outcomes = new Hip4OutcomesResource(http, basePath);
+    this.orderbook = new OrderBookResource(http, basePath, coinTransform);
+    this.trades = new TradesResource(http, basePath, coinTransform);
+    this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
+    this.orders = new OrdersResource(http, basePath, coinTransform);
+    this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
+    this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
+  }
+
+  /** @internal Encode a HIP-4 coin for use in URL paths. */
+  private encodeCoin(coin: string): string {
+    return encodeURIComponent(coin);
+  }
+
+  /**
+   * List per-outcome aggregates. `aggregatedOi` is omitted on list responses.
+   */
+  async listOutcomes(params?: import('./types').Hip4ListOutcomesParams): Promise<CursorResponse<import('./types').Hip4OutcomeAggregate[]>> {
+    return this.outcomes.list(params);
+  }
+
+  /**
+   * Get a single outcome aggregate (includes `aggregatedOi`).
+   */
+  async getOutcome(outcomeId: number | string): Promise<import('./types').Hip4OutcomeAggregate> {
+    return this.outcomes.get(outcomeId);
+  }
+
+  /**
+   * Look up an outcome aggregate by slug. Accepts the per-outcome slug
+   * (e.g. `btc-above-78213-may-04-0600`) OR a per-side slug
+   * (e.g. `btc-above-78213-yes-may-04-0600`). Includes `aggregatedOi`.
+   */
+  async getOutcomeBySlug(slug: string): Promise<import('./types').Hip4OutcomeAggregate> {
+    return this.outcomes.getBySlug(slug);
+  }
+
+  /**
+   * List all per-side instruments (one row per `#N`).
+   */
+  async getInstruments(): Promise<import('./types').Hip4Outcome[]> {
+    return this.instruments.list();
+  }
+
+  /**
+   * Get a single per-side instrument by coin (e.g. `#0`).
+   */
+  async getInstrument(coin: string): Promise<import('./types').Hip4Outcome> {
+    return this.instruments.get(coin);
+  }
+
+  /**
+   * Get current L2 orderbook snapshot for a HIP-4 coin (Pro+).
+   * @param coin Coin string with leading `#` (e.g. `#0`).
+   */
+  async getOrderbook(coin: string, params?: import('./types').GetOrderBookParams) {
+    return this.orderbook.get(coin, params);
+  }
+
+  /**
+   * Get historical L2 orderbook snapshots for a HIP-4 coin (Pro+).
+   */
+  async getOrderbookHistory(coin: string, params: import('./types').OrderBookHistoryParams) {
+    return this.orderbook.history(coin, params);
+  }
+
+  /**
+   * Get historical fills for a HIP-4 coin.
+   */
+  async getTrades(coin: string, params: import('./types').GetTradesCursorParams) {
+    return this.trades.list(coin, params);
+  }
+
+  /**
+   * Get most recent N fills for a HIP-4 coin (latest first).
+   */
+  async getTradesRecent(coin: string, limit?: number) {
+    return this.trades.recent(coin, limit);
+  }
+
+  /**
+   * Get per-side open interest history for a HIP-4 coin.
+   * Note: `markPrice` on the response is an implied probability (0..1), not USD.
+   */
+  async getOpenInterest(coin: string, params: import('./types').OpenInterestHistoryParams) {
+    return this.openInterest.history(coin, params);
+  }
+
+  /**
+   * Get current per-side open interest for a HIP-4 coin.
+   * Note: `markPrice` on the response is an implied probability (0..1), not USD.
+   */
+  async getOpenInterestCurrent(coin: string) {
+    return this.openInterest.current(coin);
+  }
+
+  /**
+   * Get combined market summary for a HIP-4 coin.
+   * @param coin Either bare numeric form (`'0'`) or `#`-prefixed form (`'#0'`). The SDK URL-encodes `#` so both work.
+   */
+  async getSummary(coin: string): Promise<CoinSummary> {
+    const response = await this.http.get<ApiResponse<CoinSummary>>(
+      `/v1/hyperliquid/hip4/summary/${this.encodeCoin(coin)}`,
+      undefined,
+      this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get per-symbol data freshness across all HIP-4 data types.
+   * @param coin Either bare numeric form (`'0'`) or `#`-prefixed form (`'#0'`). The SDK URL-encodes `#` so both work.
+   */
+  async getFreshness(coin: string): Promise<CoinFreshness> {
+    const response = await this.http.get<ApiResponse<CoinFreshness>>(
+      `/v1/hyperliquid/hip4/freshness/${this.encodeCoin(coin)}`,
+      undefined,
+      this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get mid-price history for a HIP-4 coin.
+   * Note: returned `markPrice`/`midPrice` are probabilities (0..1), not USD.
+   * @param coin Either bare numeric form (`'0'`) or `#`-prefixed form (`'#0'`). The SDK URL-encodes `#` so both work.
+   */
+  async getPrices(coin: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
+    const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
+      `/v1/hyperliquid/hip4/prices/${this.encodeCoin(coin)}`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
+  }
+
+  /**
+   * Get order lifecycle events for a HIP-4 coin (Pro+).
+   */
+  async getOrderHistory(coin: string, params: import('./resources/orders').OrderHistoryParams) {
+    return this.orders.history(coin, params);
+  }
+
+  /**
+   * Get time-bucketed order-flow aggregates for a HIP-4 coin (Pro+).
+   */
+  async getOrderFlow(coin: string, params: import('./resources/orders').OrderFlowParams) {
+    return this.orders.flow(coin, params);
+  }
+
+  /**
+   * Get TP/SL orders for a HIP-4 coin (Pro+).
+   */
+  async getTpsl(coin: string, params: import('./resources/orders').TpslParams) {
+    return this.orders.tpsl(coin, params);
+  }
+
+  /**
+   * Get full L4 reconstruction (current) for a HIP-4 coin (Pro+).
+   */
+  async getL4Orderbook(coin: string, params?: import('./resources/l4-orderbook').L4OrderBookParams) {
+    return this.l4Orderbook.get(coin, params);
+  }
+
+  /**
+   * Get L4 diffs (event stream) for a HIP-4 coin (Pro+).
+   */
+  async getL4Diffs(coin: string, params: import('./types').CursorPaginationParams) {
+    return this.l4Orderbook.diffs(coin, params);
+  }
+
+  /**
+   * Get L4 checkpoint history for a HIP-4 coin (Build+; hard cap limit=10).
+   */
+  async getL4History(coin: string, params: import('./types').CursorPaginationParams) {
+    return this.l4Orderbook.history(coin, params);
   }
 }
 
