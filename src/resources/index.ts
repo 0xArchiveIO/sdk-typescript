@@ -17,3 +17,4 @@ export { OrdersResource } from './orders';
 export { L4OrderBookResource } from './l4-orderbook';
 export { L2OrderBookResource } from './l2-orderbook';
 export { L3OrderBookResource } from './l3-orderbook';
+export { SpotPairsResource, SpotTwapResource } from './spot';

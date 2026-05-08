@@ -428,6 +428,81 @@ export interface Hip4OutcomeSideSpec {
   slug?: string;
 }
 
+/**
+ * Hyperliquid Spot pair metadata.
+ *
+ * Returned from `/v1/hyperliquid/spot/pairs` and
+ * `/v1/hyperliquid/spot/pairs/{symbol}`. Symbols are dashed canonical
+ * (`HYPE-USDC`, `PURR-USDC`); the server resolves the dashed form to
+ * Hyperliquid's wire formats (`PURR/USDC`, `@107`) internally.
+ *
+ * Spot has no funding, no open interest, no liquidations, and no candles by
+ * design (those are perpetual constructs). The SDK intentionally omits
+ * those resources from the spot client.
+ */
+export interface SpotPair {
+  /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). */
+  symbol: string;
+  /** Base asset name (e.g. `HYPE`, `PURR`). */
+  baseAsset: string;
+  /** Quote asset name (typically `USDC`). */
+  quoteAsset: string;
+  /** Hyperliquid wire format (e.g. `PURR/USDC`, `@107`). */
+  wireSymbol?: string;
+  /** Hyperliquid asset index (e.g. `107` for `@107`). */
+  assetIndex?: number;
+  /** Size decimal precision. */
+  szDecimals?: number;
+  /** Price decimal precision. */
+  pxDecimals?: number;
+  /** Whether the pair is currently tradeable. */
+  isActive?: boolean;
+  /** Latest mark / mid price observed. */
+  markPrice?: number;
+  /** Latest mid price observed. */
+  midPrice?: number;
+  /** Timestamp of the latest market data point. */
+  latestTimestamp?: string;
+}
+
+/**
+ * Hyperliquid Spot TWAP status record.
+ *
+ * Returned from `/v1/hyperliquid/spot/twap/{symbol}` and
+ * `/v1/hyperliquid/spot/twap/user/{user}`. TWAP statuses come from the L4
+ * order stream; field shape mirrors the upstream Hyperliquid TWAP status.
+ * Loosely typed because upstream includes a number of optional fields and
+ * keeps adding to the schema.
+ */
+export interface SpotTwapStatus {
+  /** Dashed canonical symbol (e.g. `HYPE-USDC`). */
+  coin: string;
+  /** Status timestamp (UTC). */
+  timestamp: string;
+  /** TWAP execution id assigned by Hyperliquid. */
+  twapId?: number;
+  /** User wallet address that owns the TWAP. */
+  userAddress?: string;
+  /** Side: `B` (buy) or `A` (sell). */
+  side?: TradeSide;
+  /** Order size remaining for the TWAP. */
+  size?: string;
+  /** Total filled size so far. */
+  filledSize?: string;
+  /** Notional executed in quote currency. */
+  filledNotional?: string;
+  /** TWAP minutes window length. */
+  minutes?: number;
+  /** True if the TWAP is randomized. */
+  randomize?: boolean;
+  /** Reduce-only flag. */
+  reduceOnly?: boolean;
+  /** Status string (`activated`, `terminated`, `error`, etc.). */
+  status?: string;
+  /** Error message when status is `error`. */
+  error?: string;
+}
+
 /** Filter params for `/v1/hyperliquid/hip4/outcomes`. */
 export interface Hip4ListOutcomesParams {
   /** Filter by settlement state. Omit to return all. */
@@ -534,8 +609,14 @@ export interface Liquidation {
   price: string;
   /** Liquidation size */
   size: string;
-  /** Side: 'B' (buy) or 'S' (sell) */
-  side: 'B' | 'S';
+  /**
+   * Trade side of the liquidating fill. Follows the trade convention:
+   * `'A'` (ask, sell-side fill, long was liquidated) or `'B'` (bid, buy-side
+   * fill, short was liquidated). Liquidations now share the trade wire shape
+   * (each row is a fill with `is_liquidation: true`) so this matches the
+   * `side` value on `Trade`. See CHANGELOG 1.6.0.
+   */
+  side: 'A' | 'B';
   /** Mark price at time of liquidation */
   markPrice?: string;
   /** Realized PnL from the liquidation */
@@ -549,9 +630,13 @@ export interface Liquidation {
 }
 
 /**
- * Parameters for getting liquidation history
+ * Parameters for getting liquidation history.
+ *
+ * Currently identical to `CursorPaginationParams`. Kept as a named type so
+ * that future liquidation-specific filters (e.g. `side`, `minSize`) can be
+ * added without breaking callers.
  */
-export interface LiquidationHistoryParams extends CursorPaginationParams {}
+export type LiquidationHistoryParams = CursorPaginationParams;
 
 /**
  * Parameters for getting liquidations by user
@@ -744,6 +829,7 @@ export type WsChannel =
   | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles'
   | 'hip3_open_interest' | 'hip3_funding' | 'hip3_liquidations'
   | 'hip4_orderbook' | 'hip4_trades' | 'hip4_open_interest'
+  | 'spot_orderbook' | 'spot_trades' | 'spot_l4_diffs' | 'spot_l4_orders' | 'spot_twap'
   | 'l4_diffs' | 'l4_orders'
   | 'hip3_l4_diffs' | 'hip3_l4_orders'
   | 'hip4_l4_diffs' | 'hip4_l4_orders';

@@ -2,7 +2,7 @@
 
 TypeScript client for 0xArchive market data in Node services, dashboards, coding-agent workflows, and agent backends.
 
-0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`. HIP-4 binary outcome markets live at `/v1/hyperliquid/hip4` and `client.hyperliquid.hip4`.
+0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`. HIP-4 binary outcome markets live at `/v1/hyperliquid/hip4` and `client.hyperliquid.hip4`. Hyperliquid Spot lives at `/v1/hyperliquid/spot` and `client.spot`.
 
 Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, and order-book reconstruction utilities.
 
@@ -38,6 +38,11 @@ const hip3Trades = await client.hyperliquid.hip3.trades.recent('km:US500');
 const hip3Funding = await client.hyperliquid.hip3.funding.current('xyz:XYZ100');
 const hip3Oi = await client.hyperliquid.hip3.openInterest.current('xyz:XYZ100');
 
+// Hyperliquid Spot lives at client.spot. Symbols are dashed canonical (HYPE-USDC).
+const spotPairs = await client.spot.pairs.list();
+const spotOrderbook = await client.spot.orderbook.get('HYPE-USDC');
+const spotTrades = await client.spot.trades.recent('HYPE-USDC');
+
 // Get historical order book snapshots
 const history = await client.hyperliquid.orderbook.history('ETH', {
   start: Date.now() - 86400000, // 24 hours ago
@@ -63,6 +68,8 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Perpetuals across the full venue |
 | Hyperliquid HIP-3 | February 2026+ | Free tier: `km:US500`. Build+: all HIP-3 symbols. Pro+: orderbook history. |
+| Hyperliquid HIP-4 | March 2026+ | Outcome markets. Pro+ for orderbook + L4 + orders. |
+| Hyperliquid Spot | March 2025+ for trades; May 2026+ for orderbook, L4, TWAP statuses | 294 dashed pairs (`HYPE-USDC`, `PURR-USDC`). No funding, OI, liquidations, or candles (perp-only constructs). |
 | Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
 
 ## Configuration
@@ -369,6 +376,69 @@ const orders = await client.hyperliquid.hip4.getOrderHistory('0', {
 ```
 
 > **No HIP-4 funding, liquidations, or candles.** These methods do not exist on `client.hyperliquid.hip4` by design. Don't expect them.
+
+#### Hyperliquid Spot
+
+Spot pairs live at `/v1/hyperliquid/spot` and `client.spot`. Symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves the dashed form to Hyperliquid's wire formats (`PURR/USDC`, `@107`) internally.
+
+Spot has **no funding, no open interest, no liquidations, and no candles** by design. Those are perpetual constructs. The SDK omits those resources from the spot client.
+
+```typescript
+// Pairs (one row per dashed symbol)
+const pairs = await client.spot.pairs.list();
+const hype = await client.spot.pairs.get('HYPE-USDC');
+console.log(`${hype.symbol}: mark=${hype.markPrice}, mid=${hype.midPrice}`);
+
+// Orderbook (Build+, live from 2026-05-05)
+const ob = await client.spot.orderbook.get('HYPE-USDC');
+console.log(`${ob.coin} mid: ${ob.midPrice}`);
+
+// Orderbook history
+const obHistory = await client.spot.orderbook.history('HYPE-USDC', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+  limit: 100,
+});
+
+// Trade history (S3 backfill from 2025-03-22)
+const trades = await client.spot.trades.list('HYPE-USDC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  limit: 1000,
+});
+
+// Recent trades (real-time)
+const recent = await client.spot.trades.recent('HYPE-USDC', 100);
+
+// L4 reconstruction (Pro+, live from 2026-05-05)
+const l4 = await client.spot.l4Orderbook.get('HYPE-USDC');
+const diffs = await client.spot.l4Orderbook.diffs('HYPE-USDC', {
+  start: Date.now() - 3600000,
+  end: Date.now(),
+});
+
+// Order lifecycle events (Pro+)
+const orders = await client.spot.orders.history('HYPE-USDC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+});
+
+// TWAP statuses by symbol or by user wallet
+const bySymbol = await client.spot.twap.bySymbol('HYPE-USDC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+});
+const byUser = await client.spot.twap.byUser('0xabc...', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+});
+
+// Per-symbol freshness across all spot data types
+const fresh = await client.spot.freshness('HYPE-USDC');
+console.log(`Orderbook last updated: ${fresh.orderbook.lastUpdated}`);
+```
+
+> **Coverage caveats.** Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
 
 ### Funding Rates
 
@@ -1222,6 +1292,38 @@ ws.subscribeHip4('hip4_trades', '#1');
 ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
   console.log(`${coin} (outcome ${outcomeId} side ${side}) settled: ${value} at ${at}`);
 });
+```
+
+#### Hyperliquid Spot Channels
+
+| Channel | Description | Requires Coin | Mode |
+|---------|-------------|---------------|-------------------|
+| `spot_orderbook` | Spot L2 order book snapshots (Build+) | Yes | Real-time only |
+| `spot_trades` | Spot trade/fill updates (Build+) | Yes | Real-time only |
+| `spot_l4_diffs` | Spot L4 orderbook diffs (Pro+) | Yes | Real-time only |
+| `spot_l4_orders` | Spot order lifecycle events (Pro+) | Yes | Real-time only |
+| `spot_twap` | Spot TWAP statuses (Build+) | Yes | Real-time only |
+
+Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`). The server resolves the dashed form to wire format internally. Spot has no funding, no open interest, no liquidations, and no candles by design.
+
+```typescript
+ws.onOrderbook((coin, ob) => {
+  console.log(`${coin} mid: ${ob.midPrice}`);
+});
+ws.onTrades((coin, trades) => {
+  console.log(`${coin} got ${trades.length} trades`);
+});
+
+await ws.connect();
+ws.subscribeSpot('orderbook', 'HYPE-USDC');
+ws.subscribeSpot('trades', 'HYPE-USDC');
+
+// Pro+: L4 channels
+ws.subscribeSpot('l4_diffs', 'HYPE-USDC');
+ws.subscribeSpot('l4_orders', 'HYPE-USDC');
+
+// TWAP statuses
+ws.subscribeSpot('twap', 'HYPE-USDC');
 ```
 
 #### Live Liquidations

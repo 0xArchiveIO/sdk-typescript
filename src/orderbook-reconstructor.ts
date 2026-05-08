@@ -71,9 +71,9 @@ export interface ReconstructOptions {
 export class OrderBookReconstructor {
   private bids: Map<number, InternalLevel> = new Map();
   private asks: Map<number, InternalLevel> = new Map();
-  private coin: string = '';
-  private lastTimestamp: string = '';
-  private lastSequence: number = 0;
+  private coin = '';
+  private lastTimestamp = '';
+  private lastSequence = 0;
 
   /**
    * Initialize or reset the reconstructor with a checkpoint

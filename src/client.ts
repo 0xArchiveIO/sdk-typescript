@@ -1,6 +1,6 @@
 import type { ClientOptions } from './types';
 import { HttpClient } from './http';
-import { HyperliquidClient, LighterClient } from './exchanges';
+import { HyperliquidClient, LighterClient, SpotClient } from './exchanges';
 import {
   OrderBookResource,
   TradesResource,
@@ -17,9 +17,11 @@ const DEFAULT_TIMEOUT = 30000;
 /**
  * 0xarchive API client
  *
- * Supports two top-level venue APIs:
+ * Supports these top-level venue APIs:
  * - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
  *   - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
+ *   - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets
+ * - `client.spot` - Hyperliquid Spot (trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
  * - `client.lighter` - Lighter.xyz perpetuals
  *
  * @example
@@ -67,6 +69,13 @@ export class OxArchive {
    * Lighter.xyz exchange data (August 2025+)
    */
   public readonly lighter: LighterClient;
+
+  /**
+   * Hyperliquid Spot exchange data. Trades backfilled from 2025-03-22;
+   * orderbook, L4, and TWAP statuses live from 2026-05-05. Symbols are
+   * dashed canonical (e.g. `HYPE-USDC`).
+   */
+  public readonly spot: SpotClient;
 
   /**
    * Data quality metrics: status, coverage, incidents, latency, SLA
@@ -123,6 +132,7 @@ export class OxArchive {
     // Exchange-specific clients (recommended)
     this.hyperliquid = new HyperliquidClient(this.http);
     this.lighter = new LighterClient(this.http);
+    this.spot = new SpotClient(this.http);
 
     // Data quality monitoring (cross-exchange)
     this.dataQuality = new DataQualityResource(this.http);

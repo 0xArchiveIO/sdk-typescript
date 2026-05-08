@@ -136,7 +136,10 @@ export const OpenInterestSchema = z.object({
 // Liquidation Schemas
 // =============================================================================
 
-export const LiquidationSideSchema = z.enum(['B', 'S']);
+// Liquidations now share the trade wire shape (each row is a fill with
+// `is_liquidation: true`), so `side` follows the trade convention `A`/`B`
+// rather than the legacy `B`/`S` long/short pair. See CHANGELOG 1.6.0.
+export const LiquidationSideSchema = z.enum(['A', 'B']);
 
 export const LiquidationSchema = z.object({
   coin: z.string(),
@@ -182,6 +185,7 @@ export const WsChannelSchema = z.enum([
   'hip3_orderbook', 'hip3_trades', 'hip3_candles',
   'hip3_open_interest', 'hip3_funding', 'hip3_liquidations',
   'hip4_orderbook', 'hip4_trades', 'hip4_open_interest',
+  'spot_orderbook', 'spot_trades', 'spot_l4_diffs', 'spot_l4_orders', 'spot_twap',
   'l4_diffs', 'l4_orders',
   'hip3_l4_diffs', 'hip3_l4_orders',
   'hip4_l4_diffs', 'hip4_l4_orders',
