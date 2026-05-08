@@ -3,11 +3,17 @@ import type { ApiResponse, ApiError } from './types';
 import { OxArchiveError } from './types';
 
 /**
- * Convert a snake_case string to camelCase
+ * Convert a snake_case string to camelCase.
+ *
+ * Only `_` followed by a lowercase letter is collapsed. Underscores before
+ * digits are preserved so that, e.g., `value_1_test` becomes `value_1Test`
+ * (not `value1Test`), matching the JS convention of treating numbers as
+ * delimiters rather than word starts.
+ *
  * @internal Exported for testing
  */
 export function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z0-9])/g, (_, char) => char.toUpperCase());
+  return str.replace(/_([a-z])/g, (_, char) => char.toUpperCase());
 }
 
 /**

@@ -421,6 +421,36 @@ export class OxArchiveWs {
   }
 
   /**
+   * Subscribe to a Hyperliquid Spot channel for a given dashed pair.
+   *
+   * @param channel One of `spot_orderbook`, `spot_trades`, `spot_l4_diffs`,
+   *   `spot_l4_orders`, `spot_twap`. The short form (e.g. `'orderbook'`) is
+   *   also accepted and the `spot_` prefix is added automatically.
+   * @param coin Spot dashed canonical symbol (e.g. `'HYPE-USDC'`).
+   */
+  subscribeSpot(
+    channel:
+      | 'orderbook' | 'trades' | 'l4_diffs' | 'l4_orders' | 'twap'
+      | 'spot_orderbook' | 'spot_trades' | 'spot_l4_diffs' | 'spot_l4_orders' | 'spot_twap',
+    coin: string,
+  ): void {
+    const fullChannel = (channel.startsWith('spot_') ? channel : `spot_${channel}`) as WsChannel;
+    this.subscribe(fullChannel, coin);
+  }
+
+  /** Unsubscribe from a Hyperliquid Spot channel for a given dashed pair.
+   * Accepts the short form (`'orderbook'`) or the full form (`'spot_orderbook'`). */
+  unsubscribeSpot(
+    channel:
+      | 'orderbook' | 'trades' | 'l4_diffs' | 'l4_orders' | 'twap'
+      | 'spot_orderbook' | 'spot_trades' | 'spot_l4_diffs' | 'spot_l4_orders' | 'spot_twap',
+    coin: string,
+  ): void {
+    const fullChannel = (channel.startsWith('spot_') ? channel : `spot_${channel}`) as WsChannel;
+    this.unsubscribe(fullChannel, coin);
+  }
+
+  /**
    * Subscribe to a HIP-4 channel for a given outcome coin.
    *
    * @param channel One of `hip4_orderbook`, `hip4_trades`, `hip4_open_interest`,
@@ -904,7 +934,8 @@ export class OxArchiveWs {
   private resubscribe(): void {
     for (const key of this.subscriptions) {
       const [channel, coin] = key.split(':') as [WsChannel, string | undefined];
-      this.send({ op: 'subscribe', channel, coin });
+      // Wire field is `symbol`; mirror the canonical form used by `subscribe()`.
+      this.send({ op: 'subscribe', channel, symbol: coin });
     }
   }
 
@@ -1018,7 +1049,8 @@ export class OxArchiveWs {
           message.channel === 'orderbook' ||
           message.channel === 'hip3_orderbook' ||
           message.channel === 'hip4_orderbook' ||
-          message.channel === 'lighter_orderbook'
+          message.channel === 'lighter_orderbook' ||
+          message.channel === 'spot_orderbook'
         ) {
           // Transform raw orderbook payload to SDK OrderBook type. Covers the
           // bare `orderbook` channel plus all per-venue variants so a single
@@ -1032,7 +1064,8 @@ export class OxArchiveWs {
           message.channel === 'trades' ||
           message.channel === 'hip3_trades' ||
           message.channel === 'hip4_trades' ||
-          message.channel === 'lighter_trades'
+          message.channel === 'lighter_trades' ||
+          message.channel === 'spot_trades'
         ) {
           // Transform raw trade payload to SDK Trade type. Covers the bare
           // `trades` channel plus all per-venue variants.

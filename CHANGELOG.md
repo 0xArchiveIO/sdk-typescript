@@ -5,6 +5,39 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## 1.7.0 (2026-05-06)
+
+### Added
+- **Hyperliquid Spot support**. New top-level client `client.spot` mirroring
+  the HIP-3 surface, minus the perp-only constructs (no funding, no open
+  interest, no liquidations, no candles). Symbols are dashed canonical
+  (`HYPE-USDC`, `PURR-USDC`); the server resolves the dashed form to
+  Hyperliquid's wire formats (`PURR/USDC`, `@107`) internally.
+  - REST resources: `client.spot.pairs` (list/get), `client.spot.orderbook`
+    (current + history), `client.spot.trades` (list/recent),
+    `client.spot.orders` (Pro+ history), `client.spot.l4Orderbook` (Pro+
+    snapshot, Pro+ diffs, Build+ checkpoint history),
+    `client.spot.twap` (by symbol or by user wallet),
+    `client.spot.freshness(symbol)`.
+  - WebSocket channels: `spot_orderbook`, `spot_trades` (Build+),
+    `spot_l4_diffs`, `spot_l4_orders` (Pro+), `spot_twap` (Build+).
+  - New helpers on `OxArchiveWs`: `subscribeSpot(channel, coin)` and
+    `unsubscribeSpot(channel, coin)`. Short forms accepted
+    (`'orderbook'` is rewritten to `'spot_orderbook'`).
+  - `spot_orderbook` data routes through the existing `onOrderbook` handler;
+    `spot_trades` data routes through the existing `onTrades` handler.
+  - New types: `SpotPair`, `SpotTwapStatus`. New exported class: `SpotClient`.
+  - Coverage: trades from 2025-03-22 (S3 backfill); orderbook, L4, and TWAP
+    statuses live from 2026-05-05.
+
+### Notes
+- **No spot funding, open interest, liquidations, or candles.** Those are
+  perpetual constructs. The SDK intentionally does not expose them on the
+  spot client. `/v1/hyperliquid/spot/candles/{symbol}` returns 501 by
+  design and is not wrapped.
+- Spot pre-2025-03-22 trade history is unrecoverable from any free public
+  archive (Hyperliquid did not publish spot fills before that date).
+
 ## 1.6.0 — 2026-05-04
 
 ### Added

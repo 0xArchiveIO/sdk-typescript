@@ -16,6 +16,8 @@ import {
   L4OrderBookResource,
   L2OrderBookResource,
   L3OrderBookResource,
+  SpotPairsResource,
+  SpotTwapResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -566,6 +568,91 @@ export class Hip4Client {
    */
   async getL4History(coin: string, params: import('./types').CursorPaginationParams) {
     return this.l4Orderbook.history(coin, params);
+  }
+}
+
+/**
+ * Hyperliquid Spot exchange client.
+ *
+ * Access Hyperliquid Spot data through the 0xarchive API. Symbols are
+ * dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves the
+ * dashed form to Hyperliquid's wire formats (`PURR/USDC`, `@107`)
+ * internally.
+ *
+ * Spot has no funding, no open interest, no liquidations, and no candles
+ * by design (those are perpetual constructs). The SDK intentionally omits
+ * those resources from the spot client.
+ *
+ * Coverage:
+ * - Trades: from 2025-03-22 (HL S3 backfill).
+ * - Orderbook, L4 diffs, L4 orders, TWAP statuses: live from 2026-05-05.
+ *
+ * Tier gating mirrors HIP-3: Pro+ for L4 / order lifecycle, Build+ for
+ * everything else.
+ *
+ * @example
+ * ```typescript
+ * const client = new OxArchive({ apiKey: '0xa_...' });
+ *
+ * const orderbook = await client.spot.orderbook.get('HYPE-USDC');
+ * const recentTrades = await client.spot.trades.recent('HYPE-USDC');
+ * const pairs = await client.spot.pairs.list();
+ *
+ * // L4 (Pro+)
+ * const l4 = await client.spot.l4Orderbook.get('HYPE-USDC');
+ * const diffs = await client.spot.l4Orderbook.diffs('HYPE-USDC', { start, end });
+ *
+ * // TWAP statuses (Build+)
+ * const byUser = await client.spot.twap.byUser('0xabc...', { start, end });
+ * ```
+ */
+export class SpotClient {
+  /** Spot pair metadata (one row per dashed symbol). */
+  public readonly pairs: SpotPairsResource;
+
+  /** L2 order book snapshots (live from 2026-05-05). */
+  public readonly orderbook: OrderBookResource;
+
+  /** Trade history (S3 backfill from 2025-03-22, live since). */
+  public readonly trades: TradesResource;
+
+  /** Order lifecycle events (Pro+; live from 2026-05-05). */
+  public readonly orders: OrdersResource;
+
+  /** L4 order book: snapshots, diffs, and checkpoint history. */
+  public readonly l4Orderbook: L4OrderBookResource;
+
+  /** TWAP statuses by symbol or by user wallet (Build+). */
+  public readonly twap: SpotTwapResource;
+
+  private http: HttpClient;
+
+  constructor(http: HttpClient) {
+    this.http = http;
+    const basePath = '/v1/hyperliquid/spot';
+    // Spot symbols are dashed canonical (HYPE-USDC). Uppercasing is a no-op
+    // for already-canonical input and forgiving for lowercased input.
+    const coinTransform = (c: string) => c.toUpperCase();
+    this.pairs = new SpotPairsResource(http, basePath, coinTransform);
+    this.orderbook = new OrderBookResource(http, basePath, coinTransform);
+    this.trades = new TradesResource(http, basePath, coinTransform);
+    this.orders = new OrdersResource(http, basePath, coinTransform);
+    this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
+    this.twap = new SpotTwapResource(http, basePath, coinTransform);
+  }
+
+  /**
+   * Get per-symbol data freshness across all spot data types.
+   *
+   * @param symbol Dashed canonical (e.g. `HYPE-USDC`).
+   */
+  async freshness(symbol: string): Promise<CoinFreshness> {
+    const response = await this.http.get<ApiResponse<CoinFreshness>>(
+      `/v1/hyperliquid/spot/freshness/${symbol.toUpperCase()}`,
+      undefined,
+      this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined,
+    );
+    return response.data;
   }
 }
 

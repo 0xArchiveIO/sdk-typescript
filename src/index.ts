@@ -1,9 +1,11 @@
 /**
  * @0xarchive/sdk - Official TypeScript SDK for 0xarchive
  *
- * Historical Market Data API for two top-level venue APIs:
+ * Historical Market Data API for these top-level venue APIs:
  * - Hyperliquid (perpetuals data from April 2023)
  * - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
+ * - Hyperliquid HIP-4 outcome markets at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
+ * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
  * - Lighter.xyz (perpetuals data)
  *
  * @example
@@ -35,7 +37,7 @@
 export { OxArchive } from './client';
 
 // Exchange clients
-export { HyperliquidClient, Hip3Client, Hip4Client, LighterClient } from './exchanges';
+export { HyperliquidClient, Hip3Client, Hip4Client, LighterClient, SpotClient } from './exchanges';
 
 // WebSocket client
 export { OxArchiveWs } from './websocket';
@@ -176,6 +178,8 @@ export type {
   Hip4OutcomeSideSpec,
   Hip4AggregatedOi,
   Hip4ListOutcomesParams,
+  SpotPair,
+  SpotTwapStatus,
   InstrumentType,
   // Funding
   FundingRate,
