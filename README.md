@@ -2,7 +2,7 @@
 
 TypeScript client for 0xArchive market data in Node services, dashboards, coding-agent workflows, and agent backends.
 
-0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`. HIP-4 binary outcome markets live at `/v1/hyperliquid/hip4` and `client.hyperliquid.hip4`. Hyperliquid Spot lives at `/v1/hyperliquid/spot` and `client.spot`.
+0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. Hyperliquid includes core perps (`/v1/hyperliquid`), HIP-3 builder perps (`/v1/hyperliquid/hip3`), HIP-4 outcome markets (`/v1/hyperliquid/hip4`), and Hyperliquid Spot (`/v1/hyperliquid/spot`). Lighter.xyz is the second top-level venue API at `/v1/lighter`. In this SDK these map to `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, and `client.lighter`.
 
 Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, and order-book reconstruction utilities.
 
@@ -57,7 +57,7 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | --- | --- |
 | First authenticated route | [Quick Start](https://www.0xarchive.io/docs/quick-start) |
 | SDK install and route docs | [SDK docs](https://www.0xarchive.io/docs/sdks) |
-| Claude Code, GPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
+| Claude Code, ChatGPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
 | Example notebooks | [Examples](https://github.com/0xArchiveIO/examples) |
 | File-based historical pulls | [Data Catalog](https://www.0xarchive.io/data) |
 | Route contract and machine context | [OpenAPI](https://www.0xarchive.io/openapi.json), [llms.txt](https://www.0xarchive.io/llms.txt) |
@@ -1541,6 +1541,16 @@ When enabled, responses are validated against Zod schemas and throw `OxArchiveEr
 ## Data Catalog
 
 For large-scale data exports (full order books, complete trade history, etc.), use the [Data Catalog](https://www.0xarchive.io/data). It lets you choose markets, datasets, and date ranges, see a live quote, and export zstd-compressed Parquet.
+
+## Links
+
+- [API Docs](https://www.0xarchive.io/docs)
+- [Python SDK](https://pypi.org/project/oxarchive/)
+- [Rust SDK](https://crates.io/crates/oxarchive)
+- [CLI](https://npmjs.com/package/@0xarchive/cli)
+- [MCP Server](https://npmjs.com/package/@0xarchive/mcp-server)
+- [0xArchive Skill](https://github.com/0xArchiveIO/0xarchive-skill)
+- [Examples](https://github.com/0xArchiveIO/examples)
 
 ## Requirements
 
