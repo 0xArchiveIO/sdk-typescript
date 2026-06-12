@@ -42,7 +42,7 @@ export { HyperliquidClient, Hip3Client, Hip4Client, LighterClient, SpotClient } 
 // WebSocket client
 export { OxArchiveWs } from './websocket';
 
-// Orderbook Reconstructor — Lighter tick-level (Enterprise)
+// Orderbook Reconstructor — Lighter tick-level
 export {
   OrderBookReconstructor,
   reconstructOrderBook,
@@ -52,7 +52,7 @@ export {
   type ReconstructOptions,
 } from './orderbook-reconstructor';
 
-// L4 Orderbook Reconstructor — Hyperliquid / HIP-3 (Pro+)
+// L4 Orderbook Reconstructor — Hyperliquid / HIP-3
 export {
   L4OrderBookReconstructor,
   type L4Order,

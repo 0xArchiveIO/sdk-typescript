@@ -81,11 +81,11 @@ export interface GetOrderBookParams {
  * Lighter orderbook data granularity levels.
  * Controls the resolution of historical orderbook data (Lighter.xyz only).
  *
- * - 'checkpoint': ~60s intervals (default, all tiers)
- * - '30s': 30 second intervals (Build+ tier)
- * - '10s': 10 second intervals (Build+ tier)
- * - '1s': 1 second intervals (Pro+ tier)
- * - 'tick': Checkpoint + raw deltas (Enterprise tier only)
+ * - 'checkpoint': ~60s intervals (default)
+ * - '30s': 30 second intervals
+ * - '10s': 10 second intervals
+ * - '1s': 1 second intervals
+ * - 'tick': Checkpoint + raw deltas
  */
 export type LighterGranularity = 'checkpoint' | '30s' | '10s' | '1s' | 'tick';
 
@@ -94,7 +94,7 @@ export interface OrderBookHistoryParams extends CursorPaginationParams {
   depth?: number;
   /**
    * Data resolution for Lighter orderbook history (Lighter.xyz only, ignored for Hyperliquid).
-   * Controls the granularity of returned snapshots. Tier restrictions apply.
+   * Controls the granularity of returned snapshots.
    * Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
    * @default 'checkpoint'
    */
@@ -816,7 +816,7 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  *
  * HIP-4 channels (outcome contracts; no funding, no liquidations, no candles):
  * - hip4_orderbook, hip4_trades, hip4_open_interest: realtime + replay
- * - hip4_l4_diffs, hip4_l4_orders: real-time only (Pro+)
+ * - hip4_l4_diffs, hip4_l4_orders: real-time only
  *
  * Liquidation messages share the trade wire format: each item is a fill row
  * with `is_liquidation: true`.
