@@ -67,8 +67,8 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | Venue | Coverage | Notes |
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Perpetuals across the full venue |
-| Hyperliquid HIP-3 | February 2026+ | Free tier: `km:US500`. Build+: all HIP-3 symbols. Pro+: orderbook history. |
-| Hyperliquid HIP-4 | March 2026+ | Outcome markets. Pro+ for orderbook + L4 + orders. |
+| Hyperliquid HIP-3 | February 2026+ | All HIP-3 symbols, orderbook, and history on every tier. |
+| Hyperliquid HIP-4 | March 2026+ | Outcome markets. All schemas on every tier. |
 | Hyperliquid Spot | March 2025+ for trades; May 2026+ for orderbook, L4, TWAP statuses | 294 dashed pairs (`HYPE-USDC`, `PURR-USDC`). No funding, OI, liquidations, or candles (perp-only constructs). |
 | Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
 
@@ -110,47 +110,40 @@ const history = await client.hyperliquid.orderbook.history('BTC', {
 });
 ```
 
-#### Orderbook Depth Limits
+#### Orderbook Depth
 
-The `depth` parameter controls how many price levels are returned per side. Tier-based limits apply:
+The `depth` parameter controls how many price levels are returned per side. Full orderbook depth is available on every tier.
 
-| Tier | Max Depth |
-|------|-----------|
-| Free | 20 |
-| Build | 200 |
-| Pro | Full Depth |
-| Enterprise | Full Depth |
-
-**Note:** Hyperliquid L2 source data contains 20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth on Pro+. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
+**Note:** Hyperliquid L2 source data contains ~20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
 
 #### Lighter Orderbook Granularity
 
-Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions. Tier restrictions apply.
+Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions.
 
-| Granularity | Interval | Tier Required | Credit Multiplier |
-|-------------|----------|---------------|-------------------|
-| `checkpoint` | ~60s | Free+ | 1x |
-| `30s` | 30s | Build+ | 2x |
-| `10s` | 10s | Build+ | 3x |
-| `1s` | 1s | Pro+ | 10x |
-| `tick` | tick-level | Enterprise | 20x |
+| Granularity | Interval | Credit Multiplier |
+|-------------|----------|-------------------|
+| `checkpoint` | ~60s | 1x |
+| `30s` | 30s | 2x |
+| `10s` | 10s | 3x |
+| `1s` | 1s | 10x |
+| `tick` | tick-level | 20x |
 
 ```typescript
-// Get Lighter orderbook history with 10s resolution (Build+ tier)
+// Get Lighter orderbook history with 10s resolution
 const history = await client.lighter.orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
   granularity: '10s'
 });
 
-// Get 1-second resolution (Pro+ tier)
+// Get 1-second resolution
 const history = await client.lighter.orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
   granularity: '1s'
 });
 
-// Tick-level data (Enterprise tier) - returns checkpoint + raw deltas
+// Tick-level data - returns checkpoint + raw deltas
 const history = await client.lighter.orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -160,7 +153,7 @@ const history = await client.lighter.orderbook.history('BTC', {
 
 **Note:** The `granularity` parameter is ignored for Hyperliquid orderbook history.
 
-#### Orderbook Reconstruction (Enterprise Tier)
+#### Orderbook Reconstruction
 
 For tick-level data, the SDK provides client-side orderbook reconstruction. This efficiently reconstructs full orderbook state from a checkpoint and incremental deltas.
 
@@ -300,7 +293,7 @@ console.log(`ETH min base amount: ${eth.minBaseAmount}`);
 HIP-3 instruments are derived from live market data and include mark price, open interest, and mid price:
 
 ```typescript
-// List all HIP-3 instruments (no tier restriction)
+// List all HIP-3 instruments
 const hip3Instruments = await client.hyperliquid.hip3.instruments.list();
 for (const inst of hip3Instruments) {
   console.log(`${inst.coin} (${inst.namespace}:${inst.ticker}): mark=${inst.markPrice}, OI=${inst.openInterest}`);
@@ -351,7 +344,7 @@ const filtered = await client.hyperliquid.hip4.listOutcomes({
   slug: 'btc-above-78213-may-04-0600',
 });
 
-// Orderbook (Pro+). Bare numeric form is recommended.
+// Orderbook. Bare numeric form is recommended.
 const ob = await client.hyperliquid.hip4.getOrderbook('0');
 // ob.midPrice is a probability ∈ [0, 1] — implied YES probability for #0.
 
@@ -367,7 +360,7 @@ const prices = await client.hyperliquid.hip4.getPrices('0', {
 const summary = await client.hyperliquid.hip4.getSummary('0');
 const fresh = await client.hyperliquid.hip4.getFreshness('0');
 
-// Pro+: L4
+// L4
 const l4 = await client.hyperliquid.hip4.getL4Orderbook('0');
 const orders = await client.hyperliquid.hip4.getOrderHistory('0', {
   start: Date.now() - 3600000,
@@ -389,7 +382,7 @@ const pairs = await client.spot.pairs.list();
 const hype = await client.spot.pairs.get('HYPE-USDC');
 console.log(`${hype.symbol}: mark=${hype.markPrice}, mid=${hype.midPrice}`);
 
-// Orderbook (Build+, live from 2026-05-05)
+// Orderbook (live from 2026-05-05)
 const ob = await client.spot.orderbook.get('HYPE-USDC');
 console.log(`${ob.coin} mid: ${ob.midPrice}`);
 
@@ -410,14 +403,14 @@ const trades = await client.spot.trades.list('HYPE-USDC', {
 // Recent trades (real-time)
 const recent = await client.spot.trades.recent('HYPE-USDC', 100);
 
-// L4 reconstruction (Pro+, live from 2026-05-05)
+// L4 reconstruction (live from 2026-05-05)
 const l4 = await client.spot.l4Orderbook.get('HYPE-USDC');
 const diffs = await client.spot.l4Orderbook.diffs('HYPE-USDC', {
   start: Date.now() - 3600000,
   end: Date.now(),
 });
 
-// Order lifecycle events (Pro+)
+// Order lifecycle events
 const orders = await client.spot.orders.history('HYPE-USDC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -721,7 +714,7 @@ while (l3History.nextCursor) {
 Access L2 full-depth orderbook derived from L4 data. Available for Hyperliquid and HIP-3.
 
 ```typescript
-// L2 full-depth orderbook (Build+ tier)
+// L2 full-depth orderbook
 const l2 = await client.hyperliquid.l2Orderbook.get('BTC');
 
 // L2 orderbook at a specific timestamp with depth
@@ -730,14 +723,14 @@ const l2Historical = await client.hyperliquid.l2Orderbook.get('BTC', {
   depth: 50
 });
 
-// L2 orderbook history (Build+ tier)
+// L2 orderbook history
 const l2History = await client.hyperliquid.l2Orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 1000
 });
 
-// L2 tick-level diffs (Pro+ tier)
+// L2 tick-level diffs
 const l2Diffs = await client.hyperliquid.l2Orderbook.diffs('BTC', {
   start: Date.now() - 3600000,
   end: Date.now(),
@@ -1173,14 +1166,14 @@ ws.replay('orderbook', 'BTC', {
   speed: 10                       // Optional, defaults to 1x
 });
 
-// Lighter.xyz replay with granularity (tier restrictions apply)
+// Lighter.xyz replay with granularity
 ws.replay('orderbook', 'BTC', {
   start: Date.now() - 86400000,
   speed: 10,
   granularity: '10s'  // Options: 'checkpoint', '30s', '10s', '1s', 'tick'
 });
 
-// Handle tick-level data (granularity='tick', Enterprise tier)
+// Handle tick-level data (granularity='tick')
 ws.onHistoricalTickData((coin, checkpoint, deltas) => {
   console.log(`Checkpoint: ${checkpoint.bids.length} bids`);
   console.log(`Deltas: ${deltas.length} updates`);
@@ -1246,8 +1239,8 @@ const ws = new OxArchiveWs({
 | `funding` | Funding rate snapshots | Yes | Replay/stream only |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
-| `l4_diffs` | L4 orderbook diffs with user attribution (Pro+) | Yes | Real-time only |
-| `l4_orders` | Order lifecycle events with user attribution (Pro+) | Yes | Real-time only |
+| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Real-time only |
+| `l4_orders` | Order lifecycle events with user attribution | Yes | Real-time only |
 
 Each `liquidations` data message is a fill row with `is_liquidation: true` — the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
 
@@ -1261,8 +1254,8 @@ Each `liquidations` data message is a fill row with `is_liquidation: true` — t
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Replay/stream only |
 | `hip3_funding` | HIP-3 funding rate snapshots | Yes | Replay/stream only |
 | `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Realtime + replay (live as of 1.6.0) |
-| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs (Pro+) | Yes | Real-time only |
-| `hip3_l4_orders` | HIP-3 order lifecycle events (Pro+) | Yes | Real-time only |
+| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Real-time only |
+| `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Real-time only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -1270,11 +1263,11 @@ Each `liquidations` data message is a fill row with `is_liquidation: true` — t
 
 | Channel | Description | Requires Coin | Mode |
 |---------|-------------|---------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots (Pro+) | Yes | Realtime + replay |
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Realtime + replay |
 | `hip4_trades` | HIP-4 trade/fill updates | Yes | Realtime + replay |
 | `hip4_open_interest` | HIP-4 open interest (per side) | Yes | Realtime + replay |
-| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs (Pro+) | Yes | Real-time only |
-| `hip4_l4_orders` | HIP-4 order lifecycle events (Pro+) | Yes | Real-time only |
+| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Real-time only |
+| `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Real-time only |
 
 HIP-4 has no funding, no liquidations, no candles by design (markets settle to 0/1 at expiry). HIP-4 `mark_price` and `midPrice` are implied probabilities in `[0, 1]`, not USD prices.
 
@@ -1298,11 +1291,11 @@ ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
 
 | Channel | Description | Requires Coin | Mode |
 |---------|-------------|---------------|-------------------|
-| `spot_orderbook` | Spot L2 order book snapshots (Build+) | Yes | Real-time only |
-| `spot_trades` | Spot trade/fill updates (Build+) | Yes | Real-time only |
-| `spot_l4_diffs` | Spot L4 orderbook diffs (Pro+) | Yes | Real-time only |
-| `spot_l4_orders` | Spot order lifecycle events (Pro+) | Yes | Real-time only |
-| `spot_twap` | Spot TWAP statuses (Build+) | Yes | Real-time only |
+| `spot_orderbook` | Spot L2 order book snapshots | Yes | Real-time only |
+| `spot_trades` | Spot trade/fill updates | Yes | Real-time only |
+| `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Real-time only |
+| `spot_l4_orders` | Spot order lifecycle events | Yes | Real-time only |
+| `spot_twap` | Spot TWAP statuses | Yes | Real-time only |
 
 Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`). The server resolves the dashed form to wire format internally. Spot has no funding, no open interest, no liquidations, and no candles by design.
 
@@ -1318,7 +1311,7 @@ await ws.connect();
 ws.subscribeSpot('orderbook', 'HYPE-USDC');
 ws.subscribeSpot('trades', 'HYPE-USDC');
 
-// Pro+: L4 channels
+// L4 channels
 ws.subscribeSpot('l4_diffs', 'HYPE-USDC');
 ws.subscribeSpot('l4_orders', 'HYPE-USDC');
 
@@ -1352,7 +1345,7 @@ ws.subscribeHip3Liquidations('hyna:BTC');
 | `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
 | `lighter_open_interest` | Lighter open interest snapshots | Yes | Replay/stream only |
 | `lighter_funding` | Lighter funding rate snapshots | Yes | Replay/stream only |
-| `lighter_l3_orderbook` | Lighter L3 order-level orderbook (Pro+) | Yes | Yes |
+| `lighter_l3_orderbook` | Lighter L3 order-level orderbook | Yes | Yes |
 
 #### Candle Replay/Stream
 
@@ -1513,7 +1506,7 @@ import type {
   WsChannel,
   WsConnectionState,
   WsReplaySnapshot,
-  // Orderbook reconstruction (Enterprise)
+  // Orderbook reconstruction
   OrderbookDelta,
   TickData,
   ReconstructedOrderBook,

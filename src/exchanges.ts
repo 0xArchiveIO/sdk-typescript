@@ -171,7 +171,7 @@ export class HyperliquidClient {
  * HIP-3 builder-deployed perpetuals client
  *
  * Access Hyperliquid HIP-3 builder perps data through the 0xarchive API.
- * Free: km:US500 only. Build+: all coins. Orderbook: Pro+.
+ * All HIP-3 coins and orderbook available on every tier.
  *
  * @example
  * ```typescript
@@ -316,8 +316,6 @@ export class Hip3Client {
  * not a USD price. HIP-4 markets are fully collateralized so there are no
  * funding rates, no liquidations, and no candles by design.
  *
- * Tier gating mirrors HIP-3: Pro+ for L4 / full orderbook / orders, Build+ for everything else.
- *
  * @example
  * ```typescript
  * const client = new OxArchive({ apiKey: '...' });
@@ -344,7 +342,7 @@ export class Hip4Client {
   public readonly outcomes: Hip4OutcomesResource;
 
   /**
-   * L2 orderbook snapshots (Pro+).
+   * L2 orderbook snapshots.
    */
   public readonly orderbook: OrderBookResource;
 
@@ -359,7 +357,7 @@ export class Hip4Client {
   public readonly openInterest: OpenInterestResource;
 
   /**
-   * Order history, flow, and TP/SL (Pro+).
+   * Order history, flow, and TP/SL.
    */
   public readonly orders: OrdersResource;
 
@@ -441,7 +439,7 @@ export class Hip4Client {
   }
 
   /**
-   * Get current L2 orderbook snapshot for a HIP-4 coin (Pro+).
+   * Get current L2 orderbook snapshot for a HIP-4 coin.
    * @param coin Coin string with leading `#` (e.g. `#0`).
    */
   async getOrderbook(coin: string, params?: import('./types').GetOrderBookParams) {
@@ -449,7 +447,7 @@ export class Hip4Client {
   }
 
   /**
-   * Get historical L2 orderbook snapshots for a HIP-4 coin (Pro+).
+   * Get historical L2 orderbook snapshots for a HIP-4 coin.
    */
   async getOrderbookHistory(coin: string, params: import('./types').OrderBookHistoryParams) {
     return this.orderbook.history(coin, params);
@@ -529,42 +527,42 @@ export class Hip4Client {
   }
 
   /**
-   * Get order lifecycle events for a HIP-4 coin (Pro+).
+   * Get order lifecycle events for a HIP-4 coin.
    */
   async getOrderHistory(coin: string, params: import('./resources/orders').OrderHistoryParams) {
     return this.orders.history(coin, params);
   }
 
   /**
-   * Get time-bucketed order-flow aggregates for a HIP-4 coin (Pro+).
+   * Get time-bucketed order-flow aggregates for a HIP-4 coin.
    */
   async getOrderFlow(coin: string, params: import('./resources/orders').OrderFlowParams) {
     return this.orders.flow(coin, params);
   }
 
   /**
-   * Get TP/SL orders for a HIP-4 coin (Pro+).
+   * Get TP/SL orders for a HIP-4 coin.
    */
   async getTpsl(coin: string, params: import('./resources/orders').TpslParams) {
     return this.orders.tpsl(coin, params);
   }
 
   /**
-   * Get full L4 reconstruction (current) for a HIP-4 coin (Pro+).
+   * Get full L4 reconstruction (current) for a HIP-4 coin.
    */
   async getL4Orderbook(coin: string, params?: import('./resources/l4-orderbook').L4OrderBookParams) {
     return this.l4Orderbook.get(coin, params);
   }
 
   /**
-   * Get L4 diffs (event stream) for a HIP-4 coin (Pro+).
+   * Get L4 diffs (event stream) for a HIP-4 coin.
    */
   async getL4Diffs(coin: string, params: import('./types').CursorPaginationParams) {
     return this.l4Orderbook.diffs(coin, params);
   }
 
   /**
-   * Get L4 checkpoint history for a HIP-4 coin (Build+; hard cap limit=10).
+   * Get L4 checkpoint history for a HIP-4 coin (hard cap limit=10).
    */
   async getL4History(coin: string, params: import('./types').CursorPaginationParams) {
     return this.l4Orderbook.history(coin, params);
@@ -587,9 +585,6 @@ export class Hip4Client {
  * - Trades: from 2025-03-22 (HL S3 backfill).
  * - Orderbook, L4 diffs, L4 orders, TWAP statuses: live from 2026-05-05.
  *
- * Tier gating mirrors HIP-3: Pro+ for L4 / order lifecycle, Build+ for
- * everything else.
- *
  * @example
  * ```typescript
  * const client = new OxArchive({ apiKey: '0xa_...' });
@@ -598,11 +593,11 @@ export class Hip4Client {
  * const recentTrades = await client.spot.trades.recent('HYPE-USDC');
  * const pairs = await client.spot.pairs.list();
  *
- * // L4 (Pro+)
+ * // L4
  * const l4 = await client.spot.l4Orderbook.get('HYPE-USDC');
  * const diffs = await client.spot.l4Orderbook.diffs('HYPE-USDC', { start, end });
  *
- * // TWAP statuses (Build+)
+ * // TWAP statuses
  * const byUser = await client.spot.twap.byUser('0xabc...', { start, end });
  * ```
  */
@@ -616,13 +611,13 @@ export class SpotClient {
   /** Trade history (S3 backfill from 2025-03-22, live since). */
   public readonly trades: TradesResource;
 
-  /** Order lifecycle events (Pro+; live from 2026-05-05). */
+  /** Order lifecycle events (live from 2026-05-05). */
   public readonly orders: OrdersResource;
 
   /** L4 order book: snapshots, diffs, and checkpoint history. */
   public readonly l4Orderbook: L4OrderBookResource;
 
-  /** TWAP statuses by symbol or by user wallet (Build+). */
+  /** TWAP statuses by symbol or by user wallet. */
   public readonly twap: SpotTwapResource;
 
   private http: HttpClient;

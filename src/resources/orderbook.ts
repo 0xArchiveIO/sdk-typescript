@@ -16,7 +16,7 @@ import {
 } from '../orderbook-reconstructor';
 
 /**
- * Parameters for tick-level orderbook history (Enterprise tier only)
+ * Parameters for tick-level orderbook history
  */
 export interface TickHistoryParams {
   /** Start timestamp (Unix ms or ISO string) - REQUIRED */
@@ -48,13 +48,13 @@ export interface TickHistoryParams {
  *   limit: 100
  * });
  *
- * // Enterprise: Get tick-level data with reconstruction
+ * // Get tick-level data with reconstruction
  * const snapshots = await client.lighter.orderbook.historyReconstructed('BTC', {
  *   start: Date.now() - 3600000,
  *   end: Date.now()
  * });
  *
- * // Enterprise: Get raw tick data for custom reconstruction
+ * // Get raw tick data for custom reconstruction
  * const tickData = await client.lighter.orderbook.historyTick('BTC', {
  *   start: Date.now() - 3600000,
  *   end: Date.now()
@@ -127,7 +127,7 @@ export class OrderBookResource {
   }
 
   /**
-   * Get raw tick-level orderbook data (Enterprise tier only).
+   * Get raw tick-level orderbook data.
    *
    * Returns a checkpoint (full orderbook state) and array of deltas.
    * Use this when you want to implement custom reconstruction logic
@@ -180,8 +180,8 @@ export class OrderBookResource {
     const tickData = response.data;
     if (!tickData?.checkpoint || !tickData?.deltas) {
       const errorMsg = response.error || response.message ||
-        'Tick-level orderbook data requires Enterprise tier. ' +
-        'Upgrade your subscription or use a different granularity.';
+        'Tick-level orderbook data was not returned for this request. ' +
+        'Check the symbol and time range, or use a different granularity.';
       throw new Error(errorMsg);
     }
 
@@ -192,7 +192,7 @@ export class OrderBookResource {
   }
 
   /**
-   * Get reconstructed tick-level orderbook history (Enterprise tier only).
+   * Get reconstructed tick-level orderbook history.
    *
    * Fetches raw tick data and reconstructs full orderbook state at each delta.
    * All reconstruction happens client-side for optimal server performance.
@@ -265,7 +265,7 @@ export class OrderBookResource {
   }
 
   /**
-   * Iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
+   * Iterate over tick-level orderbook history with automatic pagination.
    *
    * This async generator automatically handles pagination, fetching up to 1,000 deltas
    * per API request and yielding reconstructed orderbook snapshots one at a time.
