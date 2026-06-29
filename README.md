@@ -68,7 +68,7 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Perpetuals across the full venue |
 | Hyperliquid HIP-3 | February 2026+ | All HIP-3 symbols, orderbook, and history on every tier. |
-| Hyperliquid HIP-4 | March 2026+ | Outcome markets. All schemas on every tier. |
+| Hyperliquid HIP-4 | May 2026+ | Outcome markets. All schemas on every tier. |
 | Hyperliquid Spot | March 2025+ for trades; May 2026+ for orderbook, L4, TWAP statuses | 294 dashed pairs (`HYPE-USDC`, `PURR-USDC`). No funding, OI, liquidations, or candles (perp-only constructs). |
 | Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
 
@@ -789,7 +789,7 @@ console.log(`Mid price: ${hip3Summary.midPrice}`);
 Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records.
 
 ```typescript
-// Hyperliquid — available from May 2023
+// Hyperliquid: available from April 2023
 const prices = await client.hyperliquid.priceHistory('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
