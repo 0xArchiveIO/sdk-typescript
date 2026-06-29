@@ -5,6 +5,10 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## 1.7.1 (2026-06-29)
+
+- Remove tier-gating language from doc comments, open-catalog rollout.
+
 ## 1.7.0 (2026-05-06)
 
 ### Added
