@@ -1,5 +1,7 @@
 # @0xarchive/sdk
 
+[![npm version](https://img.shields.io/npm/v/%400xarchive%2Fsdk.svg)](https://www.npmjs.com/package/@0xarchive/sdk) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 TypeScript client for 0xArchive market data in Node services, dashboards, coding-agent workflows, and agent backends.
 
 0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. Hyperliquid includes core perps (`/v1/hyperliquid`), HIP-3 builder perps (`/v1/hyperliquid/hip3`), HIP-4 outcome markets (`/v1/hyperliquid/hip4`), and Hyperliquid Spot (`/v1/hyperliquid/spot`). Lighter.xyz is the second top-level venue API at `/v1/lighter`. In this SDK these map to `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, and `client.lighter`.
