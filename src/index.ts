@@ -105,6 +105,18 @@ export {
   LiquidationArrayResponseSchema,
   LiquidationVolumeSchema,
   LiquidationVolumeArrayResponseSchema,
+  // Liquidation Levels schemas
+  LiquidationLevelBucketSchema,
+  LiquidationLevelsSchema,
+  LiquidationLevelsResponseSchema,
+  LiquidationLevelsHistoryItemSchema,
+  LiquidationLevelsHistoryResponseSchema,
+  // Trigger Levels schemas
+  TriggerLevelBucketSchema,
+  TriggerLevelsSchema,
+  TriggerLevelsResponseSchema,
+  TriggerLevelsHistoryItemSchema,
+  TriggerLevelsHistoryResponseSchema,
   // Coin Freshness schemas
   DataTypeFreshnessInfoSchema,
   CoinFreshnessSchema,
@@ -198,6 +210,18 @@ export type {
   LiquidationsByUserParams,
   LiquidationVolume,
   LiquidationVolumeParams,
+  // Liquidation Levels
+  LevelsSide,
+  LiquidationLevelBucket,
+  LiquidationLevels,
+  LiquidationLevelsParams,
+  LevelsHistoryParams,
+  LiquidationLevelsHistoryItem,
+  // Trigger Levels
+  TriggerLevelBucket,
+  TriggerLevels,
+  TriggerLevelsParams,
+  TriggerLevelsHistoryItem,
   // Coin Freshness
   DataTypeFreshnessInfo,
   CoinFreshness,

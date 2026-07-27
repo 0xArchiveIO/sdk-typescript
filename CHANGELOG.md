@@ -5,6 +5,47 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## 1.8.0 (2026-07-27)
+
+### Added
+- **Liquidation levels**: `client.hyperliquid.liquidations.levels(symbol, params?)`
+  and the HIP-3 equivalent. Projected forced-liquidation levels computed from
+  clearinghouse positions and margin state, bucketed around the snapshot mark
+  price. Snapshots refresh about every 45 minutes; `params.at` (epoch ms)
+  serves a point-in-time read. `params.side` filters one side.
+- **Liquidation levels history**: `liquidations.levelsHistory(symbol, params?)`
+  with cursor pagination (`start`/`end`/`limit`/`cursor`) and `summary: true`
+  for cheap snapshot discovery. History is retained from 2026-07-27.
+- **Trigger levels**: `client.hyperliquid.orders.triggerLevels(symbol, params?)`
+  and the HIP-3 equivalent. Pending stop-loss and take-profit trigger orders
+  grouped into price buckets, with `asOf` freshness and side totals.
+- **Trigger levels history**: `orders.triggerLevelsHistory(symbol, params?)`,
+  15-minute snapshot cadence, same pagination and summary mode.
+- New exported types (`LiquidationLevels`, `TriggerLevels`, bucket and history
+  item types, `LevelsHistoryParams`, `LevelsSide`) and Zod schemas for
+  response validation.
+
+### Changed
+- The server-side `/liquidations/{symbol}/levels` endpoints now serve
+  projected forced-liquidation levels. Before 2026-07-27 (2026-07-23 on
+  Hyperliquid core) those paths served the pending trigger-order map, which
+  now lives at `/orders/{symbol}/trigger-levels`.
+
+### Fixed
+- **L2 full-depth pagination**: `l2Orderbook.history()` and `.diffs()` read
+  the raw `meta.next_cursor` key, but the HTTP layer camelizes response keys,
+  so the cursor was always undefined and pagination stopped after one page.
+  Both now read `meta.nextCursor`.
+- **`SpotPair` type rewritten to the actual wire shape** (pairIndex, name,
+  isCanonical, token ids/names/decimals, baseTokenAddress, deployerFeeShare,
+  first/last timestamps). The previous fields (baseAsset, quoteAsset,
+  wireSymbol, assetIndex, szDecimals, pxDecimals, isActive, markPrice,
+  midPrice, latestTimestamp) never existed on the wire and were always
+  undefined at runtime.
+- **`SpotTwapStatus`**: renamed phantom `filledSize`/`filledNotional` to the
+  wire's `executedSize`/`executedNotional` (numbers), and added
+  `blockNumber`, `blockTime`, `startedAt`.
+
 ## 1.7.1 (2026-06-29)
 
 - Remove tier-gating language from doc comments, open-catalog rollout.

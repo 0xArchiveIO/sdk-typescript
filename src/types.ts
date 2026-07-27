@@ -441,28 +441,40 @@ export interface Hip4OutcomeSideSpec {
  * those resources from the spot client.
  */
 export interface SpotPair {
-  /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). */
+  /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). `coin` is an alias. */
   symbol: string;
-  /** Base asset name (e.g. `HYPE`, `PURR`). */
-  baseAsset: string;
-  /** Quote asset name (typically `USDC`). */
-  quoteAsset: string;
-  /** Hyperliquid wire format (e.g. `PURR/USDC`, `@107`). */
-  wireSymbol?: string;
-  /** Hyperliquid asset index (e.g. `107` for `@107`). */
-  assetIndex?: number;
-  /** Size decimal precision. */
-  szDecimals?: number;
-  /** Price decimal precision. */
-  pxDecimals?: number;
-  /** Whether the pair is currently tradeable. */
-  isActive?: boolean;
-  /** Latest mark / mid price observed. */
-  markPrice?: number;
-  /** Latest mid price observed. */
-  midPrice?: number;
-  /** Timestamp of the latest market data point. */
-  latestTimestamp?: string;
+  /** Alias of `symbol`. */
+  coin?: string;
+  /** Hyperliquid spot pair index (e.g. `0` for PURR/USDC; wire format `@<index>`). */
+  pairIndex: number;
+  /** Hyperliquid wire name (e.g. `PURR/USDC`). */
+  name: string;
+  /** Whether this is the canonical pair for the base token. */
+  isCanonical: boolean;
+  /** Base token id in the Hyperliquid spot token registry. */
+  baseTokenId: number;
+  /** Quote token id (0 = USDC). */
+  quoteTokenId: number;
+  /** Base token name (e.g. `HYPE`, `PURR`). */
+  baseTokenName: string;
+  /** Quote token name (typically `USDC`). */
+  quoteTokenName: string;
+  /** Base token size decimals. */
+  baseSzDecimals: number;
+  /** Base token wei decimals. */
+  baseWeiDecimals: number;
+  /** Quote token size decimals. */
+  quoteSzDecimals: number;
+  /** Quote token wei decimals. */
+  quoteWeiDecimals: number;
+  /** Base token EVM address. */
+  baseTokenAddress?: string;
+  /** Deployer fee share for the pair. */
+  deployerFeeShare?: number;
+  /** First time the pair appeared in the metadata table (rebuilds can reset this). */
+  firstSeenAt?: string;
+  /** Last metadata update time. */
+  lastUpdatedAt?: string;
 }
 
 /**
@@ -485,12 +497,12 @@ export interface SpotTwapStatus {
   userAddress?: string;
   /** Side: `B` (buy) or `A` (sell). */
   side?: TradeSide;
-  /** Order size remaining for the TWAP. */
-  size?: string;
-  /** Total filled size so far. */
-  filledSize?: string;
+  /** Total TWAP order size. */
+  size?: number;
+  /** Total executed size so far. */
+  executedSize?: number;
   /** Notional executed in quote currency. */
-  filledNotional?: string;
+  executedNotional?: number;
   /** TWAP minutes window length. */
   minutes?: number;
   /** True if the TWAP is randomized. */
@@ -499,6 +511,12 @@ export interface SpotTwapStatus {
   reduceOnly?: boolean;
   /** Status string (`activated`, `terminated`, `error`, etc.). */
   status?: string;
+  /** Block number the status was observed at. */
+  blockNumber?: number;
+  /** Block time of the status event (UTC). */
+  blockTime?: string;
+  /** When the TWAP started (UTC). */
+  startedAt?: string;
   /** Error message when status is `error`. */
   error?: string;
 }
@@ -644,6 +662,164 @@ export type LiquidationHistoryParams = CursorPaginationParams;
 export interface LiquidationsByUserParams extends CursorPaginationParams {
   /** Optional coin filter */
   coin?: string;
+}
+
+// =============================================================================
+// Liquidation Levels Types (projected forced-liquidation levels)
+// =============================================================================
+
+/** Side filter for level endpoints. bid/buy/B keeps the long (or bid) side; ask/sell/A keeps the short (or ask) side. */
+export type LevelsSide = 'bid' | 'ask' | 'buy' | 'sell' | 'B' | 'A';
+
+/**
+ * One price bucket of projected forced-liquidation exposure.
+ */
+export interface LiquidationLevelBucket {
+  /** Bucket center price */
+  price: number;
+  /** USD notional of long positions projected to liquidate in this bucket */
+  longNotional: number;
+  /** USD notional of short positions projected to liquidate in this bucket */
+  shortNotional: number;
+  /** Number of long positions in this bucket */
+  longCount: number;
+  /** Number of short positions in this bucket */
+  shortCount: number;
+}
+
+/**
+ * Projected forced-liquidation levels for one snapshot, computed from
+ * clearinghouse positions and margin state. Snapshots refresh roughly every
+ * 45 minutes; `snapshotTs` identifies the snapshot served.
+ */
+export interface LiquidationLevels {
+  /** Mark price at the snapshot, center of the requested range */
+  midPrice: number;
+  /** UTC snapshot time the levels reflect */
+  snapshotTs: string;
+  /** Hyperliquid block height the snapshot reflects */
+  blockNumber: number;
+  /** Total long notional at risk across the whole book */
+  totalLong: number;
+  /** Total short notional at risk across the whole book */
+  totalShort: number;
+  /** Notional computed approximately or not bucketed (HIP-3 cross-margin exposure) */
+  flaggedNotional: number;
+  /** Price buckets inside the requested range */
+  levels: LiquidationLevelBucket[];
+}
+
+/**
+ * Parameters for getting current liquidation levels
+ */
+export interface LiquidationLevelsParams {
+  /** Percentage range around the mark price (1-50, default 10) */
+  range_pct?: number;
+  /** Number of price buckets (10-200, default 50) */
+  buckets?: number;
+  /** Side filter; the other side is zeroed */
+  side?: LevelsSide;
+  /** Point-in-time read: epoch ms. Serves the newest snapshot at or before this instant. History begins 2026-07-27. */
+  at?: number;
+}
+
+/**
+ * Parameters for level history endpoints (liquidation + trigger levels).
+ * Cursor pagination: follow `nextCursor` as `cursor`.
+ */
+export interface LevelsHistoryParams {
+  /** Range start, epoch ms inclusive. Default: 24h before end */
+  start?: number | string;
+  /** Range end, epoch ms inclusive. Default: now */
+  end?: number | string;
+  /** Cursor from the previous page's nextCursor (snapshot_ts ms, exclusive) */
+  cursor?: string;
+  /** Snapshots per page (1-100, default 24) */
+  limit?: number;
+  /** When true, items omit the levels array (cheap snapshot discovery) */
+  summary?: boolean;
+  /** Percentage range around each snapshot's mid (1-50, default 10) */
+  range_pct?: number;
+  /** Number of price buckets (10-200, default 50) */
+  buckets?: number;
+  /** Side filter; the other side is zeroed */
+  side?: LevelsSide;
+}
+
+/**
+ * One historical liquidation-levels snapshot. `levels` is omitted when
+ * `summary: true` was requested.
+ */
+export interface LiquidationLevelsHistoryItem {
+  snapshotTs: string;
+  blockNumber: number;
+  midPrice: number;
+  totalLong: number;
+  totalShort: number;
+  flaggedNotional: number;
+  levels?: LiquidationLevelBucket[];
+}
+
+// =============================================================================
+// Trigger Levels Types (pending stop-loss / take-profit orders)
+// =============================================================================
+
+/**
+ * Aggregated currently open trigger orders at one rounded price bucket.
+ */
+export interface TriggerLevelBucket {
+  /** Rounded trigger price bucket */
+  priceBucket: number;
+  /** Number of bid-side trigger orders in the bucket */
+  bidCount: number;
+  /** Bid-side trigger size in the bucket */
+  bidSize: number;
+  /** Number of ask-side trigger orders in the bucket */
+  askCount: number;
+  /** Ask-side trigger size in the bucket */
+  askSize: number;
+}
+
+/**
+ * Currently pending stop-loss and take-profit trigger orders grouped into
+ * price buckets. Voluntary trigger orders, not projected forced liquidations;
+ * use liquidation levels for those.
+ */
+export interface TriggerLevels {
+  /** Current mid/mark price, center of the requested range */
+  midPrice: number;
+  /** UTC RFC3339 server time the pending-trigger state was read */
+  asOf: string;
+  /** Total pending bid size across the returned window */
+  totalBidSize: number;
+  /** Total pending ask size across the returned window */
+  totalAskSize: number;
+  /** Price buckets inside the requested range */
+  levels: TriggerLevelBucket[];
+}
+
+/**
+ * Parameters for getting the current trigger-levels map
+ */
+export interface TriggerLevelsParams {
+  /** Percentage range around the mid price (1-50, default 10) */
+  range_pct?: number;
+  /** Number of price buckets (10-200, default 50) */
+  buckets?: number;
+  /** Side filter; the other side is zeroed */
+  side?: LevelsSide;
+}
+
+/**
+ * One historical trigger-levels snapshot (15-minute cadence). `levels` is
+ * omitted when `summary: true` was requested.
+ */
+export interface TriggerLevelsHistoryItem {
+  snapshotTs: string;
+  midPrice: number;
+  totalBidSize: number;
+  totalAskSize: number;
+  levels?: TriggerLevelBucket[];
 }
 
 // =============================================================================
