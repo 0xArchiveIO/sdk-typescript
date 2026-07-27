@@ -381,6 +381,78 @@ export const LiquidationVolumeArrayResponseSchema = z.object({
 });
 
 // =============================================================================
+// Liquidation Levels Schemas (projected forced-liquidation levels)
+// =============================================================================
+
+export const LiquidationLevelBucketSchema = z.object({
+  price: z.number(),
+  longNotional: z.number(),
+  shortNotional: z.number(),
+  longCount: z.number(),
+  shortCount: z.number(),
+});
+
+export const LiquidationLevelsSchema = z.object({
+  midPrice: z.number(),
+  snapshotTs: z.string(),
+  blockNumber: z.number(),
+  totalLong: z.number(),
+  totalShort: z.number(),
+  flaggedNotional: z.number(),
+  levels: z.array(LiquidationLevelBucketSchema),
+});
+
+export const LiquidationLevelsResponseSchema = ApiResponseSchema(LiquidationLevelsSchema);
+
+export const LiquidationLevelsHistoryItemSchema = z.object({
+  snapshotTs: z.string(),
+  blockNumber: z.number(),
+  midPrice: z.number(),
+  totalLong: z.number(),
+  totalShort: z.number(),
+  flaggedNotional: z.number(),
+  levels: z.array(LiquidationLevelBucketSchema).optional(),
+});
+
+export const LiquidationLevelsHistoryResponseSchema = ApiResponseSchema(
+  z.array(LiquidationLevelsHistoryItemSchema)
+);
+
+// =============================================================================
+// Trigger Levels Schemas (pending stop-loss / take-profit orders)
+// =============================================================================
+
+export const TriggerLevelBucketSchema = z.object({
+  priceBucket: z.number(),
+  bidCount: z.number(),
+  bidSize: z.number(),
+  askCount: z.number(),
+  askSize: z.number(),
+});
+
+export const TriggerLevelsSchema = z.object({
+  midPrice: z.number(),
+  asOf: z.string(),
+  totalBidSize: z.number(),
+  totalAskSize: z.number(),
+  levels: z.array(TriggerLevelBucketSchema),
+});
+
+export const TriggerLevelsResponseSchema = ApiResponseSchema(TriggerLevelsSchema);
+
+export const TriggerLevelsHistoryItemSchema = z.object({
+  snapshotTs: z.string(),
+  midPrice: z.number(),
+  totalBidSize: z.number(),
+  totalAskSize: z.number(),
+  levels: z.array(TriggerLevelBucketSchema).optional(),
+});
+
+export const TriggerLevelsHistoryResponseSchema = ApiResponseSchema(
+  z.array(TriggerLevelsHistoryItemSchema)
+);
+
+// =============================================================================
 // Coin Freshness Schemas
 // =============================================================================
 

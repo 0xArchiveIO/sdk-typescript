@@ -1,6 +1,23 @@
 import type { HttpClient } from '../http';
-import type { ApiResponse, CursorResponse, Liquidation, LiquidationHistoryParams, LiquidationsByUserParams, LiquidationVolume, LiquidationVolumeParams } from '../types';
-import { LiquidationArrayResponseSchema, LiquidationVolumeArrayResponseSchema } from '../schemas';
+import type {
+  ApiResponse,
+  CursorResponse,
+  LevelsHistoryParams,
+  Liquidation,
+  LiquidationHistoryParams,
+  LiquidationLevels,
+  LiquidationLevelsHistoryItem,
+  LiquidationLevelsParams,
+  LiquidationsByUserParams,
+  LiquidationVolume,
+  LiquidationVolumeParams,
+} from '../types';
+import {
+  LiquidationArrayResponseSchema,
+  LiquidationLevelsHistoryResponseSchema,
+  LiquidationLevelsResponseSchema,
+  LiquidationVolumeArrayResponseSchema,
+} from '../schemas';
 
 /**
  * Liquidations API resource
@@ -101,6 +118,54 @@ export class LiquidationsResource {
       `${this.basePath}/liquidations/${this.coinTransform(symbol)}/volume`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationVolumeArrayResponseSchema as any : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
+  }
+
+  /**
+   * Get projected forced-liquidation levels for a symbol
+   *
+   * Computed from clearinghouse positions and margin state, bucketed around
+   * the snapshot mark price. Snapshots refresh roughly every 45 minutes;
+   * pass `at` (epoch ms) for a point-in-time read. History begins 2026-07-27.
+   *
+   * Note: these are projected forced liquidations, not the pending
+   * trigger-order map (see `orders.triggerLevels` for that).
+   *
+   * @param symbol - The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
+   * @param params - Range, bucket count, side filter, and optional at
+   * @returns Liquidation levels for one snapshot
+   */
+  async levels(symbol: string, params?: LiquidationLevelsParams): Promise<LiquidationLevels> {
+    const response = await this.http.get<ApiResponse<LiquidationLevels>>(
+      `${this.basePath}/liquidations/${this.coinTransform(symbol)}/levels`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? LiquidationLevelsResponseSchema : undefined
+    );
+    return response.data;
+  }
+
+  /**
+   * Get historical liquidation-levels snapshots with cursor pagination
+   *
+   * Ascending by snapshot time (about every 45 minutes, retained from
+   * 2026-07-27). Pass `summary: true` to list snapshots without histograms.
+   *
+   * @param symbol - The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
+   * @param params - Time range, cursor pagination, summary, and re-binning parameters
+   * @returns CursorResponse with snapshots and nextCursor for pagination
+   */
+  async levelsHistory(
+    symbol: string,
+    params?: LevelsHistoryParams
+  ): Promise<CursorResponse<LiquidationLevelsHistoryItem[]>> {
+    const response = await this.http.get<ApiResponse<LiquidationLevelsHistoryItem[]>>(
+      `${this.basePath}/liquidations/${this.coinTransform(symbol)}/levels/history`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? LiquidationLevelsHistoryResponseSchema : undefined
     );
     return {
       data: response.data,
