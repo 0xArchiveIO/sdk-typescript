@@ -22,6 +22,10 @@ export interface ApiMeta {
   nextCursor?: string;
   /** Unique request ID for debugging */
   requestId: string;
+  /** Coverage start date (ISO 8601), present when the requested window ends before the symbol's coverage begins */
+  coverageFrom?: string;
+  /** Advisory notice explaining an empty response (e.g. window predates coverage) */
+  notice?: string;
 }
 
 /**

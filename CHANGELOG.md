@@ -24,6 +24,9 @@ semver in spirit.
 - New exported types (`LiquidationLevels`, `TriggerLevels`, bucket and history
   item types, `LevelsHistoryParams`, `LevelsSide`) and Zod schemas for
   response validation.
+- **`meta.coverageFrom` / `meta.notice`**: empty responses for range windows
+  that end before a symbol's coverage begins now carry the coverage start date
+  and an advisory notice.
 
 ### Changed
 - The server-side `/liquidations/{symbol}/levels` endpoints now serve
