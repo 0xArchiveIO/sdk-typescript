@@ -57,14 +57,14 @@ export class L2OrderBookResource {
     params: CursorPaginationParams & { depth?: number },
   ): Promise<CursorResponse<any[]>> {
     const coin = this.coinTransform(symbol);
-    const resp: ApiResponse<any[]> & { meta?: { next_cursor?: string } } =
-      await this.http.get(
-        `${this.basePath}/orderbook/${coin}/l2/history`,
-        params as unknown as Record<string, unknown>,
-      );
+    const resp: ApiResponse<any[]> = await this.http.get(
+      `${this.basePath}/orderbook/${coin}/l2/history`,
+      params as unknown as Record<string, unknown>,
+    );
+    // http.get camelizes response keys, so the wire's next_cursor arrives as nextCursor
     return {
       data: resp.data,
-      nextCursor: resp.meta?.next_cursor ?? undefined,
+      nextCursor: resp.meta?.nextCursor ?? undefined,
     };
   }
 
@@ -74,14 +74,13 @@ export class L2OrderBookResource {
     params: CursorPaginationParams,
   ): Promise<CursorResponse<any[]>> {
     const coin = this.coinTransform(symbol);
-    const resp: ApiResponse<any[]> & { meta?: { next_cursor?: string } } =
-      await this.http.get(
-        `${this.basePath}/orderbook/${coin}/l2/diffs`,
-        params as unknown as Record<string, unknown>,
-      );
+    const resp: ApiResponse<any[]> = await this.http.get(
+      `${this.basePath}/orderbook/${coin}/l2/diffs`,
+      params as unknown as Record<string, unknown>,
+    );
     return {
       data: resp.data,
-      nextCursor: resp.meta?.next_cursor ?? undefined,
+      nextCursor: resp.meta?.nextCursor ?? undefined,
     };
   }
 }
