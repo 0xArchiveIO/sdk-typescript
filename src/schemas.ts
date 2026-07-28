@@ -25,6 +25,8 @@ export const ApiMetaSchema = z.object({
   count: z.number(),
   nextCursor: z.string().optional(),
   requestId: z.string(),
+  coverageFrom: z.string().optional(),
+  notice: z.string().optional(),
 });
 
 export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
