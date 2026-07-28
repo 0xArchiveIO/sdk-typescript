@@ -1684,9 +1684,11 @@ export interface WebSocketLatency {
   /** Current latency */
   currentMs: number;
   /** 1-hour average latency */
-  avg1hMs: number;
+  /** 1-hour average; omitted until the platform has real samples for this venue. */
+  avg1hMs?: number;
   /** 24-hour average latency */
-  avg24hMs: number;
+  /** 24-hour average; omitted when unavailable. */
+  avg24hMs?: number;
   /** 24-hour P99 latency */
   p9924hMs?: number;
 }
@@ -1696,9 +1698,11 @@ export interface RestApiLatency {
   /** Current latency */
   currentMs: number;
   /** 1-hour average latency */
-  avg1hMs: number;
+  /** 1-hour average; omitted until the platform has real samples for this venue. */
+  avg1hMs?: number;
   /** 24-hour average latency */
-  avg24hMs: number;
+  /** 24-hour average; omitted when unavailable. */
+  avg24hMs?: number;
 }
 
 /** Data freshness metrics (lag from source) */
@@ -1746,7 +1750,8 @@ export interface CompletenessMetrics {
   /** Orderbook completeness percentage */
   orderbook: number;
   /** Fills completeness percentage */
-  fills: number;
+  /** Omitted until fills has an honest expectation model. */
+  fills?: number;
   /** Funding rate completeness percentage */
   funding: number;
   /** Overall completeness percentage */
