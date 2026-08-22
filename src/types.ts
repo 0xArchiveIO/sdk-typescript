@@ -116,7 +116,11 @@ export type TradeSide = 'A' | 'B';
 export type TradeDirection = string;
 
 /**
- * Trade/fill record with full execution details
+ * Trade/fill record with execution details.
+ *
+ * Lighter trade routes are fill-grain: when the route supplies counterparty
+ * context, maker and taker information describes that individual fill rather
+ * than a complete order lifecycle.
  */
 export interface Trade {
   /** Trading pair symbol */
@@ -149,9 +153,9 @@ export interface Trade {
   startPosition?: string;
   /** User's wallet address (for fill-level data from REST API) */
   userAddress?: string;
-  /** Maker's wallet address (for market-level WebSocket trades) */
+  /** Maker's wallet address when the route provides per-fill maker/taker context */
   makerAddress?: string;
-  /** Taker's wallet address (for market-level WebSocket trades) */
+  /** Taker's wallet address when the route provides per-fill maker/taker context */
   takerAddress?: string;
   /** Builder address that routed this order. Present only when the order was placed through a builder. */
   builderAddress?: string;
@@ -561,7 +565,10 @@ export interface FundingRate {
 
 /**
  * Aggregation interval for OI and funding history.
- * When omitted, raw ~1 min data is returned.
+ *
+ * When omitted, the route's native/default cadence is returned. Cadence is
+ * venue- and family-specific; callers should not infer a universal raw
+ * one-minute interval from this shared type.
  */
 export type OiFundingInterval = '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
 
@@ -569,7 +576,7 @@ export type OiFundingInterval = '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
  * Parameters for getting funding rate history
  */
 export interface FundingHistoryParams extends CursorPaginationParams {
-  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  /** Aggregation interval. When omitted, the route's native/default cadence is returned. */
   interval?: OiFundingInterval;
 }
 
@@ -607,7 +614,7 @@ export interface OpenInterest {
  * Parameters for getting open interest history
  */
 export interface OpenInterestHistoryParams extends CursorPaginationParams {
-  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  /** Aggregation interval. When omitted, the route's native/default cadence is returned. */
   interval?: OiFundingInterval;
 }
 
@@ -861,7 +868,7 @@ export interface Candle {
 export interface CandleHistoryParams extends CursorPaginationParams {
   /** Candle interval (default: 1h) */
   interval?: CandleInterval;
-  /** Maximum number of results to return (default: 100, max: 10000 for candles) */
+  /** Maximum number of results to return (default: 100, max: 1000 for candles) */
   limit?: number;
 }
 
@@ -977,7 +984,7 @@ export interface PriceSnapshot {
 
 /** Parameters for price history */
 export interface PriceHistoryParams extends CursorPaginationParams {
-  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  /** Aggregation interval. When omitted, the projected route's native/default cadence is returned. */
   interval?: OiFundingInterval;
 }
 
@@ -994,8 +1001,9 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  * - open_interest, funding, lighter_open_interest, lighter_funding,
  *   hip3_open_interest, hip3_funding: historical only (replay/stream)
  *
- * HIP-4 channels (outcome contracts; no funding, no liquidations, no candles):
- * - hip4_orderbook, hip4_trades, hip4_open_interest: realtime + replay
+ * HIP-4 channels (outcome contracts; no funding or liquidations):
+ * - hip4_trades: realtime + replay
+ * - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused
  * - hip4_l4_diffs, hip4_l4_orders: real-time only
  *
  * Liquidation messages share the trade wire format: each item is a fill row

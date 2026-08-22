@@ -171,7 +171,8 @@ export class HyperliquidClient {
  * HIP-3 builder-deployed perpetuals client
  *
  * Access Hyperliquid HIP-3 builder perps data through the 0xarchive API.
- * All HIP-3 coins and orderbook available on every tier.
+ * Coverage is family- and schema-specific; use the route that matches the
+ * dataset being requested.
  *
  * @example
  * ```typescript
@@ -314,7 +315,8 @@ export class Hip3Client {
  *
  * `mark_price` (and `midPrice`) for HIP-4 is an implied probability in [0, 1],
  * not a USD price. HIP-4 markets are fully collateralized so there are no
- * funding rates, no liquidations, and no candles by design.
+ * funding rates or liquidations. Candle history and outcome-side open interest
+ * are served from 2026-05-02; HIP-4 open interest updates at ~10s.
  *
  * @example
  * ```typescript
@@ -357,6 +359,11 @@ export class Hip4Client {
   public readonly openInterest: OpenInterestResource;
 
   /**
+   * OHLCV candle data (served from 2026-05-02; HIP-4 prices are probabilities).
+   */
+  public readonly candles: CandlesResource;
+
+  /**
    * Order history, flow, and TP/SL.
    */
   public readonly orders: OrdersResource;
@@ -391,6 +398,7 @@ export class Hip4Client {
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
+    this.candles = new CandlesResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
@@ -672,7 +680,7 @@ export class LighterClient {
   public readonly orderbook: OrderBookResource;
 
   /**
-   * Trade/fill history
+   * Trade/fill history (one row per fill; maker/taker context where returned)
    */
   public readonly trades: TradesResource;
 
@@ -697,7 +705,7 @@ export class LighterClient {
   public readonly candles: CandlesResource;
 
   /**
-   * L3 order book (Lighter only)
+   * L3 order book (Lighter only; capped at 250 orders per side)
    */
   public readonly l3Orderbook: L3OrderBookResource;
 

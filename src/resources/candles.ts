@@ -12,7 +12,7 @@ import { CandleArrayResponseSchema } from '../schemas';
  *   start: Date.now() - 86400000,
  *   end: Date.now(),
  *   interval: '1h',
- *   limit: 10000
+ *   limit: 1000
  * });
  *
  * // Get all pages
@@ -23,7 +23,7 @@ import { CandleArrayResponseSchema } from '../schemas';
  *     end: Date.now(),
  *     interval: '1h',
  *     cursor: result.nextCursor,
- *     limit: 10000
+ *     limit: 1000
  *   });
  *   allCandles.push(...result.data);
  * }
