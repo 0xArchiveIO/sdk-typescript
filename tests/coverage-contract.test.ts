@@ -240,6 +240,7 @@ describe('HIP-4 candles and coverage contract', () => {
     const readme = readRepoFile('README.md');
     const types = readRepoFile('src/types.ts');
     const exchanges = readRepoFile('src/exchanges.ts');
+    const candleResource = readRepoFile('src/resources/candles.ts');
     const hip4SectionStart = readme.indexOf('#### HIP-4 Outcome Markets');
     const hip4SectionEnd = readme.indexOf('#### Hyperliquid Spot');
     const hip4Section = readme.slice(hip4SectionStart, hip4SectionEnd);
@@ -279,6 +280,9 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(spotSection).not.toMatch(/no funding,[\s\S]{0,80}no candles/i);
     expect(types).toContain('SpotClient.candles');
     expect(exchanges).toContain('2025-03-22T10:50:22Z');
+    expect(candleResource).toContain('10,000 for core Hyperliquid and Lighter');
+    expect(candleResource).toContain('1,000 for HIP-3, HIP-4, and Hyperliquid Spot');
+    expect(candleResource).not.toContain('maximum `limit` of 1000');
   });
 
   it('exposes Spot candles while keeping perp-only resources absent', () => {
