@@ -6,6 +6,10 @@ import { TradeArrayResponseSchema } from '../schemas';
 /**
  * Trades API resource
  *
+ * Lighter trade routes are fill-grain: describe returned rows as individual
+ * fills with maker/taker context where the route provides it, not as complete
+ * order history.
+ *
  * @example
  * ```typescript
  * // Get trade history with cursor-based pagination (recommended)

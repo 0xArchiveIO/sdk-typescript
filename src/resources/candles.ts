@@ -3,7 +3,14 @@ import type { ApiResponse, Candle, CandleHistoryParams, CursorResponse } from '.
 import { CandleArrayResponseSchema } from '../schemas';
 
 /**
- * Candles (OHLCV) API resource
+ * Candles (OHLCV) API resource.
+ *
+ * The resource is mounted only on clients whose family exposes a candle route.
+ * Family-specific limits and coverage are documented on the owning client;
+ * the API currently supports the shared 1m-through-1w interval set. Maximum
+ * `limit` is route-specific: 10,000 for core Hyperliquid and Lighter, and
+ * 1,000 for HIP-3, HIP-4, and Hyperliquid Spot. Pagination cursors are opaque
+ * strings.
  *
  * @example
  * ```typescript
@@ -12,7 +19,7 @@ import { CandleArrayResponseSchema } from '../schemas';
  *   start: Date.now() - 86400000,
  *   end: Date.now(),
  *   interval: '1h',
- *   limit: 10000
+ *   limit: 1000
  * });
  *
  * // Get all pages
@@ -23,7 +30,7 @@ import { CandleArrayResponseSchema } from '../schemas';
  *     end: Date.now(),
  *     interval: '1h',
  *     cursor: result.nextCursor,
- *     limit: 10000
+ *     limit: 1000
  *   });
  *   allCandles.push(...result.data);
  * }
@@ -38,7 +45,8 @@ export class CandlesResource {
   constructor(
     private http: HttpClient,
     private basePath: string = '/v1',
-    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase(),
+    private maxLimit: number = 10_000,
   ) {}
 
   /**
@@ -49,9 +57,28 @@ export class CandlesResource {
    * @returns CursorResponse with candle records and nextCursor for pagination
    */
   async history(symbol: string, params: CandleHistoryParams): Promise<CursorResponse<Candle[]>> {
+    if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > this.maxLimit)) {
+      throw new RangeError(`limit must be between 1 and ${this.maxLimit} for this candle route`);
+    }
+    const normalizeTimestamp = (value: number | string, field: 'start' | 'end') => {
+      const timestamp = typeof value === 'number'
+        ? value
+        : /^\d+$/.test(value)
+          ? Number(value)
+          : Date.parse(value);
+      if (!Number.isFinite(timestamp)) {
+        throw new TypeError(`${field} must be an integer millisecond timestamp or valid ISO date string`);
+      }
+      return Math.trunc(timestamp);
+    };
+    const query = {
+      ...params,
+      start: normalizeTimestamp(params.start, 'start'),
+      end: normalizeTimestamp(params.end, 'end'),
+    };
     const response = await this.http.get<ApiResponse<Candle[]>>(
       `${this.basePath}/candles/${this.coinTransform(symbol)}`,
-      params as unknown as Record<string, unknown>,
+      query as unknown as Record<string, unknown>,
       this.http.validationEnabled ? CandleArrayResponseSchema : undefined
     );
     return {

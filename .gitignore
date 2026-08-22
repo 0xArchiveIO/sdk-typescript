@@ -1,5 +1,6 @@
 # Tests (internal only, not published)
-tests/
+tests/*
+!tests/coverage-contract.test.ts
 
 # Benchmarks (contain API keys)
 benchmark-*.ts

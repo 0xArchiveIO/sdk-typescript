@@ -116,7 +116,11 @@ export type TradeSide = 'A' | 'B';
 export type TradeDirection = string;
 
 /**
- * Trade/fill record with full execution details
+ * Trade/fill record with execution details.
+ *
+ * Lighter trade routes are fill-grain: when the route supplies counterparty
+ * context, maker and taker information describes that individual fill rather
+ * than a complete order lifecycle.
  */
 export interface Trade {
   /** Trading pair symbol */
@@ -149,9 +153,9 @@ export interface Trade {
   startPosition?: string;
   /** User's wallet address (for fill-level data from REST API) */
   userAddress?: string;
-  /** Maker's wallet address (for market-level WebSocket trades) */
+  /** Maker's wallet address when the route provides per-fill maker/taker context */
   makerAddress?: string;
-  /** Taker's wallet address (for market-level WebSocket trades) */
+  /** Taker's wallet address when the route provides per-fill maker/taker context */
   takerAddress?: string;
   /** Builder address that routed this order. Present only when the order was placed through a builder. */
   builderAddress?: string;
@@ -170,14 +174,15 @@ export interface Trade {
 /**
  * Cursor-based pagination parameters (recommended)
  * More efficient than offset-based pagination for large datasets.
- * The cursor is a timestamp - use the `nextCursor` from the response to get the next page.
+ * The cursor is an opaque server token. Pass the returned `nextCursor`
+ * unchanged to the next request; do not parse it as a timestamp.
  */
 export interface CursorPaginationParams {
   /** Start timestamp (Unix ms or ISO string) - REQUIRED */
   start: number | string;
   /** End timestamp (Unix ms or ISO string) - REQUIRED */
   end: number | string;
-  /** Cursor from previous response's nextCursor (timestamp). If not provided, starts from the beginning of the range. */
+  /** Opaque cursor from the previous response's `nextCursor`. */
   cursor?: number | string;
   /** Maximum number of results to return (default: 100, max: 1000) */
   limit?: number;
@@ -440,9 +445,9 @@ export interface Hip4OutcomeSideSpec {
  * (`HYPE-USDC`, `PURR-USDC`); the server resolves the dashed form to
  * Hyperliquid's wire formats (`PURR/USDC`, `@107`) internally.
  *
- * Spot has no funding, no open interest, no liquidations, and no candles by
- * design (those are perpetual constructs). The SDK intentionally omits
- * those resources from the spot client.
+ * Spot has no funding, no open interest, and no liquidations. Candle history
+ * is served separately through `SpotClient.candles` at
+ * `/v1/hyperliquid/spot/candles/{symbol}` from 2025-03-22T10:50:22Z.
  */
 export interface SpotPair {
   /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). `coin` is an alias. */
@@ -561,7 +566,10 @@ export interface FundingRate {
 
 /**
  * Aggregation interval for OI and funding history.
- * When omitted, raw ~1 min data is returned.
+ *
+ * When omitted, the route's native/default cadence is returned. Cadence is
+ * venue- and family-specific; callers should not infer a universal raw
+ * one-minute interval from this shared type.
  */
 export type OiFundingInterval = '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
 
@@ -569,7 +577,7 @@ export type OiFundingInterval = '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
  * Parameters for getting funding rate history
  */
 export interface FundingHistoryParams extends CursorPaginationParams {
-  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  /** Aggregation interval. When omitted, the route's native/default cadence is returned. */
   interval?: OiFundingInterval;
 }
 
@@ -604,10 +612,36 @@ export interface OpenInterest {
 }
 
 /**
+ * HIP-4 per-side open interest snapshot.
+ *
+ * HIP-4 outcome markets expose identity fields that are not part of the
+ * generic open-interest contract. `markPrice` and `midPrice` are implied
+ * probabilities in [0, 1], not USD prices. HIP-4 has no oracle price field.
+ */
+export interface Hip4OpenInterest {
+  /** `#`-prefixed per-side coin identifier (for example, `#0`). */
+  coin: string;
+  /** Same value as `coin`, returned for cross-venue consistency. */
+  symbol: string;
+  /** Numeric outcome identifier shared by the Yes and No sides. */
+  outcomeId: number;
+  /** Side index within the outcome (0 = Yes, 1 = No). */
+  side: 0 | 1;
+  /** Snapshot timestamp (UTC). */
+  timestamp: string;
+  /** Open interest in contracts (notional currency: USDH). */
+  openInterest: string;
+  /** Implied probability in [0, 1], not a USD mark price. */
+  markPrice?: string | null;
+  /** Mid probability in [0, 1]. */
+  midPrice?: string | null;
+}
+
+/**
  * Parameters for getting open interest history
  */
 export interface OpenInterestHistoryParams extends CursorPaginationParams {
-  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  /** Aggregation interval. When omitted, the route's native/default cadence is returned. */
   interval?: OiFundingInterval;
 }
 
@@ -856,12 +890,18 @@ export interface Candle {
 }
 
 /**
- * Parameters for getting candle history
+ * Parameters for getting candle history.
+ *
+ * All candle routes support `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and
+ * `1w` intervals. Maximum rows are route-specific: 10,000 for core
+ * Hyperliquid and Lighter, and 1,000 for HIP-3, HIP-4, and Hyperliquid Spot.
+ * Pagination cursors are opaque server tokens and must be passed through
+ * unchanged.
  */
 export interface CandleHistoryParams extends CursorPaginationParams {
   /** Candle interval (default: 1h) */
   interval?: CandleInterval;
-  /** Maximum number of results to return (default: 100, max: 10000 for candles) */
+  /** Maximum results (default: 100; route max is 10,000 or 1,000 by family) */
   limit?: number;
 }
 
@@ -977,7 +1017,7 @@ export interface PriceSnapshot {
 
 /** Parameters for price history */
 export interface PriceHistoryParams extends CursorPaginationParams {
-  /** Aggregation interval. When omitted, raw ~1 min data is returned. */
+  /** Aggregation interval. When omitted, the projected route's native/default cadence is returned. */
   interval?: OiFundingInterval;
 }
 
@@ -994,8 +1034,9 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  * - open_interest, funding, lighter_open_interest, lighter_funding,
  *   hip3_open_interest, hip3_funding: historical only (replay/stream)
  *
- * HIP-4 channels (outcome contracts; no funding, no liquidations, no candles):
- * - hip4_orderbook, hip4_trades, hip4_open_interest: realtime + replay
+ * HIP-4 channels (outcome contracts; no funding or liquidations):
+ * - hip4_trades: realtime + replay
+ * - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused
  * - hip4_l4_diffs, hip4_l4_orders: real-time only
  *
  * Liquidation messages share the trade wire format: each item is a fill row
