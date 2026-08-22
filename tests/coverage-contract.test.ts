@@ -62,8 +62,8 @@ describe('HIP-4 candles and coverage contract', () => {
     const url = new URL(requestUrl);
     expect(url.pathname).toBe('/v1/hyperliquid/hip4/candles/%230');
     expect(url.searchParams.get('interval')).toBe('1m');
-    expect(url.searchParams.get('start')).toBe('2026-05-02T08:00:00Z');
-    expect(url.searchParams.get('end')).toBe('2026-05-02T09:00:00Z');
+    expect(url.searchParams.get('start')).toBe(String(Date.parse('2026-05-02T08:00:00Z')));
+    expect(url.searchParams.get('end')).toBe(String(Date.parse('2026-05-02T09:00:00Z')));
   });
 
   it('exposes authenticated Spot candle history with an opaque cursor', async () => {
@@ -131,10 +131,40 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(firstUrl.searchParams.get('interval')).toBe('5m');
     expect(firstUrl.searchParams.get('limit')).toBe('1000');
     expect(firstUrl.searchParams.get('cursor')).toBeNull();
+    expect(firstUrl.searchParams.get('start')).toBe(String(Date.parse('2025-03-22T10:50:22Z')));
+    expect(firstUrl.searchParams.get('end')).toBe(String(Date.parse('2025-03-22T11:20:22Z')));
 
     const secondUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
     expect(secondUrl.pathname).toBe('/v1/hyperliquid/spot/candles/HYPE-USDC');
     expect(secondUrl.searchParams.get('cursor')).toBe('spot-cursor/opaque-token');
+  });
+
+  it('enforces route-specific candle limits before issuing a request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: [],
+        meta: { count: 0, request_id: 'request-candle-limit' },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new OxArchive({ apiKey: 'fake-key', baseUrl: 'https://api.example.test' });
+    const params = {
+      start: '2026-05-02T08:00:00Z',
+      end: '2026-05-02T09:00:00Z',
+      interval: '1m' as const,
+    };
+
+    await expect(client.spot.candles.history('HYPE-USDC', { ...params, limit: 1001 }))
+      .rejects.toThrow('limit must be between 1 and 1000');
+    await expect(client.hyperliquid.hip3.candles.history('xyz:XYZ100', { ...params, limit: 1001 }))
+      .rejects.toThrow('limit must be between 1 and 1000');
+    await client.hyperliquid.candles.history('BTC', { ...params, limit: 10_000 });
+    await client.lighter.candles.history('BTC', { ...params, limit: 10_000 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('preserves HIP-4 per-side OI identity fields through validation', async () => {
@@ -267,7 +297,7 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(types).toContain('stored replay only; live bridges paused');
     expect(readme).toMatch(/Per fill.*maker.*taker/i);
     expect(exchanges).toContain('public readonly candles: CandlesResource;');
-    expect(exchanges).toContain("new CandlesResource(http, basePath, coinTransform)");
+    expect(exchanges).toContain("new CandlesResource(http, basePath, coinTransform, 1_000)");
     expect(hip4Section).not.toMatch(/HIP-4[\s\S]{0,220}no candles by design/i);
 
     const spotSectionStart = readme.indexOf('#### Hyperliquid Spot');

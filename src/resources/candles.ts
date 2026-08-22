@@ -45,7 +45,8 @@ export class CandlesResource {
   constructor(
     private http: HttpClient,
     private basePath: string = '/v1',
-    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+    private coinTransform: (coin: string) => string = (c) => c.toUpperCase(),
+    private maxLimit: number = 10_000,
   ) {}
 
   /**
@@ -56,9 +57,28 @@ export class CandlesResource {
    * @returns CursorResponse with candle records and nextCursor for pagination
    */
   async history(symbol: string, params: CandleHistoryParams): Promise<CursorResponse<Candle[]>> {
+    if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > this.maxLimit)) {
+      throw new RangeError(`limit must be between 1 and ${this.maxLimit} for this candle route`);
+    }
+    const normalizeTimestamp = (value: number | string, field: 'start' | 'end') => {
+      const timestamp = typeof value === 'number'
+        ? value
+        : /^\d+$/.test(value)
+          ? Number(value)
+          : Date.parse(value);
+      if (!Number.isFinite(timestamp)) {
+        throw new TypeError(`${field} must be an integer millisecond timestamp or valid ISO date string`);
+      }
+      return Math.trunc(timestamp);
+    };
+    const query = {
+      ...params,
+      start: normalizeTimestamp(params.start, 'start'),
+      end: normalizeTimestamp(params.end, 'end'),
+    };
     const response = await this.http.get<ApiResponse<Candle[]>>(
       `${this.basePath}/candles/${this.coinTransform(symbol)}`,
-      params as unknown as Record<string, unknown>,
+      query as unknown as Record<string, unknown>,
       this.http.validationEnabled ? CandleArrayResponseSchema : undefined
     );
     return {

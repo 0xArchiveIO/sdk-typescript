@@ -253,7 +253,7 @@ export class Hip3Client {
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.funding = new FundingResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
-    this.candles = new CandlesResource(http, basePath, coinTransform);
+    this.candles = new CandlesResource(http, basePath, coinTransform, 1_000);
     this.liquidations = new LiquidationsResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
@@ -407,7 +407,7 @@ export class Hip4Client {
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.openInterest = new Hip4OpenInterestResource(http, basePath, coinTransform);
-    this.candles = new CandlesResource(http, basePath, coinTransform);
+    this.candles = new CandlesResource(http, basePath, coinTransform, 1_000);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
@@ -660,7 +660,7 @@ export class SpotClient {
     this.pairs = new SpotPairsResource(http, basePath, coinTransform);
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
-    this.candles = new CandlesResource(http, basePath, coinTransform);
+    this.candles = new CandlesResource(http, basePath, coinTransform, 1_000);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.twap = new SpotTwapResource(http, basePath, coinTransform);
