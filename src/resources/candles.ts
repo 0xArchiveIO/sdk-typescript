@@ -3,7 +3,12 @@ import type { ApiResponse, Candle, CandleHistoryParams, CursorResponse } from '.
 import { CandleArrayResponseSchema } from '../schemas';
 
 /**
- * Candles (OHLCV) API resource
+ * Candles (OHLCV) API resource.
+ *
+ * The resource is mounted only on clients whose family exposes a candle route.
+ * Family-specific limits and coverage are documented on the owning client;
+ * the API currently supports the shared 1m-through-1w interval set and a
+ * maximum `limit` of 1000. Pagination cursors are opaque strings.
  *
  * @example
  * ```typescript

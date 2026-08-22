@@ -1,5 +1,13 @@
 import type { HttpClient } from './http';
-import type { ApiResponse, CursorResponse, CoinFreshness, CoinSummary, PriceSnapshot, PriceHistoryParams } from './types';
+import type {
+  ApiResponse,
+  CursorResponse,
+  CoinFreshness,
+  CoinSummary,
+  Hip4OpenInterest,
+  PriceSnapshot,
+  PriceHistoryParams,
+} from './types';
 import {
   OrderBookResource,
   TradesResource,
@@ -10,6 +18,7 @@ import {
   Hip4OutcomesResource,
   FundingResource,
   OpenInterestResource,
+  Hip4OpenInterestResource,
   CandlesResource,
   LiquidationsResource,
   OrdersResource,
@@ -356,7 +365,7 @@ export class Hip4Client {
   /**
    * Open interest (per side).
    */
-  public readonly openInterest: OpenInterestResource;
+  public readonly openInterest: Hip4OpenInterestResource;
 
   /**
    * OHLCV candle data (served from 2026-05-02; HIP-4 prices are probabilities).
@@ -397,7 +406,7 @@ export class Hip4Client {
     this.outcomes = new Hip4OutcomesResource(http, basePath);
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
-    this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
+    this.openInterest = new Hip4OpenInterestResource(http, basePath, coinTransform);
     this.candles = new CandlesResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
@@ -479,7 +488,10 @@ export class Hip4Client {
    * Get per-side open interest history for a HIP-4 coin.
    * Note: `markPrice` on the response is an implied probability (0..1), not USD.
    */
-  async getOpenInterest(coin: string, params: import('./types').OpenInterestHistoryParams) {
+  async getOpenInterest(
+    coin: string,
+    params: import('./types').OpenInterestHistoryParams,
+  ): Promise<CursorResponse<Hip4OpenInterest[]>> {
     return this.openInterest.history(coin, params);
   }
 
@@ -487,7 +499,7 @@ export class Hip4Client {
    * Get current per-side open interest for a HIP-4 coin.
    * Note: `markPrice` on the response is an implied probability (0..1), not USD.
    */
-  async getOpenInterestCurrent(coin: string) {
+  async getOpenInterestCurrent(coin: string): Promise<Hip4OpenInterest> {
     return this.openInterest.current(coin);
   }
 
@@ -585,11 +597,13 @@ export class Hip4Client {
  * dashed form to Hyperliquid's wire formats (`PURR/USDC`, `@107`)
  * internally.
  *
- * Spot has no funding, no open interest, no liquidations, and no candles
- * by design (those are perpetual constructs). The SDK intentionally omits
- * those resources from the spot client.
+ * Spot has no funding, open interest, or liquidations. Candle history is
+ * served through the REST candles route; the SDK does not expose perp-only
+ * funding, open-interest, or liquidation resources on the spot client.
  *
  * Coverage:
+ * - Candles: from 2025-03-22T10:50:22Z; intervals 1m, 5m, 15m, 30m, 1h,
+ *   4h, 1d, and 1w; maximum limit 1000. Pagination cursors are opaque strings.
  * - Trades: from 2025-03-22 (HL S3 backfill).
  * - Orderbook, L4 diffs, L4 orders, TWAP statuses: live from 2026-05-05.
  *
@@ -619,6 +633,13 @@ export class SpotClient {
   /** Trade history (S3 backfill from 2025-03-22, live since). */
   public readonly trades: TradesResource;
 
+  /**
+   * OHLCV candle history (served from 2025-03-22T10:50:22Z).
+   * Spot accepts the shared candle intervals, up to 1000 rows per request,
+   * and returns opaque pagination cursors.
+   */
+  public readonly candles: CandlesResource;
+
   /** Order lifecycle events (live from 2026-05-05). */
   public readonly orders: OrdersResource;
 
@@ -639,6 +660,7 @@ export class SpotClient {
     this.pairs = new SpotPairsResource(http, basePath, coinTransform);
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
+    this.candles = new CandlesResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.twap = new SpotTwapResource(http, basePath, coinTransform);
@@ -700,7 +722,7 @@ export class LighterClient {
   public readonly openInterest: OpenInterestResource;
 
   /**
-   * OHLCV candle data
+   * OHLCV candle data (served from 2025-08-01)
    */
   public readonly candles: CandlesResource;
 

@@ -21,7 +21,8 @@ const DEFAULT_TIMEOUT = 30000;
  * - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
  *   - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
  *   - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets
- * - `client.spot` - Hyperliquid Spot (trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
+ * - `client.spot` - Hyperliquid Spot (candles from 2025-03-22T10:50:22Z;
+ *   trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
  * - `client.lighter` - Lighter.xyz perpetuals
  *
  * @example
@@ -71,9 +72,10 @@ export class OxArchive {
   public readonly lighter: LighterClient;
 
   /**
-   * Hyperliquid Spot exchange data. Trades backfilled from 2025-03-22;
-   * orderbook, L4, and TWAP statuses live from 2026-05-05. Symbols are
-   * dashed canonical (e.g. `HYPE-USDC`).
+   * Hyperliquid Spot exchange data. Candle history is served from
+   * 2025-03-22T10:50:22Z; trades are backfilled from 2025-03-22; orderbook,
+   * L4, and TWAP statuses are live from 2026-05-05. Symbols are dashed
+   * canonical (e.g. `HYPE-USDC`).
    */
   public readonly spot: SpotClient;
 

@@ -174,14 +174,15 @@ export interface Trade {
 /**
  * Cursor-based pagination parameters (recommended)
  * More efficient than offset-based pagination for large datasets.
- * The cursor is a timestamp - use the `nextCursor` from the response to get the next page.
+ * The cursor is an opaque server token. Pass the returned `nextCursor`
+ * unchanged to the next request; do not parse it as a timestamp.
  */
 export interface CursorPaginationParams {
   /** Start timestamp (Unix ms or ISO string) - REQUIRED */
   start: number | string;
   /** End timestamp (Unix ms or ISO string) - REQUIRED */
   end: number | string;
-  /** Cursor from previous response's nextCursor (timestamp). If not provided, starts from the beginning of the range. */
+  /** Opaque cursor from the previous response's `nextCursor`. */
   cursor?: number | string;
   /** Maximum number of results to return (default: 100, max: 1000) */
   limit?: number;
@@ -444,9 +445,9 @@ export interface Hip4OutcomeSideSpec {
  * (`HYPE-USDC`, `PURR-USDC`); the server resolves the dashed form to
  * Hyperliquid's wire formats (`PURR/USDC`, `@107`) internally.
  *
- * Spot has no funding, no open interest, no liquidations, and no candles by
- * design (those are perpetual constructs). The SDK intentionally omits
- * those resources from the spot client.
+ * Spot has no funding, no open interest, and no liquidations. Candle history
+ * is served separately through `SpotClient.candles` at
+ * `/v1/hyperliquid/spot/candles/{symbol}` from 2025-03-22T10:50:22Z.
  */
 export interface SpotPair {
   /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). `coin` is an alias. */
@@ -608,6 +609,32 @@ export interface OpenInterest {
   impactBidPrice?: string;
   /** Impact ask price for liquidations */
   impactAskPrice?: string;
+}
+
+/**
+ * HIP-4 per-side open interest snapshot.
+ *
+ * HIP-4 outcome markets expose identity fields that are not part of the
+ * generic open-interest contract. `markPrice` and `midPrice` are implied
+ * probabilities in [0, 1], not USD prices. HIP-4 has no oracle price field.
+ */
+export interface Hip4OpenInterest {
+  /** `#`-prefixed per-side coin identifier (for example, `#0`). */
+  coin: string;
+  /** Same value as `coin`, returned for cross-venue consistency. */
+  symbol: string;
+  /** Numeric outcome identifier shared by the Yes and No sides. */
+  outcomeId: number;
+  /** Side index within the outcome (0 = Yes, 1 = No). */
+  side: 0 | 1;
+  /** Snapshot timestamp (UTC). */
+  timestamp: string;
+  /** Open interest in contracts (notional currency: USDH). */
+  openInterest: string;
+  /** Implied probability in [0, 1], not a USD mark price. */
+  markPrice?: string | null;
+  /** Mid probability in [0, 1]. */
+  midPrice?: string | null;
 }
 
 /**
@@ -863,7 +890,11 @@ export interface Candle {
 }
 
 /**
- * Parameters for getting candle history
+ * Parameters for getting candle history.
+ *
+ * All candle routes support `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and
+ * `1w` intervals and accept up to 1000 rows per request. Pagination cursors
+ * are opaque server tokens and must be passed through unchanged.
  */
 export interface CandleHistoryParams extends CursorPaginationParams {
   /** Candle interval (default: 1h) */

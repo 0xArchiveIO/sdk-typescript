@@ -134,6 +134,24 @@ export const OpenInterestSchema = z.object({
   impactAskPrice: z.string().optional(),
 });
 
+/** HIP-4 side index: 0 = Yes, 1 = No. */
+export const Hip4SideSchema = z.union([z.literal(0), z.literal(1)]);
+
+/**
+ * HIP-4 per-side open interest. This is intentionally separate from the
+ * generic open-interest schema so Zod does not strip outcome identity fields.
+ */
+export const Hip4OpenInterestSchema = z.object({
+  coin: z.string(),
+  symbol: z.string(),
+  outcomeId: z.number().int(),
+  side: Hip4SideSchema,
+  timestamp: z.string(),
+  openInterest: z.string(),
+  markPrice: z.string().nullable().optional(),
+  midPrice: z.string().nullable().optional(),
+});
+
 // =============================================================================
 // Liquidation Schemas
 // =============================================================================
@@ -358,6 +376,8 @@ export const FundingRateResponseSchema = ApiResponseSchema(FundingRateSchema);
 export const FundingRateArrayResponseSchema = ApiResponseSchema(z.array(FundingRateSchema));
 export const OpenInterestResponseSchema = ApiResponseSchema(OpenInterestSchema);
 export const OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(OpenInterestSchema));
+export const Hip4OpenInterestResponseSchema = ApiResponseSchema(Hip4OpenInterestSchema);
+export const Hip4OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(Hip4OpenInterestSchema));
 export const CandleArrayResponseSchema = ApiResponseSchema(z.array(CandleSchema));
 export const LiquidationArrayResponseSchema = ApiResponseSchema(z.array(LiquidationSchema));
 
@@ -533,6 +553,7 @@ export type ValidatedTrade = z.infer<typeof TradeSchema>;
 export type ValidatedInstrument = z.infer<typeof InstrumentSchema>;
 export type ValidatedFundingRate = z.infer<typeof FundingRateSchema>;
 export type ValidatedOpenInterest = z.infer<typeof OpenInterestSchema>;
+export type ValidatedHip4OpenInterest = z.infer<typeof Hip4OpenInterestSchema>;
 export type ValidatedCandle = z.infer<typeof CandleSchema>;
 export type ValidatedLiquidation = z.infer<typeof LiquidationSchema>;
 export type ValidatedWsServerMessage = z.infer<typeof WsServerMessageSchema>;

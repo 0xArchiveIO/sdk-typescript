@@ -44,6 +44,11 @@ const hip3Oi = await client.hyperliquid.hip3.openInterest.current('xyz:XYZ100');
 const spotPairs = await client.spot.pairs.list();
 const spotOrderbook = await client.spot.orderbook.get('HYPE-USDC');
 const spotTrades = await client.spot.trades.recent('HYPE-USDC');
+const spotCandles = await client.spot.candles.history('HYPE-USDC', {
+  start: Date.parse('2025-03-22T10:50:22Z'),
+  end: Date.now(),
+  interval: '1h',
+});
 
 // Get historical order book snapshots
 const history = await client.hyperliquid.orderbook.history('ETH', {
@@ -71,8 +76,8 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | Hyperliquid | April 2023+ | Core perpetual markets; coverage varies by schema and route. |
 | Hyperliquid HIP-3 | February 2026+ for served history | Builder perps with family-specific schema coverage; funding and trade history begin in February 2026. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side open interest are served from 2026-05-02; OI updates at ~10s. No funding. |
-| Hyperliquid Spot | March 2025+ for trades; May 2026+ for orderbook, L4, TWAP statuses | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). No funding, OI, liquidations, or candles. |
-| Lighter.xyz | Observed global fill floor August 27, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
+| Hyperliquid Spot | Candles from 2025-03-22T10:50:22Z; trades from March 2025; orderbook, L4, TWAP from May 2026 | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and opaque cursors. No funding, OI, or liquidations. |
+| Lighter.xyz | Candles served from 2025-08-01; observed global fill floor August 27, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
 
 ## Configuration
 
@@ -385,7 +390,11 @@ const orders = await client.hyperliquid.hip4.getOrderHistory('0', {
 
 Spot pairs live at `/v1/hyperliquid/spot` and `client.spot`. Symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves the dashed form to Hyperliquid's wire formats (`PURR/USDC`, `@107`) internally.
 
-Spot has **no funding, no open interest, no liquidations, and no candles** by design. Those are perpetual constructs. The SDK omits those resources from the spot client.
+Spot has no funding, open interest, or liquidations. Candle history is served
+through `GET /v1/hyperliquid/spot/candles/{symbol}` and
+`client.spot.candles.history()`, with coverage from **2025-03-22T10:50:22Z**.
+The candle route accepts `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`,
+with a maximum `limit` of 1000 and opaque pagination cursors.
 
 ```typescript
 // Pairs (one row per dashed symbol)
@@ -413,6 +422,14 @@ const trades = await client.spot.trades.list('HYPE-USDC', {
 
 // Recent trades (real-time)
 const recent = await client.spot.trades.recent('HYPE-USDC', 100);
+
+// Candle history (served from 2025-03-22T10:50:22Z)
+const candles = await client.spot.candles.history('HYPE-USDC', {
+  start: Date.parse('2025-03-22T10:50:22Z'),
+  end: Date.now(),
+  interval: '1h',
+  limit: 1000,
+});
 
 // L4 reconstruction (live from 2026-05-05)
 const l4 = await client.spot.l4Orderbook.get('HYPE-USDC');
@@ -442,7 +459,7 @@ const fresh = await client.spot.freshness('HYPE-USDC');
 console.log(`Orderbook last updated: ${fresh.orderbook.lastUpdated}`);
 ```
 
-> **Coverage caveats.** Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
+> **Coverage caveats.** Spot candle history is served from 2025-03-22T10:50:22Z through `GET /v1/hyperliquid/spot/candles/{symbol}`. The route supports 1m, 5m, 15m, 30m, 1h, 4h, 1d, and 1w intervals, up to 1000 rows per request; cursors are opaque. Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
 
 ### Funding Rates
 
@@ -704,7 +721,7 @@ const l3Ob = await client.lighter.l3Orderbook.get('BTC');
 
 // Get L3 orderbook at a specific timestamp with custom depth
 const l3Historical = await client.lighter.l3Orderbook.get('BTC', {
-  timestamp: 1704067200000,
+  timestamp: '2026-03-05T00:00:00Z',
   depth: 250
 });
 
@@ -894,6 +911,14 @@ const lighterCandles = await client.lighter.candles.history('BTC', {
   end: Date.now(),
   interval: '15m'
 });
+
+// Hyperliquid Spot candles (served from 2025-03-22T10:50:22Z)
+const spotCandles = await client.spot.candles.history('HYPE-USDC', {
+  start: '2025-03-22T10:50:22Z',
+  end: new Date().toISOString(),
+  interval: '1h',
+  limit: 1000,
+});
 ```
 
 #### Available Intervals
@@ -908,6 +933,10 @@ const lighterCandles = await client.lighter.candles.history('BTC', {
 | `4h` | 4 hours |
 | `1d` | 1 day |
 | `1w` | 1 week |
+
+`nextCursor` values are opaque server tokens; pass them back unchanged as
+`cursor` when requesting the next page. Hyperliquid Spot candle history starts
+at **2025-03-22T10:50:22Z**, and its route accepts up to 1000 rows per request.
 
 ### Data Quality Monitoring
 
@@ -1314,7 +1343,7 @@ ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
 | `spot_l4_orders` | Spot order lifecycle events | Yes | Real-time only |
 | `spot_twap` | Spot TWAP statuses | Yes | Real-time only |
 
-Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`). The server resolves the dashed form to wire format internally. Spot has no funding, no open interest, no liquidations, and no candles by design.
+Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`). The server resolves the dashed form to wire format internally. Spot has no funding, open interest, or liquidations; candle history is REST-only through `client.spot.candles` and has no `spot_candles` WebSocket channel.
 
 ```typescript
 ws.onOrderbook((coin, ob) => {
