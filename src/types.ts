@@ -893,13 +893,15 @@ export interface Candle {
  * Parameters for getting candle history.
  *
  * All candle routes support `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and
- * `1w` intervals and accept up to 1000 rows per request. Pagination cursors
- * are opaque server tokens and must be passed through unchanged.
+ * `1w` intervals. Maximum rows are route-specific: 10,000 for core
+ * Hyperliquid and Lighter, and 1,000 for HIP-3, HIP-4, and Hyperliquid Spot.
+ * Pagination cursors are opaque server tokens and must be passed through
+ * unchanged.
  */
 export interface CandleHistoryParams extends CursorPaginationParams {
   /** Candle interval (default: 1h) */
   interval?: CandleInterval;
-  /** Maximum number of results to return (default: 100, max: 1000 for candles) */
+  /** Maximum results (default: 100; route max is 10,000 or 1,000 by family) */
   limit?: number;
 }
 

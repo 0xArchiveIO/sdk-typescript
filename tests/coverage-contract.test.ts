@@ -283,6 +283,9 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(candleResource).toContain('10,000 for core Hyperliquid and Lighter');
     expect(candleResource).toContain('1,000 for HIP-3, HIP-4, and Hyperliquid Spot');
     expect(candleResource).not.toContain('maximum `limit` of 1000');
+    expect(types).toContain('10,000 for core');
+    expect(types).toContain('1,000 for HIP-3, HIP-4, and Hyperliquid Spot');
+    expect(types).not.toContain('accept up to 1000 rows per request');
   });
 
   it('exposes Spot candles while keeping perp-only resources absent', () => {
