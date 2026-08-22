@@ -9,7 +9,8 @@ export interface L3OrderBookParams {
 /**
  * L3 Order Book API resource (Lighter only)
  *
- * Access L3 orderbook snapshots and history from Lighter.xyz.
+ * Access Lighter.xyz L3 orderbook snapshots and history. The served snapshot
+ * is order-level data capped at 250 orders per side.
  *
  * @example
  * ```typescript
@@ -35,7 +36,7 @@ export class L3OrderBookResource {
    * Get L3 order book snapshot for a symbol
    *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
-   * @param params - Optional parameters (timestamp, depth)
+   * @param params - Optional parameters (timestamp, depth; maximum 250 orders per side)
    * @returns L3 order book snapshot
    */
   async get(symbol: string, params?: L3OrderBookParams): Promise<any> {

@@ -5,6 +5,36 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## Unreleased
+
+### Added
+- **Hyperliquid Spot candles**: `client.spot.candles.history()` now wraps
+  `GET /v1/hyperliquid/spot/candles/{symbol}`. Coverage starts at
+  `2025-03-22T10:50:22Z`; the route supports `1m`, `5m`, `15m`, `30m`, `1h`,
+  `4h`, `1d`, and `1w`, accepts up to 1000 rows, and returns opaque cursors.
+
+### Changed
+- Spot documentation and types now distinguish the served candle route from
+  the still-unsupported funding, open-interest, and liquidation resources.
+
+## 1.9.0 (2026-08-22)
+
+### Added
+- **HIP-4 candles**: `client.hyperliquid.hip4.candles.history()` now exposes
+  typed OHLCV history for outcome sides. Coverage is served from 2026-05-02;
+  candle OHLC values are implied probabilities in `[0, 1]`.
+
+### Changed
+- HIP-4 coverage copy now distinguishes served candles and outcome-side open
+  interest (approximately 10-second updates) from the unsupported funding
+  resource. The SDK still does not expose HIP-4 funding.
+- Route-family cadence copy no longer describes all omitted OI/funding intervals
+  as raw approximately one-minute data. Lighter L3 depth is documented as 250
+  orders per side, and Lighter trades as per-fill maker/taker context where
+  served.
+- HIP-4 WebSocket docs now distinguish live trades/L4/settlement delivery from
+  stored-replay-only L2 and OI while those live bridges are paused.
+
 ## 1.8.0 (2026-07-27)
 
 ### Added
@@ -98,9 +128,9 @@ semver in spirit.
     `unsubscribeHip3Liquidations(coin)`.
   - New typed event handler: `onLiquidations((channel, coin, fills) => ...)`
     where `fills` is `Trade[]`.
-- **HIP-4 WebSocket channels**: `hip4_orderbook`, `hip4_trades`,
-  `hip4_open_interest` (realtime + replay) and `hip4_l4_diffs`,
-  `hip4_l4_orders` (realtime only, Pro+).
+- **HIP-4 WebSocket channel helpers**: `hip4_trades` (live + replay),
+  `hip4_orderbook` and `hip4_open_interest` (stored replay; live bridges
+  currently paused), and `hip4_l4_diffs` / `hip4_l4_orders` (live only).
   - New helpers: `subscribeHip4(channel, coin)`, `unsubscribeHip4(channel, coin)`.
   - `hip4_orderbook` data routes through the existing `onOrderbook` handler.
   - `hip4_trades` data routes through the existing `onTrades` handler.
@@ -151,9 +181,10 @@ semver in spirit.
   variants (the older schema was missing several entries).
 
 ### Notes
-- **No HIP-4 candles, funding, or liquidations.** HIP-4 outcome markets
+- **HIP-4 funding and liquidations remain unsupported.** HIP-4 outcome markets
   settle to 0/1 at expiry instead of streaming a funding curve, and there is
-  no liquidation engine. The SDK intentionally does not expose these.
+  no liquidation engine. Candle history was added after this release and is
+  exposed by the current SDK under `client.hyperliquid.hip4.candles`.
 - **HIP-4 mark/mid prices are implied probabilities**, not USD. The SDK
   surfaces them on `OpenInterest`, `PriceSnapshot`, and `CoinSummary` types
   but they are bounded to `[0, 1]`. JSDoc on the HIP-4 client and types now

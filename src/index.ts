@@ -5,7 +5,7 @@
  * - Hyperliquid (perpetuals data from April 2023)
  * - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
  * - Hyperliquid HIP-4 outcome markets at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
- * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
+ * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (candles from 2025-03-22T10:50:22Z; trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
  * - Lighter.xyz (perpetuals data)
  *
  * @example
@@ -95,6 +95,10 @@ export {
   OpenInterestSchema,
   OpenInterestResponseSchema,
   OpenInterestArrayResponseSchema,
+  Hip4SideSchema,
+  Hip4OpenInterestSchema,
+  Hip4OpenInterestResponseSchema,
+  Hip4OpenInterestArrayResponseSchema,
   // Candle schemas
   CandleIntervalSchema,
   CandleSchema,
@@ -158,6 +162,7 @@ export {
   type ValidatedInstrument,
   type ValidatedFundingRate,
   type ValidatedOpenInterest,
+  type ValidatedHip4OpenInterest,
   type ValidatedCandle,
   type ValidatedLiquidation,
   type ValidatedWsServerMessage,
@@ -198,6 +203,7 @@ export type {
   FundingHistoryParams,
   // Open Interest
   OpenInterest,
+  Hip4OpenInterest,
   OpenInterestHistoryParams,
   OiFundingInterval,
   // Candles
