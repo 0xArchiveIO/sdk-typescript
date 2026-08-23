@@ -174,8 +174,9 @@ export interface Trade {
 /**
  * Cursor-based pagination parameters (recommended)
  * More efficient than offset-based pagination for large datasets.
- * The cursor is an opaque server token. Pass the returned `nextCursor`
- * unchanged to the next request; do not parse it as a timestamp.
+ * The API returns `next_cursor` as a numeric string. Treat it as an opaque
+ * client value: pass the returned `nextCursor` unchanged to the next request;
+ * do not parse or transform it.
  */
 export interface CursorPaginationParams {
   /** Start timestamp (Unix ms or ISO string) - REQUIRED */
@@ -184,7 +185,7 @@ export interface CursorPaginationParams {
   end: number | string;
   /** Opaque cursor from the previous response's `nextCursor`. */
   cursor?: number | string;
-  /** Maximum number of results to return (default: 100, max: 1000) */
+  /** Maximum number of results to return; route-specific (candle routes accept 10,000 or 1,000 by family). */
   limit?: number;
 }
 
@@ -894,9 +895,9 @@ export interface Candle {
  *
  * All candle routes support `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and
  * `1w` intervals. Maximum rows are route-specific: 10,000 for core
- * Hyperliquid and Lighter, and 1,000 for HIP-3, HIP-4, and Hyperliquid Spot.
- * Pagination cursors are opaque server tokens and must be passed through
- * unchanged.
+ * Hyperliquid, HIP-3, and Lighter, and 1,000 for HIP-4 and Hyperliquid Spot.
+ * The API returns pagination cursors as numeric strings; treat them as opaque
+ * client values and pass them through unchanged.
  */
 export interface CandleHistoryParams extends CursorPaginationParams {
   /** Candle interval (default: 1h) */

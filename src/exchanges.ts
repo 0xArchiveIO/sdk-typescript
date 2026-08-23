@@ -217,7 +217,7 @@ export class Hip3Client {
   public readonly openInterest: OpenInterestResource;
 
   /**
-   * OHLCV candle data
+   * OHLCV candle data (up to 10,000 rows per request)
    */
   public readonly candles: CandlesResource;
 
@@ -253,7 +253,7 @@ export class Hip3Client {
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.funding = new FundingResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
-    this.candles = new CandlesResource(http, basePath, coinTransform, 1_000);
+    this.candles = new CandlesResource(http, basePath, coinTransform, 10_000);
     this.liquidations = new LiquidationsResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
@@ -317,10 +317,9 @@ export class Hip3Client {
  *
  * Coin format: `#<10*outcome_id + side>` (e.g. `#0` is outcome 0 / Yes, `#1` is outcome 0 / No).
  * The backend accepts both the bare numeric form (`0`, `1`) and the on-chain
- * `#`-prefixed form (`#0`, `#1`). The SDK URL-encodes coins on the wire so that
- * the `#`-prefixed form survives transit (`#` is the URL-fragment delimiter and
- * would otherwise be stripped by `fetch`). Either form works; pass whichever is
- * convenient.
+ * `#`-prefixed form (`#0`, `#1`). The bare numeric form is recommended as the
+ * primary path; the SDK URL-encodes `#` to `%23` so the legacy form survives
+ * transit.
  *
  * `mark_price` (and `midPrice`) for HIP-4 is an implied probability in [0, 1],
  * not a USD price. HIP-4 markets are fully collateralized so there are no
@@ -331,10 +330,10 @@ export class Hip3Client {
  * ```typescript
  * const client = new OxArchive({ apiKey: '...' });
  *
- * // Both forms work — the SDK encodes `#` to `%23` on the wire so the
- * // path makes it through `fetch` intact.
- * const orderbook = await client.hyperliquid.hip4.getOrderbook('#0');
- * const orderbookAlt = await client.hyperliquid.hip4.getOrderbook('0');
+ * // Bare numeric form is the primary documented path.
+ * const orderbook = await client.hyperliquid.hip4.getOrderbook('0');
+ * // Legacy `#`-prefixed input remains accepted and is encoded as `%23`.
+ * const orderbookLegacy = await client.hyperliquid.hip4.getOrderbook('#0');
  *
  * // Filter outcomes by slug
  * const outcomes = await client.hyperliquid.hip4.listOutcomes({ isSettled: false });
@@ -603,7 +602,8 @@ export class Hip4Client {
  *
  * Coverage:
  * - Candles: from 2025-03-22T10:50:22Z; intervals 1m, 5m, 15m, 30m, 1h,
- *   4h, 1d, and 1w; maximum limit 1000. Pagination cursors are opaque strings.
+ *   4h, 1d, and 1w; maximum limit 1000. The API returns numeric-string
+ *   cursors; preserve and resend them unchanged.
  * - Trades: from 2025-03-22 (HL S3 backfill).
  * - Orderbook, L4 diffs, L4 orders, TWAP statuses: live from 2026-05-05.
  *
@@ -636,7 +636,8 @@ export class SpotClient {
   /**
    * OHLCV candle history (served from 2025-03-22T10:50:22Z).
    * Spot accepts the shared candle intervals, up to 1000 rows per request,
-   * and returns opaque pagination cursors.
+   * and returns numeric-string pagination cursors that callers should pass
+   * through unchanged.
    */
   public readonly candles: CandlesResource;
 

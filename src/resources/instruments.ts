@@ -171,9 +171,9 @@ export class Hip3InstrumentsResource {
  * // List all HIP-4 per-side instruments
  * const instruments = await client.hyperliquid.hip4.instruments.list();
  *
- * // Both forms work (SDK encodes `#` on the wire)
- * const yes = await client.hyperliquid.hip4.instruments.get('#0');
- * const yesAlt = await client.hyperliquid.hip4.instruments.get('0');
+ * // Bare numeric form is primary; legacy `#` input remains URL-encoded.
+ * const yes = await client.hyperliquid.hip4.instruments.get('0');
+ * const yesLegacy = await client.hyperliquid.hip4.instruments.get('#0');
  * ```
  */
 export class Hip4InstrumentsResource {

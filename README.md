@@ -74,9 +74,9 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | Venue | Coverage | Notes |
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Core perpetual markets; coverage varies by schema and route. |
-| Hyperliquid HIP-3 | February 2026+ for served history | Builder perps with family-specific schema coverage; funding and trade history begin in February 2026. |
+| Hyperliquid HIP-3 | February 2026+ for served history | Builder perps with family-specific schema coverage; funding and trade history begin in February 2026. Candle history accepts up to 10,000 rows per request. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side open interest are served from 2026-05-02; OI updates at ~10s. No funding. |
-| Hyperliquid Spot | Candles from 2025-03-22T10:50:22Z; trades from March 2025; orderbook, L4, TWAP from May 2026 | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and opaque cursors. No funding, OI, or liquidations. |
+| Hyperliquid Spot | Candles from 2025-03-22T10:50:22Z; trades from March 2025; orderbook, L4, TWAP from May 2026 | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and numeric-string cursors passed through unchanged. No funding, OI, or liquidations. |
 | Lighter.xyz | Candles served from 2025-08-01; observed global fill floor August 27, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
 
 ## Configuration
@@ -323,7 +323,7 @@ console.log(`Mark price: ${us500.markPrice}`);
 
 HIP-4 is Hyperliquid's binary outcome-market namespace. Each outcome has 2 sides (`#0` = Yes / side 0, `#1` = No / side 1, etc.). Markets are fully collateralized so there are no funding rates or liquidations. Candle history and outcome-side open interest are served from **2026-05-02**; OI updates at **~10s**. `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
 
-**Path encoding:** the backend accepts both the bare numeric form (`'0'`, `'1'`, ...) and the on-chain `#`-prefixed form (`'#0'`, `'#1'`, ...) — and `#`-prefixed is the canonical form returned by the API in `coin` fields. The SDK URL-encodes the value on the wire (`#` becomes `%23`) so the `#` form survives `fetch` (the WHATWG `URL` parser would otherwise treat `#` as a fragment delimiter and silently drop the rest of the path). Both forms are equivalent at the API; pass whichever is convenient.
+**Path encoding:** the backend accepts both the bare numeric form (`'0'`, `'1'`, ...) and the legacy on-chain `#`-prefixed form (`'#0'`, `'#1'`, ...). The bare numeric form is the documented primary path. The SDK URL-encodes the legacy value on the wire (`#` becomes `%23`) so it survives `fetch` parsing; both forms remain accepted.
 
 ```typescript
 // Per-side instruments (one row per #N coin)
@@ -394,7 +394,8 @@ Spot has no funding, open interest, or liquidations. Candle history is served
 through `GET /v1/hyperliquid/spot/candles/{symbol}` and
 `client.spot.candles.history()`, with coverage from **2025-03-22T10:50:22Z**.
 The candle route accepts `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`,
-with a maximum `limit` of 1000 and opaque pagination cursors.
+with a maximum `limit` of 1000 and numeric-string pagination cursors that
+callers should pass through unchanged.
 
 ```typescript
 // Pairs (one row per dashed symbol)
@@ -459,7 +460,7 @@ const fresh = await client.spot.freshness('HYPE-USDC');
 console.log(`Orderbook last updated: ${fresh.orderbook.lastUpdated}`);
 ```
 
-> **Coverage caveats.** Spot candle history is served from 2025-03-22T10:50:22Z through `GET /v1/hyperliquid/spot/candles/{symbol}`. The route supports 1m, 5m, 15m, 30m, 1h, 4h, 1d, and 1w intervals, up to 1000 rows per request; cursors are opaque. Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
+> **Coverage caveats.** Spot candle history is served from 2025-03-22T10:50:22Z through `GET /v1/hyperliquid/spot/candles/{symbol}`. The route supports 1m, 5m, 15m, 30m, 1h, 4h, 1d, and 1w intervals, up to 1000 rows per request; numeric-string cursors should be passed back unchanged. Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
 
 ### Funding Rates
 
@@ -934,9 +935,11 @@ const spotCandles = await client.spot.candles.history('HYPE-USDC', {
 | `1d` | 1 day |
 | `1w` | 1 week |
 
-`nextCursor` values are opaque server tokens; pass them back unchanged as
-`cursor` when requesting the next page. Hyperliquid Spot candle history starts
-at **2025-03-22T10:50:22Z**, and its route accepts up to 1000 rows per request.
+`nextCursor` values are returned as numeric strings. Treat each as an opaque
+client value and pass it back unchanged as `cursor` when requesting the next
+page. Core Hyperliquid, HIP-3, and Lighter candle routes accept up to 10,000
+rows per request; HIP-4 and Spot routes accept up to 1,000. Hyperliquid Spot
+candle history starts at **2025-03-22T10:50:22Z**.
 
 ### Data Quality Monitoring
 

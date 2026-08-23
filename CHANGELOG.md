@@ -11,7 +11,8 @@ semver in spirit.
 - **Hyperliquid Spot candles**: `client.spot.candles.history()` now wraps
   `GET /v1/hyperliquid/spot/candles/{symbol}`. Coverage starts at
   `2025-03-22T10:50:22Z`; the route supports `1m`, `5m`, `15m`, `30m`, `1h`,
-  `4h`, `1d`, and `1w`, accepts up to 1000 rows, and returns opaque cursors.
+  `4h`, `1d`, and `1w`, accepts up to 1000 rows, and returns numeric-string
+  cursors that callers should pass through unchanged.
 
 ### Changed
 - Spot documentation and types now distinguish the served candle route from
