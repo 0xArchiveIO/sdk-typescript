@@ -295,9 +295,9 @@ export interface Hip3Instrument {
  * Coin format: `#<10*outcome_id + side>` (e.g. `#0` = outcome 0 / Yes, `#1` = outcome 0 / No).
  *
  * Symbol path encoding: the backend accepts both the bare numeric form (`0`, `1`)
- * and the on-chain `#`-prefixed form (`#0`, `#1`). The bare form is recommended in
- * URLs to avoid `%23` encoding hassles. The SDK passes the value through as-is —
- * it does NOT auto-encode `#`.
+ * and the on-chain `#`-prefixed form (`#0`, `#1`). The bare numeric form is recommended
+ * as the primary path. The SDK URL-encodes `#` to `%23` on the wire, so both forms
+ * are accepted safely through `fetch` URL parsing.
  *
  * Note: HIP-4 `mark_price` / `midPrice` on related endpoints (open interest,
  * prices, summary) are implied probabilities in [0, 1], not USD prices.

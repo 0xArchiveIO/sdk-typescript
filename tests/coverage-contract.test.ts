@@ -304,6 +304,8 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(readme).not.toContain('tick-level individual order detail');
     expect(readme).toContain('live bridge paused');
     expect(types).toContain('stored replay only; live bridges paused');
+    expect(types).toContain('The SDK URL-encodes `#` to `%23` on the wire');
+    expect(types).not.toContain('it does NOT auto-encode `#`');
     expect(readme).toMatch(/Per fill.*maker.*taker/i);
     expect(exchanges).toContain('public readonly candles: CandlesResource;');
     expect(exchanges).toContain("new CandlesResource(http, basePath, coinTransform, 10_000)");
