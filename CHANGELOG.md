@@ -17,6 +17,8 @@ semver in spirit.
 ### Changed
 - Spot documentation and types now distinguish the served candle route from
   the still-unsupported funding, open-interest, and liquidation resources.
+- Lighter WebSocket channels are explicitly available for bounded historical
+  replay, not live subscriptions; current data remains available through REST.
 
 ## 1.9.0 (2026-08-22)
 

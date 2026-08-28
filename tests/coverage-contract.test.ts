@@ -302,7 +302,7 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(l3Section).toContain('2026-03-05T00:00:00Z');
     expect(l3Section).not.toContain('1704067200000');
     expect(readme).not.toContain('tick-level individual order detail');
-    expect(readme).toContain('live bridge paused');
+    expect(readme).toContain('live bridges are paused');
     expect(types).toContain('stored replay only; live bridges paused');
     expect(types).toContain('The SDK URL-encodes `#` to `%23` on the wire');
     expect(types).not.toContain('it does NOT auto-encode `#`');

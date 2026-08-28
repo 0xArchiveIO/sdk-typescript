@@ -1144,7 +1144,9 @@ const trades = await client.trades.list('BTC', { start, end });
 
 ## WebSocket Client
 
-The WebSocket client supports two modes: real-time streaming and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
+The WebSocket client supports live subscriptions for supported Hyperliquid channels and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
+
+> Lighter channels support historical replay but not live subscriptions through the 0xArchive WebSocket. Use REST for current data and REST, WebSocket replay, or exports for historical data.
 
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
@@ -1213,13 +1215,15 @@ ws.onReplayComplete((channel, coin, recordsSent) => {
 // Start replay at 10x speed
 ws.replay('orderbook', 'BTC', {
   start: Date.now() - 86400000,  // 24 hours ago
-  end: Date.now(),               // Optional, defaults to now
+  end: Date.now(),               // End of bounded replay window
   speed: 10                       // Optional, defaults to 1x
 });
 
-// Lighter.xyz replay with granularity
-ws.replay('orderbook', 'BTC', {
+// Lighter.xyz replay with granularity (Lighter channels are replay-only;
+// use the Lighter REST resources for current data)
+ws.replay('lighter_orderbook', 'BTC', {
   start: Date.now() - 86400000,
+  end: Date.now(),
   speed: 10,
   granularity: '10s'  // Options: 'checkpoint', '30s', '10s', '1s', 'tick'
 });
@@ -1280,45 +1284,45 @@ const ws = new OxArchiveWs({
 
 #### Hyperliquid Channels
 
-| Channel | Description | Requires Coin | Mode |
-|---------|-------------|---------------|-------------------|
-| `orderbook` | L2 order book updates | Yes | Realtime + replay |
-| `trades` | Trade/fill updates | Yes | Realtime + replay |
-| `candles` | OHLCV candle data | Yes | Replay only |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Realtime + replay (live as of 1.6.0) |
-| `open_interest` | Open interest snapshots | Yes | Replay/stream only |
-| `funding` | Funding rate snapshots | Yes | Replay/stream only |
-| `ticker` | Price and 24h volume | Yes | Real-time only |
-| `all_tickers` | All market tickers | No | Real-time only |
-| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Real-time only |
-| `l4_orders` | Order lifecycle events with user attribution | Yes | Real-time only |
+| Channel | Description | Requires Coin | Live Subscription | Historical Replay |
+|---------|-------------|---------------|-------------------|-------------------|
+| `orderbook` | L2 order book updates | Yes | Yes | Yes |
+| `trades` | Trade/fill updates | Yes | Yes | Yes |
+| `candles` | OHLCV candle data | Yes | No | Yes |
+| `liquidations` | Liquidation events (May 2025+) | Yes | Yes | Yes |
+| `open_interest` | Open interest snapshots | Yes | No | Yes |
+| `funding` | Funding rate snapshots | Yes | No | Yes |
+| `ticker` | Price and 24h volume | Yes | Yes | No |
+| `all_tickers` | All market tickers | No | Yes | No |
+| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | No |
+| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | No |
 
 Each `liquidations` data message is a fill row with `is_liquidation: true` — the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
 
 #### HIP-3 Builder Perps Channels
 
-| Channel | Description | Requires Coin | Mode |
-|---------|-------------|---------------|-------------------|
-| `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Realtime + replay |
-| `hip3_trades` | HIP-3 trade/fill updates | Yes | Realtime + replay |
-| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Realtime + replay |
-| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Replay/stream only |
-| `hip3_funding` | HIP-3 funding rate snapshots | Yes | Replay/stream only |
-| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Realtime + replay (live as of 1.6.0) |
-| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Real-time only |
-| `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Real-time only |
+| Channel | Description | Requires Coin | Live Subscription | Historical Replay |
+|---------|-------------|---------------|-------------------|-------------------|
+| `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes | Yes |
+| `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes | Yes |
+| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes | Yes |
+| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | No | Yes |
+| `hip3_funding` | HIP-3 funding rate snapshots | Yes | No | Yes |
+| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes | Yes |
+| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
+| `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
 #### HIP-4 Outcome-Market Channels
 
-| Channel | Description | Requires Coin | Mode |
-|---------|-------------|---------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Stored replay only; live bridge paused |
-| `hip4_trades` | HIP-4 trade/fill updates | Yes | Realtime + replay |
-| `hip4_open_interest` | HIP-4 open interest (per side) | Yes | Stored replay only; live bridge paused |
-| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Real-time only |
-| `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Real-time only |
+| Channel | Description | Requires Coin | Live Subscription | Historical Replay |
+|---------|-------------|---------------|-------------------|-------------------|
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | No | Yes |
+| `hip4_trades` | HIP-4 trade/fill updates | Yes | Yes | Yes |
+| `hip4_open_interest` | HIP-4 open interest (per side) | Yes | No | Yes |
+| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Yes | No |
+| `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Yes | No |
 
 HIP-4 has no funding or liquidation channel. Candle history and current outcome-side OI are available through REST from 2026-05-02; OI updates at ~10s. Stored WebSocket replay is available for HIP-4 order-book and OI history, but their live bridges are paused. HIP-4 `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
 
@@ -1338,13 +1342,13 @@ ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
 
 #### Hyperliquid Spot Channels
 
-| Channel | Description | Requires Coin | Mode |
-|---------|-------------|---------------|-------------------|
-| `spot_orderbook` | Spot L2 order book snapshots | Yes | Real-time only |
-| `spot_trades` | Spot trade/fill updates | Yes | Real-time only |
-| `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Real-time only |
-| `spot_l4_orders` | Spot order lifecycle events | Yes | Real-time only |
-| `spot_twap` | Spot TWAP statuses | Yes | Real-time only |
+| Channel | Description | Requires Coin | Live Subscription | Historical Replay |
+|---------|-------------|---------------|-------------------|-------------------|
+| `spot_orderbook` | Spot L2 order book snapshots | Yes | Yes | No |
+| `spot_trades` | Spot trade/fill updates | Yes | Yes | No |
+| `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Yes | No |
+| `spot_l4_orders` | Spot order lifecycle events | Yes | Yes | No |
+| `spot_twap` | Spot TWAP statuses | Yes | Yes | No |
 
 Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`). The server resolves the dashed form to wire format internally. Spot has no funding, open interest, or liquidations; candle history is REST-only through `client.spot.candles` and has no `spot_candles` WebSocket channel.
 
@@ -1387,16 +1391,18 @@ ws.subscribeHip3Liquidations('hyna:BTC');
 
 #### Lighter.xyz Channels
 
-| Channel | Description | Requires Coin | Historical Support |
-|---------|-------------|---------------|-------------------|
-| `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | Yes |
-| `lighter_trades` | Lighter trade/fill updates | Yes | Yes |
-| `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
-| `lighter_open_interest` | Lighter open interest snapshots | Yes | Replay/stream only |
-| `lighter_funding` | Lighter funding rate snapshots | Yes | Replay/stream only |
-| `lighter_l3_orderbook` | Lighter L3 order-level orderbook | Yes | Yes |
+| Channel | Description | Requires Coin | Live Subscription | Historical Replay | Current Data Path |
+|---------|-------------|---------------|-------------------|-------------------|-------------------|
+| `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | No | Yes | Lighter REST |
+| `lighter_trades` | Lighter trade/fill updates | Yes | No | Yes | Lighter REST |
+| `lighter_candles` | Lighter OHLCV candle data | Yes | No | Yes | Lighter REST |
+| `lighter_open_interest` | Lighter open interest snapshots | Yes | No | Yes | Lighter REST |
+| `lighter_funding` | Lighter funding rate snapshots | Yes | No | Yes | Lighter REST |
+| `lighter_l3_orderbook` | Lighter L3 order-level orderbook | Yes | No | Yes | Lighter REST |
 
-#### Candle Replay/Stream
+Current Lighter data is available through the REST resources. Historical Lighter data is available through REST, WebSocket replay, or exports.
+
+#### Candle Replay
 
 ```typescript
 // Replay candles at 10x speed
@@ -1407,9 +1413,10 @@ ws.replay('candles', 'BTC', {
   interval: '15m'  // 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
 });
 
-// Lighter.xyz candles
+// Lighter.xyz candles (replay only; use REST for current data)
 ws.replay('lighter_candles', 'BTC', {
   start: Date.now() - 86400000,
+  end: Date.now(),
   speed: 10,
   interval: '5m'
 });

@@ -18,6 +18,7 @@
  * await ws.connect();
  * ws.replay('orderbook', 'BTC', {
  *   start: Date.now() - 86400000,
+ *   end: Date.now(),
  *   speed: 10 // 10x speed
  * });
  * ```
@@ -69,6 +70,25 @@ const DEFAULT_WS_URL = 'wss://api.0xarchive.io/ws';
 const DEFAULT_PING_INTERVAL = 30000; // 30 seconds
 const DEFAULT_RECONNECT_DELAY = 1000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
+
+export const LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = new Set([
+  'lighter_orderbook',
+  'lighter_trades',
+  'lighter_candles',
+  'lighter_open_interest',
+  'lighter_funding',
+  'lighter_l3_orderbook',
+]);
+
+export const LIGHTER_SUBSCRIPTION_ERROR =
+  'Lighter WebSocket channels support replay, not live subscriptions. ' +
+  'Use REST for current data or a replay request for stored history.';
+
+function validateLiveSubscription(channel: WsChannel): void {
+  if (LIGHTER_REPLAY_CHANNELS.has(channel)) {
+    throw new Error(LIGHTER_SUBSCRIPTION_ERROR);
+  }
+}
 
 // Server idle timeout is 60 seconds. The SDK sends pings every 30 seconds
 // to keep the connection alive. Browser WebSocket API automatically responds
@@ -183,7 +203,7 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
 }
 
 /**
- * WebSocket client for real-time data streaming.
+ * WebSocket client for supported live data and historical replay.
  *
  * **Keep-Alive:** The server sends WebSocket ping frames every 30 seconds
  * and will disconnect idle connections after 60 seconds. This SDK automatically
@@ -310,9 +330,13 @@ export class OxArchiveWs {
   }
 
   /**
-   * Subscribe to a channel
+   * Subscribe to a supported live channel.
+   *
+   * Lighter channels are available through `replay`, not live subscriptions.
+   * Use REST for current data or a bounded replay request for stored history.
    */
   subscribe(channel: WsChannel, coin?: string): void {
+    validateLiveSubscription(channel);
     const key = this.subscriptionKey(channel, coin);
     this.subscriptions.add(key);
 
@@ -485,7 +509,8 @@ export class OxArchiveWs {
   // ==========================================================================
 
   /**
-   * Start historical replay with timing preserved
+   * Start historical replay with timing preserved.
+   * Lighter channels support bounded replay only; use REST for current data.
    *
    * @param channel - Data channel to replay
    * @param coin - Trading pair (e.g., 'BTC', 'ETH')
@@ -495,6 +520,7 @@ export class OxArchiveWs {
    * ```typescript
    * ws.replay('orderbook', 'BTC', {
    *   start: Date.now() - 86400000, // 24 hours ago
+   *   end: Date.now(),
    *   speed: 10 // 10x faster than real-time
    * });
    * ```

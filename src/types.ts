@@ -1029,11 +1029,14 @@ export interface PriceHistoryParams extends CursorPaginationParams {
 /**
  * WebSocket channel types.
  *
- * - ticker/all_tickers: real-time only
- * - liquidations: realtime + replay (Hyperliquid; live as of 1.6.0)
- * - hip3_liquidations: realtime + replay (HIP-3; live as of 1.6.0)
- * - open_interest, funding, lighter_open_interest, lighter_funding,
- *   hip3_open_interest, hip3_funding: historical only (replay/stream)
+ * - ticker/all_tickers: live subscriptions only
+ * - liquidations: live + replay (Hyperliquid; live as of 1.6.0)
+ * - hip3_liquidations: live + replay (HIP-3; live as of 1.6.0)
+ * - lighter_orderbook, lighter_trades, lighter_candles,
+ *   lighter_open_interest, lighter_funding, lighter_l3_orderbook:
+ *   historical replay only; use Lighter REST for current data
+ * - open_interest, funding, hip3_open_interest, hip3_funding: historical only
+ *   (replay/stream)
  *
  * HIP-4 channels (outcome contracts; no funding or liquidations):
  * - hip4_trades: realtime + replay
