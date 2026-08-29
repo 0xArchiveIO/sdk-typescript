@@ -27,6 +27,7 @@ import {
   L3OrderBookResource,
   SpotPairsResource,
   SpotTwapResource,
+  Hip3BreadthResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -241,6 +242,9 @@ export class Hip3Client {
    */
   public readonly l2Orderbook: L2OrderBookResource;
 
+  /** Aggregate market breadth above the current UTC-session VWAP. */
+  public readonly breadth: Hip3BreadthResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -258,6 +262,7 @@ export class Hip3Client {
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
+    this.breadth = new Hip3BreadthResource(http, basePath);
   }
 
   /**

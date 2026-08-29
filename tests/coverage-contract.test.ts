@@ -344,4 +344,110 @@ describe('HIP-4 candles and coverage contract', () => {
 
     expect('funding' in client.hyperliquid.hip4).toBe(false);
   });
+
+  it('exposes typed HIP-3 breadth above session VWAP current and history routes', async () => {
+    const snapshot = {
+      session_date: '2026-08-28',
+      calculated_at: '2026-08-28T12:00:00Z',
+      value_pct: null,
+      coverage_ratio: 0,
+      counts: {
+        candidates: 3,
+        eligible: 0,
+        above: 0,
+        at: 0,
+        below: 0,
+        excluded_no_session_volume: 2,
+        excluded_stale_price: 1,
+      },
+      namespaces: {
+        eligible: {},
+        above: {},
+        at: {},
+        below: {},
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: snapshot,
+          meta: { count: 1, request_id: 'breadth-current' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: [snapshot],
+          meta: {
+            count: 1,
+            next_cursor: '1756382400000',
+            request_id: 'breadth-history',
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OxArchive({
+      apiKey: 'test-key',
+      baseUrl: 'https://api.example.test',
+      validate: true,
+    });
+    const current = await client.hyperliquid.hip3.breadth.current();
+    const history = await client.hyperliquid.hip3.breadth.history({
+      start: 1756382400000,
+      end: 1756386000000,
+      cursor: '1756380000000',
+      limit: 1000,
+      interval: '5m',
+    });
+
+    expect(current).toMatchObject({
+      sessionDate: '2026-08-28',
+      calculatedAt: '2026-08-28T12:00:00Z',
+      valuePct: null,
+      coverageRatio: 0,
+      counts: {
+        candidates: 3,
+        eligible: 0,
+        excludedNoSessionVolume: 2,
+        excludedStalePrice: 1,
+      },
+      namespaces: { eligible: {}, above: {}, at: {}, below: {} },
+    });
+    expect(history).toEqual({
+      data: [current],
+      nextCursor: '1756382400000',
+    });
+
+    const currentUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(currentUrl.pathname).toBe('/v1/hyperliquid/hip3/breadth/above-vwap/current');
+    expect([...currentUrl.searchParams]).toEqual([]);
+    const historyUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    expect(historyUrl.pathname).toBe('/v1/hyperliquid/hip3/breadth/above-vwap');
+    expect(historyUrl.searchParams.get('start')).toBe('1756382400000');
+    expect(historyUrl.searchParams.get('end')).toBe('1756386000000');
+    expect(historyUrl.searchParams.get('cursor')).toBe('1756380000000');
+    expect(historyUrl.searchParams.get('limit')).toBe('1000');
+    expect(historyUrl.searchParams.get('interval')).toBe('5m');
+
+    await expect(client.hyperliquid.hip3.breadth.history({ limit: 1001 }))
+      .rejects.toThrow('limit must be between 1 and 1000');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('documents projected liquidation cadence and Lighter funding units', () => {
+    const readme = readRepoFile('README.md');
+    const changelog = readRepoFile('CHANGELOG.md');
+    const types = readRepoFile('src/types.ts');
+
+    expect(`${readme}\n${changelog}\n${types}`).toContain('about every five minutes');
+    expect(`${readme}\n${changelog}\n${types}`).toMatch(/fractional[\s\S]{0,80}non-annualized/i);
+    expect(changelog).toMatch(/breaking unit correction/i);
+    expect(`${readme}\n${changelog}\n${types}`).not.toMatch(/45 minutes/i);
+  });
 });

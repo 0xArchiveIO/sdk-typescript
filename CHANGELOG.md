@@ -19,6 +19,16 @@ semver in spirit.
   the still-unsupported funding, open-interest, and liquidation resources.
 - Lighter WebSocket channels are explicitly available for bounded historical
   replay, not live subscriptions; current data remains available through REST.
+- HIP-3 breadth above the current UTC-session VWAP is available through
+  `client.hyperliquid.hip3.breadth.current()` and `.history()`. History begins
+  on 2026-08-28; `valuePct` is `null` when no instruments are eligible.
+- Hyperliquid core `l4_diffs` and `l4_orders` replay now documents the exact
+  `l4_snapshot` then ordered `l4_batch` sequence. HIP-3, HIP-4, and Spot L4
+  remain live-only.
+- Projected forced-liquidation price levels refresh about every five minutes.
+- **Breaking unit correction:** Lighter `funding_rate` is fractional and
+  non-annualized. Consumers that compensated for the former percent units
+  must update their conversion.
 
 ## 1.9.0 (2026-08-22)
 
@@ -44,7 +54,7 @@ semver in spirit.
 - **Liquidation levels**: `client.hyperliquid.liquidations.levels(symbol, params?)`
   and the HIP-3 equivalent. Projected forced-liquidation levels computed from
   clearinghouse positions and margin state, bucketed around the snapshot mark
-  price. Snapshots refresh about every 45 minutes; `params.at` (epoch ms)
+  price. Snapshots refresh about every five minutes; `params.at` (epoch ms)
   serves a point-in-time read. `params.side` filters one side.
 - **Liquidation levels history**: `liquidations.levelsHistory(symbol, params?)`
   with cursor pagination (`start`/`end`/`limit`/`cursor`) and `summary: true`

@@ -47,6 +47,12 @@ import type {
   WsChannel,
   WsClientMessage,
   WsServerMessage,
+  WsReplay,
+  WsStandardReplayChannel,
+  WsStandardReplayOptions,
+  WsCoreL4ReplayOptions,
+  HyperliquidCoreL4Channel,
+  HyperliquidL4LiveOnlyChannel,
   WsConnectionState,
   WsEventHandlers,
   OrderBook,
@@ -84,9 +90,35 @@ export const LIGHTER_SUBSCRIPTION_ERROR =
   'Lighter WebSocket channels support replay, not live subscriptions. ' +
   'Use REST for current data or a replay request for stored history.';
 
+export const HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR =
+  'Hyperliquid HIP-3, HIP-4, and Spot L4 channels support live subscriptions only; replay is unavailable.';
+
+export const HYPERLIQUID_CORE_L4_REPLAY_CHANNELS: ReadonlySet<HyperliquidCoreL4Channel> = new Set([
+  'l4_diffs',
+  'l4_orders',
+]);
+
+export const HYPERLIQUID_L4_LIVE_ONLY_CHANNELS: ReadonlySet<HyperliquidL4LiveOnlyChannel> = new Set([
+  'hip3_l4_diffs',
+  'hip3_l4_orders',
+  'hip4_l4_diffs',
+  'hip4_l4_orders',
+  'spot_l4_diffs',
+  'spot_l4_orders',
+]);
+
 function validateLiveSubscription(channel: WsChannel): void {
   if (LIGHTER_REPLAY_CHANNELS.has(channel)) {
     throw new Error(LIGHTER_SUBSCRIPTION_ERROR);
+  }
+}
+
+function validateReplayChannel(channel: WsChannel, end?: number): void {
+  if (HYPERLIQUID_L4_LIVE_ONLY_CHANNELS.has(channel as HyperliquidL4LiveOnlyChannel)) {
+    throw new Error(HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR);
+  }
+  if (HYPERLIQUID_CORE_L4_REPLAY_CHANNELS.has(channel as HyperliquidCoreL4Channel) && end === undefined) {
+    throw new Error('Hyperliquid core L4 replay requires an explicit end timestamp.');
   }
 }
 
@@ -526,6 +558,16 @@ export class OxArchiveWs {
    * ```
    */
   replay(
+    channel: HyperliquidCoreL4Channel,
+    coin: string,
+    options: WsCoreL4ReplayOptions,
+  ): void;
+  replay(
+    channel: WsStandardReplayChannel,
+    coin: string,
+    options: WsStandardReplayOptions,
+  ): void;
+  replay(
     channel: WsChannel,
     coin: string,
     options: {
@@ -535,8 +577,9 @@ export class OxArchiveWs {
       granularity?: string;
       /** Candle interval for candles channel (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w) */
       interval?: string;
-    }
+    },
   ): void {
+    validateReplayChannel(channel, options.end);
     this.send({
       op: 'replay',
       channel,
@@ -546,7 +589,7 @@ export class OxArchiveWs {
       speed: options.speed ?? 1,
       granularity: options.granularity,
       interval: options.interval,
-    });
+    } as WsReplay);
   }
 
   /**
@@ -573,16 +616,13 @@ export class OxArchiveWs {
    * ```
    */
   multiReplay(
-    channels: WsChannel[],
+    channels: WsStandardReplayChannel[],
     coin: string,
-    options: {
-      start: number;
-      end?: number;
-      speed?: number;
-      granularity?: string;
-      interval?: string;
-    }
+    options: WsStandardReplayOptions,
   ): void {
+    for (const channel of channels) {
+      validateReplayChannel(channel, options.end);
+    }
     this.send({
       op: 'replay',
       channels,

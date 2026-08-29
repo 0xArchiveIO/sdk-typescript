@@ -319,6 +319,27 @@ console.log(`Mark price: ${us500.markPrice}`);
 | xyz (Hyperliquid) | `xyz:XYZ100` |
 | km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
 
+#### HIP-3 Market Breadth
+
+HIP-3 breadth reports the percentage of eligible instruments trading above
+their current UTC-session VWAP. History begins on **2026-08-28** and is
+aggregate-only; there is no synthetic pre-launch history. Instruments with no
+session volume or a stale last completed candle are excluded, so coverage can
+change overnight and on weekends. Percentages should not be averaged across
+snapshots; `interval` uses the last snapshot in each bucket.
+
+```typescript
+const breadthNow = await client.hyperliquid.hip3.breadth.current();
+const breadthHistory = await client.hyperliquid.hip3.breadth.history({
+  start: Date.parse('2026-08-28T00:00:00Z'),
+  end: Date.now(),
+  interval: '5m',
+});
+
+// valuePct is null when no instruments are eligible, not 0.
+console.log(breadthNow.valuePct, breadthHistory.nextCursor);
+```
+
 #### HIP-4 Outcome Markets
 
 HIP-4 is Hyperliquid's binary outcome-market namespace. Each outcome has 2 sides (`#0` = Yes / side 0, `#1` = No / side 1, etc.). Markets are fully collateralized so there are no funding rates or liquidations. Candle history and outcome-side open interest are served from **2026-05-02**; OI updates at **~10s**. `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
@@ -463,6 +484,10 @@ console.log(`Orderbook last updated: ${fresh.orderbook.lastUpdated}`);
 > **Coverage caveats.** Spot candle history is served from 2025-03-22T10:50:22Z through `GET /v1/hyperliquid/spot/candles/{symbol}`. The route supports 1m, 5m, 15m, 30m, 1h, 4h, 1d, and 1w intervals, up to 1000 rows per request; numeric-string cursors should be passed back unchanged. Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
 
 ### Funding Rates
+
+For Lighter, `funding_rate` and the SDK's `fundingRate` are fractional and
+non-annualized. Consumers that compensated for the former percent units must
+update their conversion.
 
 ```typescript
 // Get current funding rate
@@ -1294,10 +1319,16 @@ const ws = new OxArchiveWs({
 | `funding` | Funding rate snapshots | Yes | No | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
 | `all_tickers` | All market tickers | No | Yes | No |
-| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | No |
-| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | No |
+| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
+| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
 
 Each `liquidations` data message is a fill row with `is_liquidation: true` — the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
+
+Hyperliquid core `l4_diffs` and `l4_orders` support bounded replay as an
+`l4_snapshot` followed by ordered `l4_batch` events. The batches are ordered
+by `(block_number, seq)`; pass an explicit `end` for the bounded request and
+the replay `speed` option is ignored. HIP-3,
+HIP-4, and Hyperliquid Spot L4 channels remain live-only.
 
 #### HIP-3 Builder Perps Channels
 
@@ -1486,7 +1517,7 @@ ws.replaySeek(1704067200000);
 ws.replayStop();
 ```
 
-**Channels available for multi-channel replay:** All historical channels can be combined in a single multi-channel replay. This includes `orderbook`, `trades`, `candles`, `liquidations`, `open_interest`, `funding`, and their `lighter_*` and `hip3_*` variants.
+**Channels available for multi-channel replay:** Standard replay channels can be combined in a single multi-channel replay. Core Hyperliquid L4 replay is single-channel. HIP-3, HIP-4, and Hyperliquid Spot L4 channels remain live-only.
 
 ### WebSocket Connection States
 

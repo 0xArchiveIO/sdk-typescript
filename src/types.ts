@@ -207,6 +207,66 @@ export interface CursorResponse<T> {
 }
 
 // =============================================================================
+// HIP-3 Breadth Types
+// =============================================================================
+
+/** Auditable counts behind a HIP-3 breadth-above-session-VWAP snapshot. */
+export interface Hip3BreadthCounts {
+  candidates: number;
+  eligible: number;
+  above: number;
+  at: number;
+  below: number;
+  excludedNoSessionVolume: number;
+  excludedStalePrice: number;
+}
+
+/** Per-builder namespace counts for one HIP-3 breadth snapshot. */
+export type Hip3BreadthNamespaceCounts = Record<string, number>;
+
+/**
+ * Aggregate HIP-3 market breadth above the current UTC-session VWAP.
+ *
+ * `valuePct` is unavailable (`null`) when no instrument is eligible. It is
+ * never a zero-filled substitute for an unavailable aggregate. `coverageRatio`
+ * is `eligible / candidates`; the namespace maps are aggregate counts, not
+ * per-symbol VWAP values.
+ */
+export interface Hip3BreadthSnapshot {
+  /** UTC session date represented by the snapshot (history starts 2026-08-28). */
+  sessionDate: string;
+  /** UTC timestamp when the aggregate was calculated. */
+  calculatedAt: string;
+  /** Percentage of eligible instruments above session VWAP, or null if none are eligible. */
+  valuePct: number | null;
+  /** Ratio of eligible instruments to candidates, in the inclusive range 0..1. */
+  coverageRatio: number;
+  /** Auditable instrument eligibility and direction counts. */
+  counts: Hip3BreadthCounts;
+  /** Aggregate counts keyed by HIP-3 builder namespace. */
+  namespaces: {
+    eligible: Hip3BreadthNamespaceCounts;
+    above: Hip3BreadthNamespaceCounts;
+    at: Hip3BreadthNamespaceCounts;
+    below: Hip3BreadthNamespaceCounts;
+  };
+}
+
+/** Parameters for HIP-3 breadth-above-session-VWAP history. */
+export interface Hip3BreadthHistoryParams {
+  /** Range start, epoch milliseconds inclusive. Defaults to the route window. */
+  start?: number;
+  /** Range end, epoch milliseconds inclusive. Defaults to now. */
+  end?: number;
+  /** Opaque cursor returned as `nextCursor`; pass it through unchanged. */
+  cursor?: string;
+  /** Snapshots per page, from 1 through 1000. */
+  limit?: number;
+  /** Optional last-observation-downsampling interval. */
+  interval?: OiFundingInterval;
+}
+
+// =============================================================================
 // Instruments Types
 // =============================================================================
 
@@ -559,7 +619,7 @@ export interface FundingRate {
   coin: string;
   /** Funding timestamp (UTC) */
   timestamp: string;
-  /** Funding rate as decimal (e.g., 0.0001 = 0.01%) */
+  /** Funding rate as decimal (e.g., 0.0001 = 0.01%); Lighter is fractional and non-annualized. */
   fundingRate: string;
   /** Premium component of funding rate */
   premium?: string;
@@ -728,8 +788,9 @@ export interface LiquidationLevelBucket {
 
 /**
  * Projected forced-liquidation levels for one snapshot, computed from
- * clearinghouse positions and margin state. Snapshots refresh roughly every
- * 45 minutes; `snapshotTs` identifies the snapshot served.
+ * clearinghouse positions and margin state. Snapshots refresh about every
+ * five minutes; this is a measured cadence, not a hard guarantee. `snapshotTs`
+ * identifies the snapshot served.
  */
 export interface LiquidationLevels {
   /** Mark price at the snapshot, center of the requested range */
@@ -1041,7 +1102,10 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  * HIP-4 channels (outcome contracts; no funding or liquidations):
  * - hip4_trades: realtime + replay
  * - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused
- * - hip4_l4_diffs, hip4_l4_orders: real-time only
+ * - l4_diffs, l4_orders: Hyperliquid core live data and bounded replay. Core
+ *   replay starts with `l4_snapshot`, followed by ordered `l4_batch` pages.
+ * - hip3_l4_diffs, hip3_l4_orders, hip4_l4_diffs, hip4_l4_orders,
+ *   spot_l4_diffs, spot_l4_orders: real-time only
  *
  * Liquidation messages share the trade wire format: each item is a fill row
  * with `is_liquidation: true`.
@@ -1058,6 +1122,27 @@ export type WsChannel =
   | 'l4_diffs' | 'l4_orders'
   | 'hip3_l4_diffs' | 'hip3_l4_orders'
   | 'hip4_l4_diffs' | 'hip4_l4_orders';
+
+/** Hyperliquid core L4 channels with checkpoint-anchored replay support. */
+export type HyperliquidCoreL4Channel = 'l4_diffs' | 'l4_orders';
+
+/** HIP-3 L4 channels. These channels are live-only. */
+export type Hip3L4Channel = 'hip3_l4_diffs' | 'hip3_l4_orders';
+
+/** HIP-4 L4 channels. These channels are live-only. */
+export type Hip4L4Channel = 'hip4_l4_diffs' | 'hip4_l4_orders';
+
+/** Hyperliquid Spot L4 channels. These channels are live-only. */
+export type SpotL4Channel = 'spot_l4_diffs' | 'spot_l4_orders';
+
+/** L4 channels that must not be sent in a historical replay request. */
+export type HyperliquidL4LiveOnlyChannel = Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
+
+/** Replay-capable channels, including the existing Lighter replay channels. */
+export type WsReplayableChannel = Exclude<WsChannel, HyperliquidL4LiveOnlyChannel>;
+
+/** Replay-capable channels other than the dedicated core L4 replay path. */
+export type WsStandardReplayChannel = Exclude<WsReplayableChannel, HyperliquidCoreL4Channel>;
 
 /** Subscribe message from client */
 export interface WsSubscribe {
@@ -1084,27 +1169,59 @@ export interface WsPing {
   op: 'ping';
 }
 
-/** Replay message from client - replays historical data with timing preserved */
-export interface WsReplay {
+/** Common options for standard timed replay channels. */
+export interface WsStandardReplayOptions {
+  /** Start timestamp (Unix ms). */
+  start: number;
+  /** End timestamp (Unix ms, defaults to now for standard replay). */
+  end?: number;
+  /** Playback speed multiplier (1 = real-time, 10 = 10x faster). */
+  speed?: number;
+  /** Data resolution for Lighter orderbook channels. */
+  granularity?: string;
+  /** Candle or aggregate interval for supported channels. */
+  interval?: string;
+}
+
+/** Standard replay request, including the existing Lighter replay-only path. */
+export interface WsStandardReplay extends WsStandardReplayOptions {
   op: 'replay';
   /** Single channel for replay. Mutually exclusive with `channels`. */
-  channel?: WsChannel;
+  channel?: WsStandardReplayChannel;
   /** Multiple channels for multi-channel replay. Mutually exclusive with `channel`. */
-  channels?: WsChannel[];
+  channels?: WsStandardReplayChannel[];
   symbol?: string;
   /** @deprecated Use `symbol`. */
   coin?: string;
-  /** Start timestamp (Unix ms) */
-  start: number;
-  /** End timestamp (Unix ms, defaults to now) */
-  end?: number;
-  /** Playback speed multiplier (1 = real-time, 10 = 10x faster) */
-  speed?: number;
-  /** Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick') */
-  granularity?: string;
-  /** Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w') */
-  interval?: string;
 }
+
+/** Options for checkpoint-anchored Hyperliquid core L4 replay. */
+export interface WsCoreL4ReplayOptions {
+  /** Start timestamp (Unix ms). */
+  start: number;
+  /** Required end timestamp (Unix ms) for the bounded L4 replay. */
+  end: number;
+  /** Accepted for API compatibility but ignored by the bulk L4 replay task. */
+  speed?: number;
+}
+
+/**
+ * Hyperliquid core L4 replay request. The server emits one `l4_snapshot`
+ * anchor, then one or more `l4_batch` pages ordered by `(block_number, seq)`.
+ * `end` is required because this is a bounded bulk replay; `speed` is ignored.
+ */
+export interface WsCoreL4Replay extends WsCoreL4ReplayOptions {
+  op: 'replay';
+  channel: HyperliquidCoreL4Channel;
+  /** Core L4 replay is single-channel only. */
+  channels?: never;
+  symbol?: string;
+  /** @deprecated Use `symbol`. */
+  coin?: string;
+}
+
+/** Replay request union with live-only HIP-3, HIP-4, and Spot L4 excluded. */
+export type WsReplay = WsStandardReplay | WsCoreL4Replay;
 
 /** Replay control messages */
 export interface WsReplayPause { op: 'replay.pause'; }
@@ -1332,22 +1449,79 @@ export interface WsGapDetected {
   duration_minutes: number;
 }
 
-/** L4 snapshot (sent on l4_diffs/hip3_l4_diffs subscription) */
-export interface WsL4Snapshot {
-  type: 'l4_snapshot';
-  channel: WsChannel;
-  coin: string;
-  last_block_number: number;
-  timestamp: number;
-  data: any;
+/** A checkpoint order entry in an L4 snapshot: user address plus venue order object. */
+export type WsL4SnapshotEntry = [user: string, order: Record<string, unknown>];
+
+/** Replay/live L4 snapshot payload. */
+export interface WsL4SnapshotData {
+  bids: WsL4SnapshotEntry[];
+  asks: WsL4SnapshotEntry[];
 }
 
-/** L4 batched data (all L4 channels) */
-export interface WsL4Batch {
-  type: 'l4_batch';
-  channel: WsChannel;
+/** One L4 diff event in a batch, ordered by `(block_number, seq)`. */
+export interface WsL4DiffEvent {
+  timestamp: number;
+  block_number: number;
+  seq: number;
+  oid: number;
+  user: string;
+  side: string;
+  price: number;
+  diff_type: string;
+  new_size: number | null;
+  insert_before: number | null;
+}
+
+/** One L4 order-lifecycle event in a batch, ordered by `(block_number, seq)`. */
+export interface WsL4OrderEvent {
+  timestamp: number;
+  block_number: number;
+  seq: number;
+  oid: number;
+  user: string;
+  status: string;
+  side: string;
+  limit_price: number;
+  size: number;
+  orig_size: number;
+  order_type: string;
+  trigger_condition: string;
+  is_trigger: boolean;
+  trigger_price: number;
+  is_position_tpsl: boolean;
+  reduce_only: boolean;
+  tif: string | null;
+  cloid: string | null;
+}
+
+/** L4 batch event item for either the diffs or order-lifecycle channel. */
+export type WsL4BatchEvent = WsL4DiffEvent | WsL4OrderEvent;
+
+/**
+ * L4 snapshot envelope. Core replay sends this first, anchored at the nearest
+ * checkpoint at or before the requested start. HIP-3, HIP-4, and Spot L4 use
+ * the same envelope for live delivery only.
+ */
+export interface WsL4Snapshot<T = WsL4SnapshotData> {
+  type: 'l4_snapshot';
+  channel: HyperliquidCoreL4Channel | Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
   coin: string;
-  data: any[];
+  symbol: string;
+  last_block_number: number;
+  timestamp: number;
+  data: T;
+}
+
+/**
+ * L4 batch envelope. Core replay emits batches after its initial snapshot in
+ * strict `(block_number, seq)` order; HIP-3, HIP-4, and Spot L4 are live-only.
+ */
+export interface WsL4Batch<T extends WsL4BatchEvent = WsL4BatchEvent> {
+  type: 'l4_batch';
+  channel: HyperliquidCoreL4Channel | Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
+  coin: string;
+  symbol: string;
+  data: T[];
 }
 
 /**
