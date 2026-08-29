@@ -9,7 +9,7 @@ describe('HIP-4 candles and coverage contract', () => {
     vi.unstubAllGlobals();
   });
 
-  it('exposes typed HIP-4 candle history and encodes canonical coin paths', async () => {
+  it('uses the primary bare numeric HIP-4 candle path and preserves numeric-string cursors', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -27,7 +27,7 @@ describe('HIP-4 candles and coverage contract', () => {
         ],
         meta: {
           count: 1,
-          next_cursor: 'next-cursor',
+          next_cursor: '1777708860000',
           request_id: 'request-1',
         },
       }),
@@ -38,7 +38,7 @@ describe('HIP-4 candles and coverage contract', () => {
       apiKey: 'test-key',
       baseUrl: 'https://api.example.test',
     });
-    const result = await client.hyperliquid.hip4.candles.history('#0', {
+    const result = await client.hyperliquid.hip4.candles.history('0', {
       start: '2026-05-02T08:00:00Z',
       end: '2026-05-02T09:00:00Z',
       interval: '1m',
@@ -55,18 +55,26 @@ describe('HIP-4 candles and coverage contract', () => {
           volume: 10,
         },
       ],
-      nextCursor: 'next-cursor',
+      nextCursor: '1777708860000',
     });
 
     const [requestUrl] = fetchMock.mock.calls[0] as [string];
     const url = new URL(requestUrl);
-    expect(url.pathname).toBe('/v1/hyperliquid/hip4/candles/%230');
+    expect(url.pathname).toBe('/v1/hyperliquid/hip4/candles/0');
     expect(url.searchParams.get('interval')).toBe('1m');
     expect(url.searchParams.get('start')).toBe(String(Date.parse('2026-05-02T08:00:00Z')));
     expect(url.searchParams.get('end')).toBe(String(Date.parse('2026-05-02T09:00:00Z')));
+
+    await client.hyperliquid.hip4.candles.history('#0', {
+      start: '2026-05-02T08:00:00Z',
+      end: '2026-05-02T09:00:00Z',
+      interval: '1m',
+    });
+    const legacyUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    expect(legacyUrl.pathname).toBe('/v1/hyperliquid/hip4/candles/%230');
   });
 
-  it('exposes authenticated Spot candle history with an opaque cursor', async () => {
+  it('preserves a numeric-string cursor across authenticated Spot candle pagination', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
@@ -83,7 +91,7 @@ describe('HIP-4 candles and coverage contract', () => {
           }],
           meta: {
             count: 1,
-            next_cursor: 'spot-cursor/opaque-token',
+            next_cursor: '1742642422000',
             request_id: 'request-spot-candles-1',
           },
         }),
@@ -123,7 +131,7 @@ describe('HIP-4 candles and coverage contract', () => {
       close: 18.3,
       volume: 42,
     });
-    expect(first.nextCursor).toBe('spot-cursor/opaque-token');
+    expect(first.nextCursor).toBe('1742642422000');
     expect(second.data).toEqual([]);
 
     const firstUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
@@ -136,7 +144,7 @@ describe('HIP-4 candles and coverage contract', () => {
 
     const secondUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
     expect(secondUrl.pathname).toBe('/v1/hyperliquid/spot/candles/HYPE-USDC');
-    expect(secondUrl.searchParams.get('cursor')).toBe('spot-cursor/opaque-token');
+    expect(secondUrl.searchParams.get('cursor')).toBe('1742642422000');
   });
 
   it('enforces route-specific candle limits before issuing a request', async () => {
@@ -159,12 +167,13 @@ describe('HIP-4 candles and coverage contract', () => {
 
     await expect(client.spot.candles.history('HYPE-USDC', { ...params, limit: 1001 }))
       .rejects.toThrow('limit must be between 1 and 1000');
-    await expect(client.hyperliquid.hip3.candles.history('xyz:XYZ100', { ...params, limit: 1001 }))
-      .rejects.toThrow('limit must be between 1 and 1000');
+    await expect(client.hyperliquid.hip3.candles.history('xyz:XYZ100', { ...params, limit: 10_001 }))
+      .rejects.toThrow('limit must be between 1 and 10000');
+    await client.hyperliquid.hip3.candles.history('xyz:XYZ100', { ...params, limit: 10_000 });
     await client.hyperliquid.candles.history('BTC', { ...params, limit: 10_000 });
     await client.lighter.candles.history('BTC', { ...params, limit: 10_000 });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('preserves HIP-4 per-side OI identity fields through validation', async () => {
@@ -185,7 +194,7 @@ describe('HIP-4 candles and coverage contract', () => {
         json: async () => ({
           success: true,
           data: [record],
-          meta: { count: 1, next_cursor: 'next-oi', request_id: 'request-oi-history' },
+          meta: { count: 1, next_cursor: '1777708860000', request_id: 'request-oi-history' },
         }),
       })
       .mockResolvedValueOnce({
@@ -293,11 +302,13 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(l3Section).toContain('2026-03-05T00:00:00Z');
     expect(l3Section).not.toContain('1704067200000');
     expect(readme).not.toContain('tick-level individual order detail');
-    expect(readme).toContain('live bridge paused');
+    expect(readme).toContain('live bridges are paused');
     expect(types).toContain('stored replay only; live bridges paused');
+    expect(types).toContain('The SDK URL-encodes `#` to `%23` on the wire');
+    expect(types).not.toContain('it does NOT auto-encode `#`');
     expect(readme).toMatch(/Per fill.*maker.*taker/i);
     expect(exchanges).toContain('public readonly candles: CandlesResource;');
-    expect(exchanges).toContain("new CandlesResource(http, basePath, coinTransform, 1_000)");
+    expect(exchanges).toContain("new CandlesResource(http, basePath, coinTransform, 10_000)");
     expect(hip4Section).not.toMatch(/HIP-4[\s\S]{0,220}no candles by design/i);
 
     const spotSectionStart = readme.indexOf('#### Hyperliquid Spot');
@@ -306,15 +317,16 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(spotSection).toContain('GET /v1/hyperliquid/spot/candles/{symbol}');
     expect(spotSection).toContain('client.spot.candles.history');
     expect(spotSection).toContain('2025-03-22T10:50:22Z');
-    expect(spotSection).toContain('opaque pagination cursors');
+    expect(spotSection).toContain('numeric-string pagination cursors');
     expect(spotSection).not.toMatch(/no funding,[\s\S]{0,80}no candles/i);
     expect(types).toContain('SpotClient.candles');
     expect(exchanges).toContain('2025-03-22T10:50:22Z');
-    expect(candleResource).toContain('10,000 for core Hyperliquid and Lighter');
-    expect(candleResource).toContain('1,000 for HIP-3, HIP-4, and Hyperliquid Spot');
+    expect(candleResource).toContain('10,000 for core Hyperliquid, HIP-3, and Lighter');
+    expect(candleResource).toContain('1,000 for HIP-4 and Hyperliquid Spot');
     expect(candleResource).not.toContain('maximum `limit` of 1000');
     expect(types).toContain('10,000 for core');
-    expect(types).toContain('1,000 for HIP-3, HIP-4, and Hyperliquid Spot');
+    expect(types).toContain('Hyperliquid, HIP-3, and Lighter');
+    expect(types).toContain('1,000 for HIP-4 and Hyperliquid Spot');
     expect(types).not.toContain('accept up to 1000 rows per request');
   });
 
@@ -331,5 +343,111 @@ describe('HIP-4 candles and coverage contract', () => {
     const client = new OxArchive({ apiKey: 'test-key' });
 
     expect('funding' in client.hyperliquid.hip4).toBe(false);
+  });
+
+  it('exposes typed HIP-3 breadth above session VWAP current and history routes', async () => {
+    const snapshot = {
+      session_date: '2026-08-28',
+      calculated_at: '2026-08-28T12:00:00Z',
+      value_pct: null,
+      coverage_ratio: 0,
+      counts: {
+        candidates: 3,
+        eligible: 0,
+        above: 0,
+        at: 0,
+        below: 0,
+        excluded_no_session_volume: 2,
+        excluded_stale_price: 1,
+      },
+      namespaces: {
+        eligible: {},
+        above: {},
+        at: {},
+        below: {},
+      },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: snapshot,
+          meta: { count: 1, request_id: 'breadth-current' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: [snapshot],
+          meta: {
+            count: 1,
+            next_cursor: '1756382400000',
+            request_id: 'breadth-history',
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new OxArchive({
+      apiKey: 'test-key',
+      baseUrl: 'https://api.example.test',
+      validate: true,
+    });
+    const current = await client.hyperliquid.hip3.breadth.current();
+    const history = await client.hyperliquid.hip3.breadth.history({
+      start: 1756382400000,
+      end: 1756386000000,
+      cursor: '1756380000000',
+      limit: 1000,
+      interval: '5m',
+    });
+
+    expect(current).toMatchObject({
+      sessionDate: '2026-08-28',
+      calculatedAt: '2026-08-28T12:00:00Z',
+      valuePct: null,
+      coverageRatio: 0,
+      counts: {
+        candidates: 3,
+        eligible: 0,
+        excludedNoSessionVolume: 2,
+        excludedStalePrice: 1,
+      },
+      namespaces: { eligible: {}, above: {}, at: {}, below: {} },
+    });
+    expect(history).toEqual({
+      data: [current],
+      nextCursor: '1756382400000',
+    });
+
+    const currentUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(currentUrl.pathname).toBe('/v1/hyperliquid/hip3/breadth/above-vwap/current');
+    expect([...currentUrl.searchParams]).toEqual([]);
+    const historyUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    expect(historyUrl.pathname).toBe('/v1/hyperliquid/hip3/breadth/above-vwap');
+    expect(historyUrl.searchParams.get('start')).toBe('1756382400000');
+    expect(historyUrl.searchParams.get('end')).toBe('1756386000000');
+    expect(historyUrl.searchParams.get('cursor')).toBe('1756380000000');
+    expect(historyUrl.searchParams.get('limit')).toBe('1000');
+    expect(historyUrl.searchParams.get('interval')).toBe('5m');
+
+    await expect(client.hyperliquid.hip3.breadth.history({ limit: 1001 }))
+      .rejects.toThrow('limit must be between 1 and 1000');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('documents projected liquidation cadence and Lighter funding units', () => {
+    const readme = readRepoFile('README.md');
+    const changelog = readRepoFile('CHANGELOG.md');
+    const types = readRepoFile('src/types.ts');
+
+    expect(`${readme}\n${changelog}\n${types}`).toContain('about every five minutes');
+    expect(`${readme}\n${changelog}\n${types}`).toMatch(/fractional[\s\S]{0,80}non-annualized/i);
+    expect(changelog).toMatch(/breaking unit correction/i);
+    expect(`${readme}\n${changelog}\n${types}`).not.toMatch(/45 minutes/i);
   });
 });

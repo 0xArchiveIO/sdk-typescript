@@ -153,6 +153,38 @@ export const Hip4OpenInterestSchema = z.object({
 });
 
 // =============================================================================
+// HIP-3 Breadth Schemas
+// =============================================================================
+
+const NonNegativeIntegerSchema = z.number().int().nonnegative();
+
+export const Hip3BreadthCountsSchema = z.object({
+  candidates: NonNegativeIntegerSchema,
+  eligible: NonNegativeIntegerSchema,
+  above: NonNegativeIntegerSchema,
+  at: NonNegativeIntegerSchema,
+  below: NonNegativeIntegerSchema,
+  excludedNoSessionVolume: NonNegativeIntegerSchema,
+  excludedStalePrice: NonNegativeIntegerSchema,
+});
+
+export const Hip3BreadthNamespaceCountsSchema = z.record(NonNegativeIntegerSchema);
+
+export const Hip3BreadthSnapshotSchema = z.object({
+  sessionDate: z.string(),
+  calculatedAt: z.string(),
+  valuePct: z.number().nullable(),
+  coverageRatio: z.number().min(0).max(1),
+  counts: Hip3BreadthCountsSchema,
+  namespaces: z.object({
+    eligible: Hip3BreadthNamespaceCountsSchema,
+    above: Hip3BreadthNamespaceCountsSchema,
+    at: Hip3BreadthNamespaceCountsSchema,
+    below: Hip3BreadthNamespaceCountsSchema,
+  }),
+});
+
+// =============================================================================
 // Liquidation Schemas
 // =============================================================================
 
@@ -289,6 +321,70 @@ export const WsReplaySnapshotSchema = z.object({
   data: z.unknown(),
 });
 
+const WsL4ChannelSchema = z.enum([
+  'l4_diffs', 'l4_orders',
+  'hip3_l4_diffs', 'hip3_l4_orders',
+  'hip4_l4_diffs', 'hip4_l4_orders',
+  'spot_l4_diffs', 'spot_l4_orders',
+]);
+
+const WsL4SnapshotEntrySchema = z.tuple([z.string(), z.record(z.unknown())]);
+
+export const WsL4SnapshotSchema = z.object({
+  type: z.literal('l4_snapshot'),
+  channel: WsL4ChannelSchema,
+  coin: z.string(),
+  symbol: z.string(),
+  last_block_number: z.number().int().nonnegative(),
+  timestamp: z.number().int(),
+  data: z.object({
+    bids: z.array(WsL4SnapshotEntrySchema),
+    asks: z.array(WsL4SnapshotEntrySchema),
+  }),
+});
+
+const WsL4DiffEventSchema = z.object({
+  timestamp: z.number().int(),
+  block_number: z.number().int().nonnegative(),
+  seq: z.number().int().nonnegative(),
+  oid: z.number().int().nonnegative(),
+  user: z.string(),
+  side: z.string(),
+  price: z.number(),
+  diff_type: z.string(),
+  new_size: z.number().nullable(),
+  insert_before: z.number().int().nonnegative().nullable(),
+});
+
+const WsL4OrderEventSchema = z.object({
+  timestamp: z.number().int(),
+  block_number: z.number().int().nonnegative(),
+  seq: z.number().int().nonnegative(),
+  oid: z.number().int().nonnegative(),
+  user: z.string(),
+  status: z.string(),
+  side: z.string(),
+  limit_price: z.number(),
+  size: z.number(),
+  orig_size: z.number(),
+  order_type: z.string(),
+  trigger_condition: z.string(),
+  is_trigger: z.boolean(),
+  trigger_price: z.number(),
+  is_position_tpsl: z.boolean(),
+  reduce_only: z.boolean(),
+  tif: z.string().nullable(),
+  cloid: z.string().nullable(),
+});
+
+export const WsL4BatchSchema = z.object({
+  type: z.literal('l4_batch'),
+  channel: WsL4ChannelSchema,
+  coin: z.string(),
+  symbol: z.string(),
+  data: z.array(z.union([WsL4DiffEventSchema, WsL4OrderEventSchema])),
+});
+
 // Stream messages
 export const WsStreamStartedSchema = z.object({
   type: z.literal('stream_started'),
@@ -353,6 +449,8 @@ export const WsServerMessageSchema = z.discriminatedUnion('type', [
   WsReplayResumedSchema,
   WsReplayCompletedSchema,
   WsReplayStoppedSchema,
+  WsL4SnapshotSchema,
+  WsL4BatchSchema,
   WsReplaySnapshotSchema,
   WsHistoricalDataSchema,
   WsStreamStartedSchema,
@@ -378,6 +476,8 @@ export const OpenInterestResponseSchema = ApiResponseSchema(OpenInterestSchema);
 export const OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(OpenInterestSchema));
 export const Hip4OpenInterestResponseSchema = ApiResponseSchema(Hip4OpenInterestSchema);
 export const Hip4OpenInterestArrayResponseSchema = ApiResponseSchema(z.array(Hip4OpenInterestSchema));
+export const Hip3BreadthResponseSchema = ApiResponseSchema(Hip3BreadthSnapshotSchema);
+export const Hip3BreadthArrayResponseSchema = ApiResponseSchema(z.array(Hip3BreadthSnapshotSchema));
 export const CandleArrayResponseSchema = ApiResponseSchema(z.array(CandleSchema));
 export const LiquidationArrayResponseSchema = ApiResponseSchema(z.array(LiquidationSchema));
 
