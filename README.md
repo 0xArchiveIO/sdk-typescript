@@ -1027,6 +1027,8 @@ const client = new OxArchive({
 
 Get API keys programmatically using an Ethereum wallet. No browser or email required.
 
+Free includes every market, route, schema, and served depth, with history limited to the most recent rolling 30 days and a maximum 30-day span per request or replay. Build and above keep the full retained archive. Plans gate capacity and Free's 30-day history window, not route families, schemas, or served depth. See [Pricing](https://www.0xarchive.io/pricing) for plan capacity.
+
 #### Free Tier (SIWE)
 
 ```typescript
