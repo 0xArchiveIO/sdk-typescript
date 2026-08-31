@@ -5,7 +5,7 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
-## Unreleased
+## 1.9.1 (2026-08-31)
 
 ### Added
 - **Hyperliquid Spot candles**: `client.spot.candles.history()` now wraps
@@ -14,6 +14,11 @@ semver in spirit.
   `4h`, `1d`, and `1w`, accepts up to 1000 rows, and returns opaque cursors.
 
 ### Changed
+- Documented the Free plan history window: Free includes every market, route,
+  schema, and served depth, with history limited to the most recent rolling
+  30 days and a maximum 30-day span per request or replay. Build and above
+  keep the full retained archive. Plans gate capacity and Free's 30-day
+  history window, not route families, schemas, or served depth.
 - Spot documentation and types now distinguish the served candle route from
   the still-unsupported funding, open-interest, and liquidation resources.
 
