@@ -77,7 +77,7 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | Hyperliquid HIP-3 | February 2026+ for served history | Builder perps with family-specific schema coverage; funding and trade history begin in February 2026. Candle history accepts up to 10,000 rows per request. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side open interest are served from 2026-05-02; OI updates at ~10s. No funding. |
 | Hyperliquid Spot | Candles from 2025-03-22T10:50:22Z; trades from March 2025; orderbook, L4, TWAP from May 2026 | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and numeric-string cursors passed through unchanged. No funding, OI, or liquidations. |
-| Lighter.xyz | Candles served from 2025-08-01; observed global fill floor August 27, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
+| Lighter.xyz | Candles served from 2025-08-01; observed global fill floor January 17, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
 
 ## Configuration
 

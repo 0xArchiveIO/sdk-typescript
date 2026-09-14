@@ -67,7 +67,7 @@ export class OxArchive {
   public readonly hyperliquid: HyperliquidClient;
 
   /**
-   * Lighter.xyz exchange data (August 2025+)
+   * Lighter.xyz exchange data. Trade history begins January 17, 2025; exact starts vary by market and data type.
    */
   public readonly lighter: LighterClient;
 
