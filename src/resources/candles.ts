@@ -8,9 +8,10 @@ import { CandleArrayResponseSchema } from '../schemas';
  * The resource is mounted only on clients whose family exposes a candle route.
  * Family-specific limits and coverage are documented on the owning client;
  * the API currently supports the shared 1m-through-1w interval set. Maximum
- * `limit` is route-specific: 10,000 for core Hyperliquid and Lighter, and
- * 1,000 for HIP-3, HIP-4, and Hyperliquid Spot. Pagination cursors are opaque
- * strings.
+ * `limit` is route-specific: 10,000 for core Hyperliquid, HIP-3, and Lighter,
+ * and 1,000 for HIP-4 and Hyperliquid Spot. The API returns pagination cursors
+ * as numeric strings; preserve and resend them unchanged as an opaque client
+ * value.
  *
  * @example
  * ```typescript
