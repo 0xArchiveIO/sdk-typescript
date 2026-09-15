@@ -63,6 +63,7 @@ export {
 
 // L2 Full-Depth Orderbook resource
 export { L2OrderBookResource, type L2OrderBookParams } from './resources/l2-orderbook';
+export { Hip3BreadthResource } from './resources/hip3-breadth';
 
 // Tick-level history params
 export type { TickHistoryParams } from './resources/orderbook';
@@ -99,6 +100,12 @@ export {
   Hip4OpenInterestSchema,
   Hip4OpenInterestResponseSchema,
   Hip4OpenInterestArrayResponseSchema,
+  // HIP-3 breadth schemas
+  Hip3BreadthCountsSchema,
+  Hip3BreadthNamespaceCountsSchema,
+  Hip3BreadthSnapshotSchema,
+  Hip3BreadthResponseSchema,
+  Hip3BreadthArrayResponseSchema,
   // Candle schemas
   CandleIntervalSchema,
   CandleSchema,
@@ -145,6 +152,8 @@ export {
   WsReplayResumedSchema,
   WsReplayCompletedSchema,
   WsReplayStoppedSchema,
+  WsL4SnapshotSchema,
+  WsL4BatchSchema,
   WsReplaySnapshotSchema,
   WsHistoricalDataSchema,
   WsStreamStartedSchema,
@@ -201,6 +210,11 @@ export type {
   // Funding
   FundingRate,
   FundingHistoryParams,
+  // HIP-3 breadth
+  Hip3BreadthCounts,
+  Hip3BreadthNamespaceCounts,
+  Hip3BreadthSnapshot,
+  Hip3BreadthHistoryParams,
   // Open Interest
   OpenInterest,
   Hip4OpenInterest,
@@ -275,6 +289,13 @@ export type {
   Web3SubscribeResult,
   // WebSocket
   WsChannel,
+  HyperliquidCoreL4Channel,
+  Hip3L4Channel,
+  Hip4L4Channel,
+  SpotL4Channel,
+  HyperliquidL4LiveOnlyChannel,
+  WsReplayableChannel,
+  WsStandardReplayChannel,
   WsOptions,
   WsClientMessage,
   WsServerMessage,
@@ -290,6 +311,10 @@ export type {
   WsData,
   // WebSocket Replay (Option B)
   WsReplay,
+  WsStandardReplay,
+  WsStandardReplayOptions,
+  WsCoreL4Replay,
+  WsCoreL4ReplayOptions,
   WsReplayPause,
   WsReplayResume,
   WsReplaySeek,
@@ -316,6 +341,11 @@ export type {
   // L4 WebSocket types
   WsL4Snapshot,
   WsL4Batch,
+  WsL4SnapshotEntry,
+  WsL4SnapshotData,
+  WsL4DiffEvent,
+  WsL4OrderEvent,
+  WsL4BatchEvent,
   // HIP-4 settlement event
   WsOutcomeSettled,
   // Errors

@@ -129,7 +129,7 @@ export class LiquidationsResource {
    * Get projected forced-liquidation levels for a symbol
    *
    * Computed from clearinghouse positions and margin state, bucketed around
-   * the snapshot mark price. Snapshots refresh roughly every 45 minutes;
+   * the snapshot mark price. Snapshots refresh about every five minutes;
    * pass `at` (epoch ms) for a point-in-time read. History begins 2026-07-27.
    *
    * Note: these are projected forced liquidations, not the pending
@@ -151,7 +151,7 @@ export class LiquidationsResource {
   /**
    * Get historical liquidation-levels snapshots with cursor pagination
    *
-   * Ascending by snapshot time (about every 45 minutes, retained from
+   * Ascending by snapshot time (about every five minutes, retained from
    * 2026-07-27). Pass `summary: true` to list snapshots without histograms.
    *
    * @param symbol - The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
