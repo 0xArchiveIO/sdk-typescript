@@ -3,80 +3,93 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>0xArchive · Hyperliquid control room</title>
+<title>0xArchive · Hyperliquid observatory</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#070806; --panel:#0d0f0a; --panel2:#111409; --line:#1c1f15; --ink:#e8e6d8; --dim:#8a8c7a; --dim2:#5c5e50;
-    --plant:#7dffc3; --oracle:#ffb347; --market:#e8ff4a; --acct:#c4b5fd; --tear:#ff5a3c; --late:#ffc857; --long:#ff6b6b; --short:#4fd1c5; --unknown:#8a8c7a;
+    --bg:#0b0d10; --panel:#101318; --panel2:#161a20; --line:#232831; --ink:#e8edf2; --dim:#8b93a0; --dim2:#5c6470;
+    --plant:#3ee6b8; --oracle:#ffb347; --market:#c8f542; --acct:#a78bfa; --tear:#ff5c5c; --late:#ffc857; --long:#ff5c5c; --short:#3ee6b8; --unknown:#5c6470;
     --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   html, body { height:100%; background:var(--bg); color:var(--ink); }
-  body { font:12px/1.4 var(--sans); display:flex; flex-direction:column; min-height:100vh; }
-  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
-  .brand { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap; }
-  .brand b { color:var(--market); font-weight:600; }
-  .kpis { display:flex; flex-wrap:wrap; gap:6px 22px; margin-left:auto; align-items:center; }
-  .kpi { display:flex; flex-direction:column; min-width:96px; }
+  body { font:12px/1.35 var(--sans); display:flex; flex-direction:column; min-height:100vh; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:8px 12px; border-bottom:1px solid var(--line); background:#0d1014; }
+  .brand { font-family:var(--mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; white-space:nowrap; }
+  .brand b { color:var(--plant); font-weight:600; letter-spacing:.12em; }
+  .ticker { display:flex; gap:0; overflow:hidden; flex:1; min-width:0; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; }
+  .ticker .ch { display:flex; align-items:center; gap:8px; padding:0 12px; border-right:1px solid var(--line); white-space:nowrap; color:var(--dim); }
+  .ticker .ch b { color:var(--ink); font-weight:500; }
+  .ticker .ch.bad b { color:var(--tear); }
+  .ticker .ch.warn b { color:var(--oracle); }
+  .kpis { display:flex; flex-wrap:wrap; gap:0; margin-left:auto; align-items:stretch; border:1px solid var(--line); }
+  .kpi { display:flex; flex-direction:column; min-width:88px; padding:4px 10px; border-right:1px solid var(--line); }
+  .kpi:last-child { border-right:0; }
   .kpi .l { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); }
-  .kpi .v { font-family:var(--mono); font-size:18px; line-height:1.1; font-variant-numeric:tabular-nums; }
+  .kpi .v { font-family:var(--mono); font-size:16px; line-height:1.15; font-variant-numeric:tabular-nums; }
   .kpi .v.ok { color:var(--plant); } .kpi .v.warn { color:var(--late); } .kpi .v.bad { color:var(--tear); }
-  .kpi canvas { width:110px; height:20px; display:block; margin-top:2px; }
-  .modes { display:flex; gap:6px; align-items:center; font-family:var(--mono); font-size:10px; color:var(--dim); }
-  .modes button { font:inherit; color:var(--dim); background:transparent; border:1px solid var(--line); border-radius:3px; padding:4px 8px; cursor:pointer; letter-spacing:.08em; text-transform:uppercase; }
-  .modes button.on { color:var(--ink); border-color:var(--dim); }
-  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--dim2); margin-right:6px; vertical-align:middle; }
+  .kpi canvas { width:96px; height:16px; display:block; margin-top:2px; }
+  .modes { display:flex; gap:0; align-items:center; font-family:var(--mono); font-size:10px; color:var(--dim); border:1px solid var(--line); }
+  .modes button { font:inherit; color:var(--dim); background:transparent; border:0; border-right:1px solid var(--line); padding:6px 10px; cursor:pointer; letter-spacing:.1em; text-transform:uppercase; }
+  .modes button:last-child { border-right:0; }
+  .modes button.on { color:#0b0d10; background:var(--plant); }
+  .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dim2); margin-right:6px; vertical-align:middle; }
   .dot.on { background:var(--plant); box-shadow:0 0 8px var(--plant); }
-  main { flex:1; display:grid; gap:8px; padding:8px 16px 12px; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(300px,360px); grid-template-rows:auto auto auto; grid-template-areas:"plant plant tape" "liq oracle tape" "wallets structure tape" "strip strip tape"; }
-  @media (max-width:1180px) { main { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"plant plant" "liq oracle" "wallets structure" "strip strip" "tape tape"; } }
-  @media (max-width:760px)  { main { grid-template-columns:minmax(0,1fr); grid-template-areas:"plant" "liq" "oracle" "structure" "wallets" "strip" "tape"; } }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px 12px; min-width:0; display:flex; flex-direction:column; gap:8px; }
-  .panel h2 { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); display:flex; align-items:center; gap:10px; }
+  main { flex:1; display:grid; gap:1px; padding:0; background:var(--line); grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(320px,380px); grid-template-rows:minmax(168px,22vh) minmax(0,1fr) minmax(0,1fr) auto; grid-template-areas:"strip strip tape" "liq plant tape" "oracle structure tape" "wallets wallets tape"; }
+  @media (max-width:1180px) { main { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"strip strip" "liq plant" "oracle structure" "wallets wallets" "tape tape"; } }
+  @media (max-width:760px)  { main { grid-template-columns:minmax(0,1fr); grid-template-areas:"strip" "liq" "plant" "oracle" "structure" "wallets" "tape"; } }
+  .panel { background:var(--panel); padding:10px 12px; min-width:0; display:flex; flex-direction:column; gap:8px; }
+  .panel h2 { font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); display:flex; align-items:center; gap:10px; }
   .panel h2 .sub { color:var(--dim2); letter-spacing:0; text-transform:none; font-family:var(--sans); font-size:11px; margin-left:auto; }
-  .panel h2 .badge { font-size:9px; padding:2px 6px; border-radius:3px; border:1px solid currentColor; letter-spacing:.1em; }
-  .badge.cascade { color:var(--tear); animation:pulse 1s infinite; }
-  @keyframes pulse { 50% { opacity:.35; } }
-  .cards { display:grid; gap:6px; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); }
-  .card { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:7px 9px; min-width:0; }
-  .card .n { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; display:flex; align-items:center; gap:6px; }
+  .panel h2 .badge { font-size:9px; padding:2px 6px; border:1px solid currentColor; letter-spacing:.12em; }
+  .badge.cascade { color:var(--tear); background:rgba(255,92,92,.12); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+  .cards { display:grid; gap:1px; background:var(--line); grid-template-columns:repeat(auto-fit, minmax(128px, 1fr)); }
+  .card { background:var(--panel2); padding:8px 9px; min-width:0; }
+  .card .n { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; display:flex; align-items:center; gap:6px; }
   .card .m { font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:3px; font-variant-numeric:tabular-nums; }
-  .pill { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--dim2); }
+  .pill { display:inline-block; width:7px; height:7px; background:var(--dim2); }
   .pill.ok { background:var(--plant); } .pill.warn { background:var(--late); } .pill.bad { background:var(--tear); box-shadow:0 0 8px var(--tear); }
   .row { display:flex; flex-wrap:wrap; gap:4px 16px; font-family:var(--mono); font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
   .row b { color:var(--ink); font-weight:500; }
-  .list { display:flex; flex-direction:column; gap:3px; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; }
-  .list .it { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:center; padding:2px 0; border-bottom:1px solid #131610; }
-  .list .it .tag { font-size:9px; letter-spacing:.1em; color:var(--dim); text-transform:uppercase; }
+  .list { display:flex; flex-direction:column; gap:0; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; }
+  .list .it { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid var(--line); }
+  .list .it .tag { font-size:9px; letter-spacing:.12em; color:var(--dim); text-transform:uppercase; }
   .list .it .val { text-align:right; white-space:nowrap; }
-  .list .empty { color:var(--dim2); font-family:var(--sans); }
-  .bar { height:3px; background:var(--market); opacity:.7; border-radius:2px; }
-  canvas.chart { width:100%; height:120px; display:block; }
-  canvas.strip { width:100%; height:110px; display:block; }
+  .list .empty { color:var(--dim2); font-family:var(--sans); padding:8px 0; }
+  .bar { height:2px; background:var(--long); opacity:.85; }
+  canvas.chart { width:100%; height:140px; display:block; background:#0c0e12; }
+  canvas.strip { width:100%; height:148px; display:block; background:#0c0e12; }
   .tape { grid-area:tape; overflow:hidden; }
-  .tape .rows { overflow-y:auto; max-height:calc(100vh - 140px); display:flex; flex-direction:column; gap:1px; }
-  .tr { display:grid; grid-template-columns:58px 52px 1fr auto; gap:8px; align-items:baseline; padding:4px 6px; border-radius:3px; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; border-left:2px solid var(--dim2); }
-  .tr.new { animation:flash 1.5s ease-out; }
-  @keyframes flash { from { background:#22301a; } to { background:transparent; } }
-  .tr .t { color:var(--dim); } .tr .tag { font-size:9px; letter-spacing:.1em; text-transform:uppercase; }
+  .tape .rows { overflow-y:auto; max-height:calc(100vh - 88px); display:flex; flex-direction:column; }
+  .tr { display:grid; grid-template-columns:54px 56px 1fr auto; gap:8px; align-items:baseline; padding:6px 8px; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); border-left:2px solid var(--dim2); }
+  .tr.new { animation:flash .9s ease-out; }
+  @keyframes flash { from { background:rgba(62,230,184,.12); } to { background:transparent; } }
+  .tr .t { color:var(--dim); } .tr .tag { font-size:9px; letter-spacing:.12em; text-transform:uppercase; }
   .tr .x { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .tr .lat { font-size:10px; padding:1px 5px; border-radius:3px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
-  .lat.fast { color:var(--plant); border-color:#1f3b2e; } .lat.arch { color:var(--late); border-color:#3b3418; } .lat.late { color:var(--tear); border-color:#3b1d16; }
+  .tr .lat { font-size:10px; padding:1px 5px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .lat.fast { color:var(--plant); border-color:#1a3d32; } .lat.arch { color:var(--late); border-color:#3b3418; } .lat.late { color:var(--tear); border-color:#3b1d16; }
   .r-plant { border-left-color:var(--plant); } .r-oracle { border-left-color:var(--oracle); } .r-market { border-left-color:var(--market); } .r-acct { border-left-color:var(--acct); }
   .r-plant .tag { color:var(--plant); } .r-oracle .tag { color:var(--oracle); } .r-market .tag { color:var(--market); } .r-acct .tag { color:var(--acct); }
   .long { color:var(--long); } .short { color:var(--short); }
   #plant { grid-area:plant; } #liq { grid-area:liq; } #oracle { grid-area:oracle; } #wallets { grid-area:wallets; } #structure { grid-area:structure; } #strip { grid-area:strip; }
-  footer { padding:6px 16px 12px; font-family:var(--mono); font-size:10px; color:var(--dim); display:flex; flex-wrap:wrap; gap:6px 18px; align-items:center; }
-  footer .now { color:var(--ink); font-family:var(--sans); font-size:12px; max-width:52rem; }
-  #detail { position:fixed; right:16px; bottom:16px; width:min(440px, calc(100vw - 32px)); max-height:60vh; overflow:auto; background:rgba(13,15,10,.97); border:1px solid var(--line); border-radius:6px; padding:10px 12px; font-family:var(--mono); font-size:11px; white-space:pre-wrap; display:none; z-index:5; }
+  footer { padding:8px 12px; font-family:var(--mono); font-size:10px; color:var(--dim); display:flex; flex-wrap:wrap; gap:6px 18px; align-items:center; border-top:1px solid var(--line); background:#0d1014; }
+  footer .now { color:var(--ink); font-family:var(--sans); font-size:12px; max-width:56rem; }
+  #detail { position:fixed; right:0; bottom:0; width:min(440px, calc(100vw - 24px)); max-height:55vh; overflow:auto; background:#101318; border:1px solid var(--line); padding:10px 12px; font-family:var(--mono); font-size:11px; white-space:pre-wrap; display:none; z-index:5; }
   #detail .close { float:right; cursor:pointer; color:var(--dim); padding:0 4px; }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">0xArchive <b>Hyperliquid control room</b></div>
-  <div class="modes"><span><span id="dot" class="dot"></span><span id="conn">connecting</span></span><button id="b-live" class="on">live</button><button id="b-demo">demo</button></div>
+  <div class="brand">0xArchive <b>observatory</b></div>
+  <div class="ticker" id="ticker">
+    <div class="ch">plant <b id="tk-plant">—</b></div>
+    <div class="ch">oracle <b id="tk-oracle">—</b></div>
+    <div class="ch">market <b id="tk-market">—</b></div>
+    <div class="ch">watch <b id="tk-watch">—</b></div>
+  </div>
+  <div class="modes"><span style="padding:0 10px"><span id="dot" class="dot"></span><span id="conn">connecting</span></span><button id="b-live" class="on">live</button><button id="b-demo">demo</button></div>
   <div class="kpis">
     <div class="kpi"><span class="l">chain to you · p50 5m</span><span class="v ok" id="k-lat">–</span><canvas id="k-spark"></canvas></div>
     <div class="kpi"><span class="l">events / min</span><span class="v" id="k-rate">0</span></div>
@@ -87,6 +100,11 @@
 </header>
 
 <main>
+  <section class="panel" id="strip">
+    <h2>Complete observability · four rails · 60 min <span class="sub">torn segment = open incident, closed on the same incident_id · plant under market</span></h2>
+    <canvas class="strip" id="strip-canvas"></canvas>
+  </section>
+
   <section class="panel" id="plant">
     <h2>Plant · every venue, every stream <span class="sub" id="plant-sub">listening on the webhook stream</span></h2>
     <div class="cards" id="venues"></div>
@@ -118,18 +136,13 @@
     <div class="list" id="structure-list"></div>
   </section>
 
-  <section class="panel" id="strip">
-    <h2>Incident tape · last 60 min <span class="sub">torn segment = open incident, closed on the same incident_id</span></h2>
-    <canvas class="strip" id="strip-canvas"></canvas>
-  </section>
-
   <section class="panel tape">
     <h2>Tape <span class="sub" id="tape-sub">newest first</span></h2>
     <div class="rows" id="tape-rows"></div>
   </section>
 </main>
 <footer>
-  <div class="now" id="now">Every panel on this page is fed by 0xArchive webhooks. Nothing here runs a node.</div>
+  <div class="now" id="now">Realtime intelligence on a trusted tape. Heatmaps show liquidations. This shows whether you can believe them.</div>
 </footer>
 <div id="detail"><span class="close" id="detail-close">×</span><span id="detail-body"></span></div>
 
@@ -297,10 +310,10 @@ function renderLiq() {
   const W = r.width, H = r.height, max = Math.max(1, ...buckets.map((b) => b.long + b.short + b.unknown));
   ctx.clearRect(0, 0, W, H);
   const bw = W / 30;
-  for (const bev of bursts) { const x = ((bev.t - m15) / 900000) * W; ctx.fillStyle = "rgba(232,255,74,0.10)"; ctx.fillRect(x - 12, 0, 24, H); ctx.fillStyle = "#e8ff4a"; ctx.font = "500 9px " + MONO; ctx.fillText("BURST", x - 14, 10); }
+  for (const bev of bursts) { const x = ((bev.t - m15) / 900000) * W; ctx.fillStyle = "rgba(200,245,66,0.10)"; ctx.fillRect(x - 12, 0, 24, H); ctx.fillStyle = "#c8f542"; ctx.font = "500 9px " + MONO; ctx.fillText("BURST", x - 14, 10); }
   buckets.forEach((b, i) => {
     let y = H - 14; const x = i * bw + 1, w = bw - 2;
-    for (const [k, col] of [["long", "#ff6b6b"], ["short", "#4fd1c5"], ["unknown", "#5c5e50"]]) { const hh = (b[k] / max) * (H - 26); ctx.fillStyle = col; ctx.fillRect(x, y - hh, w, hh); y -= hh; }
+    for (const [k, col] of [["long", "#ff5c5c"], ["short", "#3ee6b8"], ["unknown", "#5c6470"]]) { const hh = (b[k] / max) * (H - 26); ctx.fillStyle = col; ctx.fillRect(x, y - hh, w, hh); y -= hh; }
   });
   ctx.fillStyle = "#8a8c7a"; ctx.font = "500 9px " + MONO;
   ctx.fillText("15 min ago", 2, H - 3); ctx.fillText("now", W - 22, H - 3); ctx.fillText("peak " + usd(max) + " / 30 s", W / 2 - 40, 10);
@@ -350,7 +363,7 @@ function renderStructure() {
 }
 
 const stripCanvas = $("strip-canvas");
-const RAILS = [["plant", 0.18, "#7dffc3"], ["oracle", 0.40, "#ffb347"], ["market", 0.62, "#e8ff4a"], ["acct", 0.84, "#c4b5fd"]];
+const RAILS = [["plant", 0.18, "#3ee6b8"], ["oracle", 0.40, "#ffb347"], ["market", 0.62, "#c8f542"], ["acct", 0.84, "#a78bfa"]];
 function renderStrip() {
   const t1 = now(), t0 = t1 - 3600000;
   const ctx = stripCanvas.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 2), r = stripCanvas.getBoundingClientRect();
@@ -384,7 +397,23 @@ function renderKpis() {
   spark.width = r.width * dpr; spark.height = r.height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const seq = [...events.values()].filter((e) => FAST.has(e.type) && e.chain_ts).slice(-60);
   const max = Math.max(1000, ...seq.map((e) => e.lag)); ctx.clearRect(0, 0, r.width, r.height);
-  seq.forEach((e, i) => { const x = (i / 60) * r.width, hh = Math.max(1, (Math.min(e.lag, max) / max) * r.height); ctx.fillStyle = e.lag < 1500 ? "#7dffc3" : e.lag < 60000 ? "#ffc857" : "#ff5a3c"; ctx.fillRect(x, r.height - hh, r.width / 60 - 1, hh); });
+  seq.forEach((e, i) => { const x = (i / 60) * r.width, hh = Math.max(1, (Math.min(e.lag, max) / max) * r.height); ctx.fillStyle = e.lag < 1500 ? "#3ee6b8" : e.lag < 60000 ? "#ffc857" : "#ff5c5c"; ctx.fillRect(x, r.height - hh, r.width / 60 - 1, hh); });
+  const openInc = [...incidents.values()].filter((i) => !i.closeAt);
+  const tkP = $("tk-plant"), tkO = $("tk-oracle"), tkM = $("tk-market"), tkW = $("tk-watch");
+  if (tkP) {
+    const plantBad = openInc.some((i) => i.rail === "plant");
+    tkP.textContent = plantBad ? openInc.filter((i) => i.rail === "plant").length + " open" : "intact";
+    tkP.parentElement.className = "ch" + (plantBad ? " bad" : "");
+    const lastJump = [...events.values()].filter((e) => e.type === "oracle.jump").sort((a, b) => b.t - a.t)[0];
+    tkO.textContent = lastJump ? (lastJump.data.symbol || "jump") + " " + (lastJump.data.direction === "down" ? "−" : "+") + num(Math.abs(lastJump.data.change_pct || 0), 1) + "%" : "quiet";
+    tkO.parentElement.className = "ch" + (lastJump && now() - lastJump.t < 120000 ? " warn" : "");
+    const cascadeOn = $("cascade").style.display !== "none";
+    tkM.textContent = cascadeOn ? "CASCADE" : $("k-liq").textContent + " 1h";
+    tkM.parentElement.className = "ch" + (cascadeOn ? " bad" : "");
+    const liqW = [...events.values()].filter((e) => e.type === "account.liquidated" && now() - e.t < 3600000).length;
+    tkW.textContent = liqW ? liqW + " liquidated / h" : "quiet";
+    tkW.parentElement.className = "ch" + (liqW ? " bad" : "");
+  }
   if (mode === "live" && latest) {
     const l = latest.lag / 1000;
     $("now").textContent = `${latest.type}: ${$("tape-rows").firstChild ? $("tape-rows").firstChild.querySelector(".x").textContent : ""}. On chain ${ago(latest.t)} ago, delivered ${l < 1.5 ? "under a second later on the fast path" : l < 90 ? l.toFixed(0) + " s later" : (l / 60).toFixed(1) + " min later on the archive path"}${latest.late ? ", flagged late" : ""}.`;
@@ -420,7 +449,7 @@ S(21.0, "archive.gap_resolved", { symbol: "lighter", stream: "lighter_fills", ga
 S(24.0, "market.breadth_cross", { value: 61, direction: "above", threshold: 60, venue: "hyperliquid" });
 S(27.0, "account.transfer", { token: "USDC", amount: "250000", usdc_value: 250000, kind: "core_to_evm", role: "sender", address: "0x28f0233472b6a44e170e002a72845ca100be4a7e" });
 S(30.0, "market.pga_payment", { amount: 3.2, token: "HYPE", notional_usd: 96, venue: "hyperliquid" });
-const COPY = [[0, "A liquidation heatmap would already be drawing. We have not earned it yet: first, is the plant intact?"], [1, "Plant rail tears: archive.gap_detected on lighter fills. Everything below is untrusted until it heals."], [3.5, "HIP-3 oracle jump on xyz:NVDA. An oracle print, not a candle."], [6.5, "Liquidations start. Per account, exchange-wide, above the floor you set."], [11, "liquidation_burst: the cell, not another drop. Your window, your threshold."], [14, "A watched wallet is in the cascade. Completeness includes who."], [21, "Gap resolved on the same incident_id. Now the cascade is a fact, not a rumor."], [24, "Breadth crosses. Session structure, not a ticker."], [30, "Every panel on this page came from webhooks. Nothing here ran a node."]];
+const COPY = [[0, "Realtime intelligence on a trusted tape. First question: is the plant intact?"], [1, "Plant tears: archive.gap_detected on Lighter fills. Market prints below this are untrusted."], [3.5, "HIP-3 oracle jump on xyz:NVDA. An oracle print, not a candle. Named rail, not NVDA."], [6.5, "Liquidations. Per account, exchange-wide, above the floor you set."], [11, "liquidation_burst is the cell, not another drop. Your window, your threshold."], [14, "A watched wallet is in the cascade. Completeness includes who."], [21, "Gap resolved on the same incident_id. Now the cascade is a fact."], [24, "Breadth crosses. Session structure, not a ticker."], [30, "Every panel is a webhook. Nothing here ran a node."]];
 let demoStart = 0, demoCursor = -1;
 function demoTick() {
   const t = ((performance.now() - demoStart) % LOOP) / 1000;
