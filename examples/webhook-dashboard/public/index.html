@@ -45,7 +45,7 @@
     <span><span id="dot" class="dot"></span><span id="conn">connecting</span></span>
     <button id="b-live" class="on">live</button>
     <button id="b-demo">demo loop</button>
-    <span id="wins"><button data-w="120000" class="on">2m</button><button data-w="600000">10m</button><button data-w="3600000">60m</button></span>
+    <span id="wins"><button data-w="120000">2m</button><button data-w="600000" class="on">10m</button><button data-w="3600000">60m</button></span>
     <span id="clock"></span>
   </div>
 </header>
@@ -133,7 +133,7 @@ function describe(ev) {
 // ── Store ─────────────────────────────────────────────────────────────────
 const events = new Map();            // id -> ev (arrival order)
 const incidents = new Map();         // key -> { openAt, closeAt, rail }
-let mode = "live", win = 120000, selected = null, latest = null;
+let mode = "live", win = 600000, selected = null, latest = null;
 const MAX = 3000;
 
 function evTime(ev) { return Date.parse(ev.chain_ts || ev.observed_at || ev.received_at); }
@@ -143,6 +143,7 @@ function add(ev) {
   ev.rail = railOf(ev.type);
   ev.view = describe(ev);
   ev.t = evTime(ev);
+  ev.rx = Date.parse(ev.received_at) || ev.t;
   events.set(ev.id, ev);
   if (events.size > MAX) events.delete(events.keys().next().value);
   const edge = edgeOf(ev);
@@ -263,11 +264,19 @@ function draw(now) {
   // events
   glyphs.length = 0;
   const perRailLabels = { plant:0, oracle:0, market:0, acct:0 };
-  const list = [...events.values()].filter((e) => e.t >= t0 - 5000 && e.t <= t1).sort((a, b) => b.t - a.t);
+  const list = [...events.values()].filter((e) => (e.t >= t0 - 5000 || e.rx >= t0) && e.t <= t1 + 5000).sort((a, b) => b.t - a.t);
   const mono = getComputedStyle(document.body).getPropertyValue("--mono"), sans = getComputedStyle(document.body).getPropertyValue("--sans");
+  if (mode === "live") list.sort((a, b) => b.rx - a.rx);
   for (const ev of list) {
-    const x = X(ev.t); if (x < left - 10) continue;
+    const x = clamp(X(ev.t), left + 6, right);
     const r = RAIL[ev.rail]; let y = h * r.y;
+    // Arrival halo: a delivery received in the last few seconds pulses in its
+    // rail colour, wherever its chain time puts it on the axis.
+    const sinceRx = (Date.now() - ev.rx) / 1000;
+    if (mode === "live" && sinceRx < 4) {
+      ctx.globalAlpha = 1 - sinceRx / 4; ctx.strokeStyle = r.color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 10 + sinceRx * 10, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+    }
     const v = ev.view, age = ((mode === "demo" ? t0 + demoT * 1000 : t1) - ev.t) / 1000;
     const alpha = mode === "demo" ? clamp(1 - age / 18, 0.25, 1) : clamp(1 - age / ((t1 - t0) / 1000), 0.3, 1);
     ctx.globalAlpha = reduced ? 1 : alpha;
@@ -293,7 +302,8 @@ function draw(now) {
     }
     if (ev.late) { ctx.strokeStyle = "#ffc857"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, hit + 3, 0, Math.PI * 2); ctx.stroke(); }
     glyphs.push({ x, y, r: hit, ev });
-    const wantLabel = ev === selected || v.tone === "burst" || v.tone === "tear" || v.tone === "ok" || (perRailLabels[ev.rail] < 3 && age < (t1 - t0) / 1000 * 0.35);
+    const fresh = mode === "live" ? (Date.now() - ev.rx) / 1000 : age;
+    const wantLabel = ev === selected || v.tone === "burst" || v.tone === "tear" || v.tone === "ok" || (perRailLabels[ev.rail] < 3 && fresh < (t1 - t0) / 1000 * 0.35);
     if (wantLabel) {
       perRailLabels[ev.rail] += 1;
       const lift = (perRailLabels[ev.rail] % 2) ? -22 : 14;
@@ -310,7 +320,8 @@ function draw(now) {
     $("now").textContent = line;
   } else if (latest) {
     const v = latest.view, ago = Math.max(0, (Date.now() - latest.t) / 1000);
-    $("now").textContent = `${latest.type}: ${v.title}${v.sub ? ", " + v.sub : ""}. ${ago < 90 ? ago.toFixed(0) + " s ago" : new Date(latest.t).toLocaleTimeString()}${latest.late ? ", delivered late" : ""}.`;
+    const lagS = Math.max(0, (latest.rx - latest.t) / 1000);
+    $("now").textContent = `${latest.type}: ${v.title}${v.sub ? ", " + v.sub : ""}. On chain ${ago < 90 ? ago.toFixed(0) + " s ago" : "at " + new Date(latest.t).toLocaleTimeString()}, delivered ${lagS < 1.5 ? "under a second later (fast path)" : lagS < 90 ? lagS.toFixed(0) + " s later" : (lagS / 60).toFixed(1) + " min later (archive path)"}${latest.late ? ", flagged late" : ""}.`;
   }
   const open = [...incidents.values()].filter((i) => !i.closeAt).length;
   const counts = { plant:0, oracle:0, market:0, acct:0 }; for (const e of list) counts[e.rail] += 1;
