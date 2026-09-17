@@ -20,6 +20,10 @@ cloudflared tunnel --url http://127.0.0.1:3200
 
 Use the public URL the tunnel prints, with `/webhook` appended, as the endpoint URL below.
 
+## First look without the secret
+
+If you want to see deliveries before you have wired the secret in (a first setup, a shared inbox), start with `ALLOW_UNVERIFIED=1`: deliveries that fail the signature check are still accepted and shown, marked `unverified` on the tape. Never process anything from an unverified delivery; set `WEBHOOK_SECRET` and drop the flag as soon as you have the secret.
+
 ## Point 0xArchive at it
 
 Create the endpoint and keep the secret it returns; it is shown once.
