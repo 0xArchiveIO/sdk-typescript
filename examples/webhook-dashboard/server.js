@@ -16,6 +16,10 @@
 //   DATA_FILE        optional JSONL file every accepted event is appended to
 //   TOLERANCE_S      max signature age in seconds (default 300)
 //   WEBHOOK_PATH     path deliveries are posted to (default /webhook)
+//   OXARCHIVE_API_KEY  optional; with it the dashboard also shows plant status
+//                      (venue health, data lag, completeness, markets covered)
+//                      from the 0xArchive data-quality endpoints
+//   OXARCHIVE_API_URL  API base for that (default https://api.0xarchive.io)
 
 "use strict";
 
@@ -29,6 +33,8 @@ const MAX_EVENTS = Number(process.env.MAX_EVENTS || 2000);
 const TOLERANCE_S = Number(process.env.TOLERANCE_S || 300);
 const WEBHOOK_PATH = process.env.WEBHOOK_PATH || "/webhook";
 const DATA_FILE = process.env.DATA_FILE || "";
+const API_KEY = process.env.OXARCHIVE_API_KEY || "";
+const API_URL = (process.env.OXARCHIVE_API_URL || "https://api.0xarchive.io").replace(/\/$/, "");
 const SECRETS = String(process.env.WEBHOOK_SECRET || "")
   .split(",")
   .map((s) => s.trim())
@@ -138,6 +144,45 @@ function summary() {
 }
 
 // ---------------------------------------------------------------------------
+// Plant status (optional). Polls the data-quality endpoints so the dashboard
+// can show the whole plant, not only what fired: venue health and data lag
+// every 15 s, markets covered every 10 min. Nothing here is required; without
+// a key the page derives everything from the webhook stream alone.
+// ---------------------------------------------------------------------------
+const plant = { enabled: Boolean(API_KEY), fetched_at: null, status: null, latency: null, markets: null, error: null };
+async function apiGet(p) {
+  const res = await fetch(`${API_URL}${p}`, { headers: { "X-API-Key": API_KEY, accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`${p} -> ${res.status}`);
+  const j = await res.json();
+  return j && j.data !== undefined ? j.data : j;
+}
+async function pollPlantFast() {
+  try {
+    const [status, latency] = await Promise.all([apiGet("/v1/data-quality/status"), apiGet("/v1/data-quality/latency")]);
+    plant.status = status; plant.latency = latency; plant.fetched_at = new Date().toISOString(); plant.error = null;
+  } catch (e) { plant.error = String(e.message); }
+}
+async function pollPlantSlow() {
+  try {
+    const list = await apiGet("/v1/symbols");
+    const symbols = Array.isArray(list) ? list : (list.symbols || []);
+    const cutoff = Date.now() - 24 * 3600 * 1000, markets = {};
+    for (const s of symbols) {
+      const live = s.coverage_to && Date.parse(s.coverage_to) > cutoff;
+      const ex = s.exchange || "unknown";
+      markets[ex] = markets[ex] || { total: 0, live: 0 };
+      markets[ex].total += 1; if (live) markets[ex].live += 1;
+    }
+    plant.markets = markets;
+  } catch (e) { plant.error = String(e.message); }
+}
+if (plant.enabled && typeof fetch === "function") {
+  pollPlantFast(); pollPlantSlow();
+  setInterval(pollPlantFast, 15000).unref();
+  setInterval(pollPlantSlow, 600000).unref();
+}
+
+// ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -226,6 +271,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, JSON.stringify(out));
   }
   if (url.pathname === "/stats") return send(res, 200, JSON.stringify(summary()));
+  if (url.pathname === "/plant") return send(res, 200, JSON.stringify(plant));
   if (url.pathname === "/health") return send(res, 200, JSON.stringify({ status: "ok", ...stats, inMemory: events.length }));
 
   if (url.pathname === "/stream") {

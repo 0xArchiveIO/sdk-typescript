@@ -3,361 +3,448 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>0xArchive · Complete observability</title>
+<title>0xArchive · Hyperliquid control room</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#050604; --ink:#e6e4d4; --dim:#7a7c6c; --line:#1a1c14; --panel:#0b0d08;
-    --plant:#7dffc3; --oracle:#ffb347; --market:#e8ff4a; --acct:#c4b5fd; --tear:#ff5a3c; --late:#ffc857;
+    --bg:#070806; --panel:#0d0f0a; --panel2:#111409; --line:#1c1f15; --ink:#e8e6d8; --dim:#8a8c7a; --dim2:#5c5e50;
+    --plant:#7dffc3; --oracle:#ffb347; --market:#e8ff4a; --acct:#c4b5fd; --tear:#ff5a3c; --late:#ffc857; --long:#ff6b6b; --short:#4fd1c5; --unknown:#8a8c7a;
     --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
   html, body { height:100%; background:var(--bg); color:var(--ink); }
-  body { font-family:var(--sans); display:grid; grid-template-rows:auto 1fr auto; overflow:hidden; }
-  header { display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:14px 22px 8px; }
-  .brand { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
+  body { font:12px/1.4 var(--sans); display:flex; flex-direction:column; min-height:100vh; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .brand { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; white-space:nowrap; }
   .brand b { color:var(--market); font-weight:600; }
-  .lede { font-size:13px; color:var(--dim); max-width:44rem; line-height:1.4; }
-  .ctl { margin-left:auto; display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11px; color:var(--dim); }
-  .ctl button { font:inherit; color:var(--dim); background:transparent; border:1px solid var(--line); border-radius:4px; padding:4px 9px; cursor:pointer; }
-  .ctl button.on { color:var(--ink); border-color:var(--dim); }
-  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--dim); margin-right:6px; }
-  .dot.on { background:var(--plant); }
-  main { position:relative; min-height:0; }
-  canvas { display:block; width:100%; height:100%; }
-  #detail { position:absolute; right:22px; top:14px; width:min(380px, 42vw); max-height:calc(100% - 28px); overflow:auto; background:rgba(11,13,8,.94); border:1px solid var(--line); border-radius:6px; padding:10px 12px; font-family:var(--mono); font-size:11px; line-height:1.45; white-space:pre-wrap; display:none; }
-  #detail .close { float:right; color:var(--dim); cursor:pointer; padding:0 4px; }
-  footer { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px 24px; padding:8px 22px 16px; font-family:var(--mono); font-size:11px; color:var(--dim); }
-  .now { color:var(--ink); font-family:var(--sans); font-size:13px; line-height:1.45; max-width:40rem; min-height:2.9em; }
-  .stats { display:flex; flex-wrap:wrap; gap:6px 18px; }
-  .stats b { color:var(--ink); font-weight:500; }
-  .key { display:flex; gap:14px; margin-left:auto; flex-wrap:wrap; }
-  .key i { display:inline-block; width:8px; height:8px; margin-right:5px; vertical-align:middle; }
-  @media (max-width:720px) { .lede { display:none; } #detail { width:calc(100vw - 44px); } }
+  .kpis { display:flex; flex-wrap:wrap; gap:6px 22px; margin-left:auto; align-items:center; }
+  .kpi { display:flex; flex-direction:column; min-width:96px; }
+  .kpi .l { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); }
+  .kpi .v { font-family:var(--mono); font-size:18px; line-height:1.1; font-variant-numeric:tabular-nums; }
+  .kpi .v.ok { color:var(--plant); } .kpi .v.warn { color:var(--late); } .kpi .v.bad { color:var(--tear); }
+  .kpi canvas { width:110px; height:20px; display:block; margin-top:2px; }
+  .modes { display:flex; gap:6px; align-items:center; font-family:var(--mono); font-size:10px; color:var(--dim); }
+  .modes button { font:inherit; color:var(--dim); background:transparent; border:1px solid var(--line); border-radius:3px; padding:4px 8px; cursor:pointer; letter-spacing:.08em; text-transform:uppercase; }
+  .modes button.on { color:var(--ink); border-color:var(--dim); }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--dim2); margin-right:6px; vertical-align:middle; }
+  .dot.on { background:var(--plant); box-shadow:0 0 8px var(--plant); }
+  main { flex:1; display:grid; gap:8px; padding:8px 16px 12px; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(300px,360px); grid-template-rows:auto auto auto; grid-template-areas:"plant plant tape" "liq oracle tape" "wallets structure tape" "strip strip tape"; }
+  @media (max-width:1180px) { main { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-areas:"plant plant" "liq oracle" "wallets structure" "strip strip" "tape tape"; } }
+  @media (max-width:760px)  { main { grid-template-columns:minmax(0,1fr); grid-template-areas:"plant" "liq" "oracle" "structure" "wallets" "strip" "tape"; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px 12px; min-width:0; display:flex; flex-direction:column; gap:8px; }
+  .panel h2 { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); display:flex; align-items:center; gap:10px; }
+  .panel h2 .sub { color:var(--dim2); letter-spacing:0; text-transform:none; font-family:var(--sans); font-size:11px; margin-left:auto; }
+  .panel h2 .badge { font-size:9px; padding:2px 6px; border-radius:3px; border:1px solid currentColor; letter-spacing:.1em; }
+  .badge.cascade { color:var(--tear); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  .cards { display:grid; gap:6px; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); }
+  .card { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:7px 9px; min-width:0; }
+  .card .n { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; display:flex; align-items:center; gap:6px; }
+  .card .m { font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:3px; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--dim2); }
+  .pill.ok { background:var(--plant); } .pill.warn { background:var(--late); } .pill.bad { background:var(--tear); box-shadow:0 0 8px var(--tear); }
+  .row { display:flex; flex-wrap:wrap; gap:4px 16px; font-family:var(--mono); font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .row b { color:var(--ink); font-weight:500; }
+  .list { display:flex; flex-direction:column; gap:3px; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; }
+  .list .it { display:grid; grid-template-columns:auto 1fr auto; gap:8px; align-items:center; padding:2px 0; border-bottom:1px solid #131610; }
+  .list .it .tag { font-size:9px; letter-spacing:.1em; color:var(--dim); text-transform:uppercase; }
+  .list .it .val { text-align:right; white-space:nowrap; }
+  .list .empty { color:var(--dim2); font-family:var(--sans); }
+  .bar { height:3px; background:var(--market); opacity:.7; border-radius:2px; }
+  canvas.chart { width:100%; height:120px; display:block; }
+  canvas.strip { width:100%; height:110px; display:block; }
+  .tape { grid-area:tape; overflow:hidden; }
+  .tape .rows { overflow-y:auto; max-height:calc(100vh - 140px); display:flex; flex-direction:column; gap:1px; }
+  .tr { display:grid; grid-template-columns:58px 52px 1fr auto; gap:8px; align-items:baseline; padding:4px 6px; border-radius:3px; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums; border-left:2px solid var(--dim2); }
+  .tr.new { animation:flash 1.5s ease-out; }
+  @keyframes flash { from { background:#22301a; } to { background:transparent; } }
+  .tr .t { color:var(--dim); } .tr .tag { font-size:9px; letter-spacing:.1em; text-transform:uppercase; }
+  .tr .x { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tr .lat { font-size:10px; padding:1px 5px; border-radius:3px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .lat.fast { color:var(--plant); border-color:#1f3b2e; } .lat.arch { color:var(--late); border-color:#3b3418; } .lat.late { color:var(--tear); border-color:#3b1d16; }
+  .r-plant { border-left-color:var(--plant); } .r-oracle { border-left-color:var(--oracle); } .r-market { border-left-color:var(--market); } .r-acct { border-left-color:var(--acct); }
+  .r-plant .tag { color:var(--plant); } .r-oracle .tag { color:var(--oracle); } .r-market .tag { color:var(--market); } .r-acct .tag { color:var(--acct); }
+  .long { color:var(--long); } .short { color:var(--short); }
+  #plant { grid-area:plant; } #liq { grid-area:liq; } #oracle { grid-area:oracle; } #wallets { grid-area:wallets; } #structure { grid-area:structure; } #strip { grid-area:strip; }
+  footer { padding:6px 16px 12px; font-family:var(--mono); font-size:10px; color:var(--dim); display:flex; flex-wrap:wrap; gap:6px 18px; align-items:center; }
+  footer .now { color:var(--ink); font-family:var(--sans); font-size:12px; max-width:52rem; }
+  #detail { position:fixed; right:16px; bottom:16px; width:min(440px, calc(100vw - 32px)); max-height:60vh; overflow:auto; background:rgba(13,15,10,.97); border:1px solid var(--line); border-radius:6px; padding:10px 12px; font-family:var(--mono); font-size:11px; white-space:pre-wrap; display:none; z-index:5; }
+  #detail .close { float:right; cursor:pointer; color:var(--dim); padding:0 4px; }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">0xArchive <b>observability</b></div>
-  <div class="lede">Heatmaps show liquidations. This shows whether you can trust them. Three rails, one incident, straight from webhooks.</div>
-  <div class="ctl">
-    <span><span id="dot" class="dot"></span><span id="conn">connecting</span></span>
-    <button id="b-live" class="on">live</button>
-    <button id="b-demo">demo loop</button>
-    <span id="wins"><button data-w="120000">2m</button><button data-w="600000" class="on">10m</button><button data-w="3600000">60m</button></span>
-    <span id="clock"></span>
+  <div class="brand">0xArchive <b>Hyperliquid control room</b></div>
+  <div class="modes"><span><span id="dot" class="dot"></span><span id="conn">connecting</span></span><button id="b-live" class="on">live</button><button id="b-demo">demo</button></div>
+  <div class="kpis">
+    <div class="kpi"><span class="l">chain to you · p50 5m</span><span class="v ok" id="k-lat">–</span><canvas id="k-spark"></canvas></div>
+    <div class="kpi"><span class="l">events / min</span><span class="v" id="k-rate">0</span></div>
+    <div class="kpi"><span class="l">liq 1h</span><span class="v" id="k-liq">$0</span></div>
+    <div class="kpi"><span class="l">open incidents</span><span class="v ok" id="k-inc">0</span></div>
+    <div class="kpi"><span class="l">utc</span><span class="v" id="k-clock">–</span></div>
   </div>
 </header>
+
 <main>
-  <canvas id="c"></canvas>
-  <div id="detail"><span class="close" id="detail-close">×</span><span id="detail-body"></span></div>
+  <section class="panel" id="plant">
+    <h2>Plant · every venue, every stream <span class="sub" id="plant-sub">listening on the webhook stream</span></h2>
+    <div class="cards" id="venues"></div>
+    <div class="row" id="datatypes"></div>
+    <div class="list" id="incidents"></div>
+  </section>
+
+  <section class="panel" id="liq">
+    <h2>Liquidations · live <span class="badge cascade" id="cascade" style="display:none">cascade</span><span class="sub" id="liq-sub">exchange-wide, 30 s buckets, last 15 min</span></h2>
+    <canvas class="chart" id="liq-chart"></canvas>
+    <div class="row" id="liq-stats"></div>
+    <div class="list" id="liq-top"></div>
+  </section>
+
+  <section class="panel" id="oracle">
+    <h2>Oracle and chain <span class="sub" id="oracle-sub"></span></h2>
+    <div class="cards" id="chain-cards"></div>
+    <div class="cards" id="dex-cards"></div>
+    <div class="list" id="jumps"></div>
+  </section>
+
+  <section class="panel" id="wallets">
+    <h2>Watched wallets <span class="sub" id="wallets-sub"></span></h2>
+    <div class="cards" id="wallet-cards"></div>
+  </section>
+
+  <section class="panel" id="structure">
+    <h2>Market structure <span class="sub">open interest · funding · breadth · auctions</span></h2>
+    <div class="list" id="structure-list"></div>
+  </section>
+
+  <section class="panel" id="strip">
+    <h2>Incident tape · last 60 min <span class="sub">torn segment = open incident, closed on the same incident_id</span></h2>
+    <canvas class="strip" id="strip-canvas"></canvas>
+  </section>
+
+  <section class="panel tape">
+    <h2>Tape <span class="sub" id="tape-sub">newest first</span></h2>
+    <div class="rows" id="tape-rows"></div>
+  </section>
 </main>
 <footer>
-  <div class="now" id="now">Waiting for the tape.</div>
-  <div class="stats" id="stats"></div>
-  <div class="key">
-    <span><i style="background:var(--plant)"></i>plant</span>
-    <span><i style="background:var(--oracle)"></i>oracle / chain</span>
-    <span><i style="background:var(--market)"></i>market</span>
-    <span><i style="background:var(--acct)"></i>watched account</span>
-    <span><i style="background:var(--tear)"></i>open incident</span>
-  </div>
+  <div class="now" id="now">Every panel on this page is fed by 0xArchive webhooks. Nothing here runs a node.</div>
 </footer>
+<div id="detail"><span class="close" id="detail-close">×</span><span id="detail-body"></span></div>
 
 <script>
 (() => {
 "use strict";
 const $ = (id) => document.getElementById(id);
-const canvas = $("c"), ctx = canvas.getContext("2d");
-const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const MONO = getComputedStyle(document.body).getPropertyValue("--mono");
+const now = () => Date.now();
+const FAST = new Set(["account.fill", "account.transfer", "market.liquidation", "account.liquidated"]);
+const num = (v, d = 0) => (v == null || v === "" || isNaN(Number(v))) ? "" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+const usd = (v) => v == null ? "" : "$" + (Math.abs(v) >= 1e9 ? (v/1e9).toFixed(2) + "B" : Math.abs(v) >= 1e6 ? (v/1e6).toFixed(2) + "M" : Math.abs(v) >= 1e3 ? (v/1e3).toFixed(1) + "k" : num(v, 0));
+const short = (a) => typeof a === "string" && a.length > 12 ? a.slice(0, 6) + "…" + a.slice(-4) : (a || "");
+const ago = (t) => { const s = Math.max(0, (now() - t) / 1000); return s < 60 ? s.toFixed(0) + "s" : s < 3600 ? (s / 60).toFixed(0) + "m" : (s / 3600).toFixed(1) + "h"; };
+const fmtLat = (ms) => ms == null ? "–" : ms < 1000 ? Math.round(ms) + " ms" : ms < 120000 ? (ms / 1000).toFixed(2) + " s" : (ms / 60000).toFixed(1) + " min";
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
-// ── Rails: every 0xArchive event type lands on one of four rails ───────────
-const RAILS = [
-  { id:"plant",  label:"PLANT  archive · ingest",             y:0.22, color:"#7dffc3" },
-  { id:"oracle", label:"ORACLE / CHAIN",                       y:0.44, color:"#ffb347" },
-  { id:"market", label:"MARKET  liq · oi · funding · breadth", y:0.66, color:"#e8ff4a" },
-  { id:"acct",   label:"WATCHED ACCOUNTS",                     y:0.86, color:"#c4b5fd" },
-];
-const RAIL = {};
-for (const r of RAILS) RAIL[r.id] = r;
 function railOf(type) {
   if (/^(archive\.|ingest\.|export\.|billing\.|webhook\.)/.test(type)) return "plant";
   if (/^(oracle\.|chain\.|hip4\.|market\.(listed|delisted))/.test(type)) return "oracle";
   if (/^account\./.test(type)) return "acct";
   return "market";
 }
-const OPENS  = { "archive.gap_detected":1, "ingest.stall":1, "oracle.stall":1, "chain.block_stall":1, "chain.block_time_degraded":1 };
-const CLOSES = { "archive.gap_resolved":1, "ingest.recovered":1 };
+const TAGS = { "market.liquidation":"liq", "market.liquidation_burst":"burst", "market.oi_delta":"oi", "market.funding_flip":"fund", "market.breadth_cross":"breadth", "market.pga_payment":"pga", "market.listed":"listed", "market.delisted":"delist",
+  "oracle.jump":"oracle", "oracle.stall":"oracle", "chain.block_stall":"chain", "chain.block_time_degraded":"chain", "hip4.settlement":"hip4", "account.hip4_settled":"hip4",
+  "account.fill":"fill", "account.transfer":"xfer", "account.liquidated":"liq'd", "account.order_rejected":"reject", "account.twap_lifecycle":"twap",
+  "archive.gap_detected":"gap", "archive.gap_resolved":"gap ok", "ingest.stall":"stall", "ingest.recovered":"ok", "export.job.completed":"export", "export.job.failed":"export", "billing.credit_low":"credit", "webhook.test":"test" };
+const OPENS  = new Set(["archive.gap_detected", "ingest.stall", "oracle.stall", "chain.block_stall", "chain.block_time_degraded"]);
 function edgeOf(ev) {
   const st = ev.data && ev.data.state;
-  if (CLOSES[ev.type] || st === "recovered" || st === "resolved" || st === "expired") return "close";
-  if (OPENS[ev.type] && (st == null || st === "stalled" || st === "open" || st === "detected")) return "open";
+  if (ev.type === "archive.gap_resolved" || ev.type === "ingest.recovered" || st === "recovered" || st === "resolved" || st === "expired") return "close";
+  if (OPENS.has(ev.type) && (st == null || st === "stalled" || st === "open" || st === "detected")) return "open";
   return null;
 }
 function incidentKey(ev) {
   const d = ev.data || {};
   return d.incident_id || d.gap_id || [ev.type.replace(/_(detected|resolved)$|\.(stall|recovered)$/, ""), d.stream || d.dex || d.symbol || d.venue || ""].join("|");
 }
-
-// ── Presentation per event type ────────────────────────────────────────────
-const num = (v, d = 0) => (v == null || v === "" || isNaN(Number(v))) ? "" : Number(v).toLocaleString(undefined, { maximumFractionDigits:d });
-const usd = (v) => v == null ? "" : "$" + (Math.abs(v) >= 1e6 ? (v/1e6).toFixed(2) + "M" : Math.abs(v) >= 1e3 ? (v/1e3).toFixed(1) + "k" : num(v, 0));
-const short = (a) => typeof a === "string" && a.length > 12 ? a.slice(0, 6) + "…" + a.slice(-4) : (a || "");
-function describe(ev) {
+function line(ev) {
   const d = ev.data || {}, sym = d.symbol || d.coin || d.token || d.dex || d.stream || "";
+  const side = d.side ? `<span class="${d.side === "buy" || d.side === "long" ? "long" : "short"}">${esc(d.side)}</span>` : "";
   switch (ev.type) {
-    case "market.liquidation":       return { title:`${sym} liq ${usd(d.notional_usd)}`, sub:`${d.side || ""} · ${short(d.liquidated_user)}`, tone:"mkt", weight:d.notional_usd };
-    case "market.liquidation_burst": return { title:`BURST ${usd(d.total_usd ?? d.notional_usd ?? d.sum_usd)} / ${d.window_s || "?"}s`, sub:`${d.count ?? d.liquidations ?? ""} liquidations · your threshold`, tone:"burst" };
-    case "market.oi_delta":          return { title:`${sym} OI ${d.direction === "down" || (d.change_pct ?? d.delta_pct) < 0 ? "−" : "+"}${num(Math.abs(d.change_pct ?? d.delta_pct ?? 0), 1)}%`, sub:`window ${d.window_s || ""}s`, tone:"mkt" };
-    case "market.funding_flip":      return { title:`${sym} funding ${d.flipped_to === "negative" || (d.funding_rate ?? 0) < 0 ? "−" : "+"}`, sub:"sign change", tone:"mkt" };
-    case "market.breadth_cross":     return { title:`breadth ${num(d.value ?? d.breadth_pct ?? d.pct, 0)}% ${d.direction || ""}`, sub:`threshold ${d.threshold ?? ""}`, tone:"mkt" };
-    case "market.pga_payment":       return { title:`PGA ${num(d.amount, 2)} ${d.token || "HYPE"}`, sub:usd(d.notional_usd), tone:"mkt" };
-    case "oracle.jump":              return { title:`${sym} ${d.direction === "down" ? "−" : "+"}${num(Math.abs(d.change_pct ?? 0), 2)}%`, sub:`HIP-3 oracle · ${num(d.interval_s, 1)}s`, tone:"warn" };
-    case "oracle.stall":             return { title:`${sym} oracle ${d.state || ""}`, sub:`${num(d.age_s ?? d.silence_s, 0)}s silent`, tone:d.state === "recovered" ? "ok" : "tear" };
-    case "chain.block_stall":        return { title:`chain ${d.state || ""}`, sub:`${num(d.gap_s ?? d.threshold_s, 0)}s`, tone:d.state === "recovered" ? "ok" : "tear" };
-    case "chain.block_time_degraded":return { title:`block time ${d.state || ""}`, sub:`${num(d.deviation_pct, 0)}% vs baseline`, tone:d.state === "recovered" ? "ok" : "tear" };
-    case "archive.gap_detected":     return { title:`${sym} gap`, sub:`silent ${num(d.gap_s ?? d.age_s, 0)}s`, tone:"tear" };
-    case "archive.gap_resolved":     return { title:`${sym} gap closed`, sub:`${num(d.gap_s ?? d.duration_s, 0)}s · same incident`, tone:"ok" };
-    case "ingest.stall":             return { title:`${d.stream || sym} stall`, sub:`${(d.coins || []).length || 1} market(s) · ${d.threshold_s || ""}s`, tone:"tear" };
-    case "ingest.recovered":         return { title:`${d.stream || sym} recovered`, sub:"same incident_id", tone:"ok" };
-    case "account.fill":             return { title:`${sym} ${d.side || ""} ${usd(d.notional_usd)}`, sub:short(d.account), tone:"acct", weight:d.notional_usd, side:d.side };
-    case "account.transfer":         return { title:`${d.token || ""} ${num(d.amount, 2)} ${d.kind || ""}`, sub:`${short(d.address)} as ${d.role || ""}`, tone:"acct" };
-    case "account.liquidated":       return { title:`${short(d.account)} liquidated`, sub:`${sym} ${usd(d.notional_usd)}`, tone:"acct-liq" };
-    case "account.order_rejected":   return { title:`${short(d.account)} rejected`, sub:`${sym} · ${d.kind || ""}`, tone:"acct" };
-    case "account.twap_lifecycle":   return { title:`${sym} TWAP ${d.status || ""}`, sub:short(d.account), tone:"acct" };
-    default:                         return { title:ev.type, sub:sym, tone:railOf(ev.type) === "market" ? "mkt" : railOf(ev.type) === "oracle" ? "warn" : railOf(ev.type) === "acct" ? "acct" : "ok" };
+    case "market.liquidation":       return `${esc(sym)} ${usd(d.notional_usd)} ${side} <span class="t">${esc(d.venue || "")}</span>`;
+    case "market.liquidation_burst": return `${esc(sym)} ${usd(d.total_usd ?? d.notional_usd ?? d.sum_usd)} in ${esc(d.window_s || "?")}s`;
+    case "market.oi_delta":          return `${esc(sym)} OI ${(d.delta_pct ?? d.change_pct) < 0 ? "−" : "+"}${num(Math.abs(d.delta_pct ?? d.change_pct ?? 0), 1)}% (${usd(d.delta_usd)}) / ${esc(d.window_s)}s`;
+    case "market.funding_flip":      return `${esc(sym)} funding flips ${esc(d.flipped_to || "")}`;
+    case "market.breadth_cross":     return `breadth ${num(d.value ?? d.breadth_pct ?? d.pct, 0)}% ${esc(d.direction || "")} ${esc(d.threshold ?? "")}`;
+    case "market.pga_payment":       return `PGA ${num(d.amount, 2)} ${esc(d.token || "HYPE")} ${usd(d.notional_usd)}`;
+    case "oracle.jump":              return `${esc(sym)} ${d.direction === "down" ? "−" : "+"}${num(Math.abs(d.change_pct ?? 0), 2)}% in ${num(d.interval_s, 1)}s`;
+    case "oracle.stall": case "chain.block_stall": case "chain.block_time_degraded": return `${esc(sym || ev.type)} ${esc(d.state || "")}`;
+    case "archive.gap_detected":     return `${esc(sym)} gap, silent ${num(d.gap_s ?? d.age_s, 0)}s`;
+    case "archive.gap_resolved":     return `${esc(sym)} gap closed`;
+    case "ingest.stall":             return `${esc(d.stream || sym)} ${(d.coins || []).length || 1} market(s) silent ≥ ${esc(d.threshold_s || "")}s`;
+    case "ingest.recovered":         return `${esc(d.stream || sym)} recovered`;
+    case "account.fill":             return `${esc(sym)} ${side} ${num(d.size, 4)} @ ${num(d.vwap ?? d.price, 4)} ${usd(d.notional_usd)} ${short(d.account)}`;
+    case "account.transfer":         return `${esc(d.token || "")} ${num(d.amount, 2)} ${esc(d.kind || "")} ${short(d.address)}`;
+    case "account.liquidated":       return `${short(d.account)} liquidated ${esc(sym)} ${usd(d.notional_usd)}`;
+    case "account.order_rejected":   return `${short(d.account)} ${esc(sym)} ${esc(d.kind || d.reason || "rejected")}`;
+    case "account.twap_lifecycle":   return `${esc(sym)} TWAP ${esc(d.status || "")} ${num(d.fill_pct, 0)}% ${short(d.account)}`;
+    case "hip4.settlement": case "account.hip4_settled": return `${esc(sym)} settled ${esc(d.resolution || "")} ${usd(d.notional_usd)}`;
+    default: return esc(Object.entries(d).filter(([k, v]) => ["number", "string"].includes(typeof v) && k !== "timestamp").slice(0, 3).map(([k, v]) => `${k}=${v}`).join(" "));
   }
 }
 
-// ── Store ─────────────────────────────────────────────────────────────────
-const events = new Map();            // id -> ev (arrival order)
-const incidents = new Map();         // key -> { openAt, closeAt, rail }
-let mode = "live", win = 600000, selected = null, latest = null;
-const MAX = 3000;
+// ── State ─────────────────────────────────────────────────────────────────
+const events = new Map();      // id -> ev
+const incidents = new Map();   // key -> {rail, openAt, closeAt, label}
+const dexes = new Map();       // dex -> {state, at}
+const chain = { stall: null, degraded: null };
+let mode = "live", plant = null, latest = null, es = null;
+const MAXEV = 5000;
 
-function evTime(ev) { return Date.parse(ev.chain_ts || ev.observed_at || ev.received_at); }
-
-function add(ev) {
+function add(ev, live) {
   if (events.has(ev.id)) return;
   ev.rail = railOf(ev.type);
-  ev.view = describe(ev);
-  ev.t = evTime(ev);
+  ev.t = Date.parse(ev.chain_ts || ev.observed_at || ev.received_at);
   ev.rx = Date.parse(ev.received_at) || ev.t;
+  ev.lag = ev.rx - ev.t;
   events.set(ev.id, ev);
-  if (events.size > MAX) events.delete(events.keys().next().value);
+  if (events.size > MAXEV) events.delete(events.keys().next().value);
+  const d = ev.data || {};
   const edge = edgeOf(ev);
   if (edge) {
-    const k = incidentKey(ev), inc = incidents.get(k) || { rail: ev.rail, openAt: null, closeAt: null };
+    const k = incidentKey(ev), inc = incidents.get(k) || { rail: ev.rail, openAt: null, closeAt: null, label: "" };
+    inc.label = `${TAGS[ev.type] || ev.type} ${d.stream || d.dex || d.symbol || d.venue || ""}`.trim();
     if (edge === "open") { inc.openAt = ev.t; inc.closeAt = null; } else { if (inc.openAt == null) inc.openAt = ev.t - 1; inc.closeAt = ev.t; }
     incidents.set(k, inc);
   }
+  if (ev.type === "oracle.stall" && d.dex) dexes.set(d.dex, { state: d.state || "stalled", at: ev.t });
+  if (ev.type === "oracle.jump" && d.dex && !dexes.has(d.dex)) dexes.set(d.dex, { state: "ok", at: ev.t });
+  if (ev.type === "chain.block_stall") chain.stall = { state: d.state, at: ev.t };
+  if (ev.type === "chain.block_time_degraded") chain.degraded = { state: d.state, at: ev.t };
   latest = ev;
+  if (live) tapeRow(ev, true);
 }
-function reset() { events.clear(); incidents.clear(); selected = null; latest = null; }
+function reset() { events.clear(); incidents.clear(); dexes.clear(); chain.stall = chain.degraded = null; latest = null; $("tape-rows").replaceChildren(); }
+
+// ── Tape ──────────────────────────────────────────────────────────────────
+function latChip(ev) {
+  if (ev.late) return `<span class="lat late">late ${fmtLat(ev.late_ms)}</span>`;
+  if (!ev.chain_ts) return `<span class="lat">–</span>`;
+  const cls = FAST.has(ev.type) && ev.lag < 1500 ? "fast" : FAST.has(ev.type) && ev.lag < 90000 ? "fast" : "arch";
+  return `<span class="lat ${cls}" title="chain time to this server">${fmtLat(ev.lag)}</span>`;
+}
+function tapeRow(ev, fresh) {
+  const div = document.createElement("div");
+  div.className = `tr r-${ev.rail}` + (fresh ? " new" : "");
+  div.innerHTML = `<span class="t">${new Date(ev.rx).toISOString().slice(11, 19)}</span><span class="tag">${esc(TAGS[ev.type] || ev.type)}</span><span class="x">${line(ev)}</span>${latChip(ev)}`;
+  div.onclick = () => { $("detail-body").textContent = JSON.stringify(ev, (k, v) => ["rail", "t", "rx", "lag"].includes(k) ? undefined : v, 2); $("detail").style.display = "block"; };
+  const rows = $("tape-rows");
+  rows.prepend(div);
+  while (rows.children.length > 250) rows.lastChild.remove();
+}
+$("detail-close").onclick = () => { $("detail").style.display = "none"; };
+
+// ── Panels ────────────────────────────────────────────────────────────────
+const VENUES = ["hyperliquid", "hip3", "spot", "hip4", "lighter"];
+function renderPlant() {
+  const t = now();
+  const openInc = [...incidents.values()].filter((i) => !i.closeAt);
+  const st = plant && plant.status, lat = plant && plant.latency, mk = plant && plant.markets;
+  const seenVenues = {};
+  for (const e of events.values()) { const v = e.data && e.data.venue; if (v) seenVenues[v] = (seenVenues[v] || 0) + 1; }
+  const cards = VENUES.map((v) => {
+    const s = st && st.exchanges && st.exchanges[v];
+    const l = lat && lat.exchanges && lat.exchanges[v];
+    const inc = openInc.find((i) => i.label.includes(v));
+    const cls = inc ? "bad" : !s ? (seenVenues[v] ? "ok" : "") : s.status === "operational" ? "ok" : s.status === "degraded" ? "warn" : "bad";
+    const lagMs = s && s.latency_ms != null ? s.latency_ms : (l && l.data_freshness && Object.values(l.data_freshness)[0]);
+    const m = mk && mk[v];
+    return `<div class="card"><div class="n"><span class="pill ${cls}"></span>${v}</div><div class="m">${inc ? `<span style="color:var(--tear)">${esc(inc.label)} ${ago(inc.openAt)}</span>` : s ? `${esc(s.status)} · lag ${fmtLat(lagMs)}` : (seenVenues[v] ? `${seenVenues[v]} events seen` : "no events yet")}${m ? ` · ${num(m.live)} markets` : ""}</div></div>`;
+  }).join("");
+  $("venues").innerHTML = cards;
+  if (st && st.data_types) {
+    $("datatypes").innerHTML = Object.entries(st.data_types).map(([k, v]) => `<span>${k} <b style="color:${v.status === "operational" ? "var(--plant)" : "var(--late)"}">${num(v.completeness_24h, 1)}%</b></span>`).join("") + `<span>archive incidents <b>${st.active_incidents ?? 0}</b></span><span>checked ${plant.fetched_at ? ago(Date.parse(plant.fetched_at)) + " ago" : ""}</span>`;
+    $("plant-sub").textContent = `${st.status === "operational" ? "all systems operational" : "plant " + st.status} · 24 h completeness by data type`;
+  } else {
+    $("datatypes").innerHTML = `<span>plant health from the webhook stream: <b>${openInc.length ? openInc.length + " open incident(s)" : "no open incidents"}</b></span>`;
+    $("plant-sub").textContent = plant && plant.error ? "data-quality poll failed, showing webhook state" : "set OXARCHIVE_API_KEY on the server to add venue health and coverage";
+  }
+  const incs = [...incidents.values()].sort((a, b) => (b.closeAt || t) - (a.closeAt || t)).slice(0, 5);
+  $("incidents").innerHTML = incs.length ? incs.map((i) => `<div class="it"><span class="tag" style="color:${i.closeAt ? "var(--dim)" : "var(--tear)"}">${i.closeAt ? "closed" : "open"}</span><span>${esc(i.label)}</span><span class="val">${i.closeAt ? "lasted " + fmtLat(i.closeAt - i.openAt) : "open " + ago(i.openAt)}</span></div>`).join("") : `<div class="empty">No gap, stall or chain incident in the last hour. That silence is the point: the plant is being watched, not assumed.</div>`;
+  $("k-inc").textContent = openInc.length; $("k-inc").className = "v " + (openInc.length ? "bad" : "ok");
+}
+
+const liqCanvas = $("liq-chart");
+function renderLiq() {
+  const t = now(), h1 = t - 3600000, m5 = t - 300000, m15 = t - 900000, s60 = t - 60000;
+  const liqs = [...events.values()].filter((e) => e.type === "market.liquidation" && e.t >= h1);
+  let sum1h = 0, sum5m = 0, n60 = 0, sum60 = 0, longs = 0, shorts = 0, biggest = null;
+  const perMarket = new Map();
+  const buckets = new Array(30).fill(0).map(() => ({ long: 0, short: 0, unknown: 0 }));
+  for (const e of liqs) {
+    const d = e.data || {}, v = Number(d.notional_usd) || 0, side = d.side === "long" || d.side === "buy" ? "long" : d.side === "short" || d.side === "sell" ? "short" : "unknown";
+    sum1h += v; if (e.t >= m5) sum5m += v; if (e.t >= s60) { n60 += 1; sum60 += v; }
+    if (side === "long") longs += v; else if (side === "short") shorts += v;
+    if (!biggest || v > (Number(biggest.data.notional_usd) || 0)) biggest = e;
+    const key = `${d.symbol || "?"} · ${d.venue || ""}`, pm = perMarket.get(key) || { sum: 0, n: 0 }; pm.sum += v; pm.n += 1; perMarket.set(key, pm);
+    if (e.t >= m15) { const b = Math.min(29, Math.floor((e.t - m15) / 30000)); buckets[b][side] += v; }
+  }
+  const bursts = [...events.values()].filter((e) => e.type === "market.liquidation_burst" && e.t >= m15);
+  // chart
+  const ctx = liqCanvas.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 2), r = liqCanvas.getBoundingClientRect();
+  liqCanvas.width = r.width * dpr; liqCanvas.height = r.height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = r.width, H = r.height, max = Math.max(1, ...buckets.map((b) => b.long + b.short + b.unknown));
+  ctx.clearRect(0, 0, W, H);
+  const bw = W / 30;
+  for (const bev of bursts) { const x = ((bev.t - m15) / 900000) * W; ctx.fillStyle = "rgba(232,255,74,0.10)"; ctx.fillRect(x - 12, 0, 24, H); ctx.fillStyle = "#e8ff4a"; ctx.font = "500 9px " + MONO; ctx.fillText("BURST", x - 14, 10); }
+  buckets.forEach((b, i) => {
+    let y = H - 14; const x = i * bw + 1, w = bw - 2;
+    for (const [k, col] of [["long", "#ff6b6b"], ["short", "#4fd1c5"], ["unknown", "#5c5e50"]]) { const hh = (b[k] / max) * (H - 26); ctx.fillStyle = col; ctx.fillRect(x, y - hh, w, hh); y -= hh; }
+  });
+  ctx.fillStyle = "#8a8c7a"; ctx.font = "500 9px " + MONO;
+  ctx.fillText("15 min ago", 2, H - 3); ctx.fillText("now", W - 22, H - 3); ctx.fillText("peak " + usd(max) + " / 30 s", W / 2 - 40, 10);
+  // stats + cascade
+  const cascade = n60 >= 6 || sum60 >= 1000000 || bursts.some((b) => t - b.t < 120000);
+  $("cascade").style.display = cascade ? "" : "none";
+  $("liq-stats").innerHTML = `<span>5m <b>${usd(sum5m)}</b></span><span>1h <b>${usd(sum1h)}</b> · <b>${liqs.length}</b> liquidations</span><span>longs <b class="long">${sum1h ? Math.round(100 * longs / (longs + shorts || 1)) : 0}%</b> shorts <b class="short">${sum1h ? Math.round(100 * shorts / (longs + shorts || 1)) : 0}%</b></span>${biggest ? `<span>largest <b>${esc(biggest.data.symbol)} ${usd(biggest.data.notional_usd)}</b> ${ago(biggest.t)} ago</span>` : ""}${cascade ? `<span style="color:var(--tear)">${n60} in the last 60 s, ${usd(sum60)}</span>` : ""}`;
+  const top = [...perMarket.entries()].sort((a, b) => b[1].sum - a[1].sum).slice(0, 6), topMax = top.length ? top[0][1].sum : 1;
+  $("liq-top").innerHTML = top.length ? top.map(([k, v]) => `<div class="it"><span class="tag">${esc(k)}</span><span><div class="bar" style="width:${Math.max(2, 100 * v.sum / topMax)}%"></div></span><span class="val">${usd(v.sum)} · ${v.n}</span></div>`).join("") : `<div class="empty">No liquidation above the floor yet in this hour.</div>`;
+  $("k-liq").textContent = usd(sum1h);
+}
+
+function renderOracle() {
+  const t = now();
+  const stall = chain.stall && chain.stall.state === "stalled", deg = chain.degraded && chain.degraded.state && chain.degraded.state !== "recovered";
+  $("chain-cards").innerHTML = `<div class="card"><div class="n"><span class="pill ${stall ? "bad" : "ok"}"></span>block production</div><div class="m">${stall ? "STALLED " + ago(chain.stall.at) : "producing · no stall event"}</div></div>
+    <div class="card"><div class="n"><span class="pill ${deg ? "warn" : "ok"}"></span>block time</div><div class="m">${deg ? "degraded " + ago(chain.degraded.at) : "on baseline"}</div></div>`;
+  const known = ["xyz", "para", "io", "mkts", "flx", "hyna", "vntl", "km", "cash"];
+  for (const d of dexes.keys()) if (!known.includes(d)) known.push(d);
+  $("dex-cards").innerHTML = known.slice(0, 12).map((d) => { const s = dexes.get(d); const cls = !s ? "ok" : s.state === "stalled" ? "bad" : "ok"; return `<div class="card"><div class="n"><span class="pill ${cls}"></span>${esc(d)}</div><div class="m">${s ? (s.state === "stalled" ? "oracle stalled " : "last jump ") + ago(s.at) : "HIP-3 oracle · quiet"}</div></div>`; }).join("");
+  const jumps = [...events.values()].filter((e) => e.type === "oracle.jump" && t - e.t < 3600000).sort((a, b) => b.t - a.t).slice(0, 6);
+  $("jumps").innerHTML = jumps.length ? jumps.map((e) => { const d = e.data; return `<div class="it"><span class="tag">${ago(e.t)}</span><span>${esc(d.symbol)} <span class="${d.direction === "down" ? "short" : "long"}">${d.direction === "down" ? "−" : "+"}${num(Math.abs(d.change_pct), 2)}%</span> in ${num(d.interval_s, 1)}s</span><span class="val">${num(d.prev_price, 4)} → ${num(d.price, 4)}</span></div>`; }).join("") : `<div class="empty">No oracle jump above the subscribed threshold in the last hour.</div>`;
+  $("oracle-sub").textContent = `${dexes.size} HIP-3 dex${dexes.size === 1 ? "" : "es"} heard from · ${jumps.length} jumps / h`;
+}
+
+function renderWallets() {
+  const t = now(), h1 = t - 3600000, w = new Map();
+  for (const e of events.values()) {
+    if (!e.type.startsWith("account.") || e.t < h1) continue;
+    const d = e.data || {}, a = (d.account || d.address || "").toLowerCase(); if (!a) continue;
+    const s = w.get(a) || { fills: 0, buy: 0, sell: 0, xin: 0, xout: 0, liq: 0, twap: 0, rej: 0, last: 0, lastLine: "" };
+    if (e.type === "account.fill") { s.fills += d.fill_count || 1; if (d.side === "sell") s.sell += d.notional_usd || 0; else s.buy += d.notional_usd || 0; }
+    if (e.type === "account.transfer") { if (d.role === "destination") s.xin += d.usdc_value || 0; else s.xout += d.usdc_value || 0; }
+    if (e.type === "account.liquidated") s.liq += 1; if (e.type === "account.twap_lifecycle") s.twap += 1; if (e.type === "account.order_rejected") s.rej += 1;
+    if (e.t > s.last) { s.last = e.t; s.lastLine = line(e); }
+    w.set(a, s);
+  }
+  const list = [...w.entries()].sort((a, b) => b[1].last - a[1].last).slice(0, 8);
+  $("wallet-cards").innerHTML = list.length ? list.map(([a, s]) => `<div class="card"><div class="n"><span class="pill ${t - s.last < 60000 ? "ok" : ""}"></span>${short(a)}${s.liq ? ` <span style="color:var(--tear)">liquidated</span>` : ""}${s.rej ? ` <span style="color:var(--late)">rejects ${s.rej}</span>` : ""}</div><div class="m">${s.fills} fills · <span class="long">${usd(s.buy)}</span> / <span class="short">${usd(s.sell)}</span>${s.xin || s.xout ? ` · in ${usd(s.xin)} out ${usd(s.xout)}` : ""}${s.twap ? ` · twap ${s.twap}` : ""}</div><div class="m">${s.lastLine} · ${ago(s.last)} ago</div></div>`).join("") : `<div class="card"><div class="m">No watched-wallet activity in the last hour.</div></div>`;
+  $("wallets-sub").textContent = `${w.size} wallets active this hour`;
+}
+
+function renderStructure() {
+  const t = now();
+  const list = [...events.values()].filter((e) => ["market.oi_delta", "market.funding_flip", "market.breadth_cross", "market.pga_payment", "hip4.settlement", "market.listed", "market.delisted"].includes(e.type) && t - e.t < 6 * 3600000).sort((a, b) => b.t - a.t).slice(0, 10);
+  $("structure-list").innerHTML = list.length ? list.map((e) => `<div class="it"><span class="tag">${esc(TAGS[e.type] || e.type)}</span><span>${line(e)}</span><span class="val">${ago(e.t)}</span></div>`).join("") : `<div class="empty">OI deltas, funding flips, breadth crossings and auction payments land here as they happen (minutes class).</div>`;
+}
+
+const stripCanvas = $("strip-canvas");
+const RAILS = [["plant", 0.18, "#7dffc3"], ["oracle", 0.40, "#ffb347"], ["market", 0.62, "#e8ff4a"], ["acct", 0.84, "#c4b5fd"]];
+function renderStrip() {
+  const t1 = now(), t0 = t1 - 3600000;
+  const ctx = stripCanvas.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 2), r = stripCanvas.getBoundingClientRect();
+  stripCanvas.width = r.width * dpr; stripCanvas.height = r.height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = r.width, H = r.height, left = 64, right = W - 8, X = (ms) => left + ((ms - t0) / 3600000) * (right - left);
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = "#14160e"; for (let i = 0; i <= 12; i++) { const x = left + (i / 12) * (right - left); ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x, H - 4); ctx.stroke(); }
+  for (const [id, y, col] of RAILS) { ctx.strokeStyle = col + "44"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(left, H * y); ctx.lineTo(right, H * y); ctx.stroke(); ctx.fillStyle = col; ctx.font = "500 9px " + MONO; ctx.fillText(id.toUpperCase(), 6, H * y + 3); }
+  for (const inc of incidents.values()) { const y = H * RAILS.find((r) => r[0] === inc.rail)[1]; const x0 = Math.max(left, X(inc.openAt)), x1 = Math.min(right, X(inc.closeAt ?? t1)); if (x1 <= x0) continue; ctx.strokeStyle = inc.closeAt ? "#ff5a3c77" : "#ff5a3c"; ctx.lineWidth = 3; ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.setLineDash([]); }
+  for (const e of events.values()) {
+    if (e.t < t0) continue;
+    const rail = RAILS.find((r) => r[0] === e.rail), x = X(e.t), y = H * rail[1];
+    const v = e.data && e.data.notional_usd;
+    const rad = e.type === "market.liquidation_burst" ? 7 : v ? Math.min(6, 1.5 + Math.log10(Math.max(10, v)) * 0.8) : 2;
+    ctx.globalAlpha = e.late ? 0.5 : 0.85; ctx.fillStyle = edgeOf(e) === "open" ? "#ff5a3c" : rail[2];
+    if (e.type === "market.liquidation_burst") { ctx.strokeStyle = rail[2]; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+const spark = $("k-spark");
+function renderKpis() {
+  const t = now(), m5 = t - 300000, s60 = t - 60000;
+  const fast = [...events.values()].filter((e) => FAST.has(e.type) && e.rx >= m5 && e.chain_ts && !e.late).map((e) => e.lag).sort((a, b) => a - b);
+  const p50 = fast.length ? fast[Math.floor(fast.length / 2)] : null;
+  $("k-lat").textContent = fmtLat(p50); $("k-lat").className = "v " + (p50 == null ? "" : p50 < 1500 ? "ok" : p50 < 60000 ? "warn" : "bad");
+  $("k-rate").textContent = [...events.values()].filter((e) => e.rx >= s60).length;
+  $("k-clock").textContent = new Date().toISOString().slice(11, 19);
+  const ctx = spark.getContext("2d"), dpr = Math.min(devicePixelRatio || 1, 2), r = spark.getBoundingClientRect();
+  spark.width = r.width * dpr; spark.height = r.height * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const seq = [...events.values()].filter((e) => FAST.has(e.type) && e.chain_ts).slice(-60);
+  const max = Math.max(1000, ...seq.map((e) => e.lag)); ctx.clearRect(0, 0, r.width, r.height);
+  seq.forEach((e, i) => { const x = (i / 60) * r.width, hh = Math.max(1, (Math.min(e.lag, max) / max) * r.height); ctx.fillStyle = e.lag < 1500 ? "#7dffc3" : e.lag < 60000 ? "#ffc857" : "#ff5a3c"; ctx.fillRect(x, r.height - hh, r.width / 60 - 1, hh); });
+  if (mode === "live" && latest) {
+    const l = latest.lag / 1000;
+    $("now").textContent = `${latest.type}: ${$("tape-rows").firstChild ? $("tape-rows").firstChild.querySelector(".x").textContent : ""}. On chain ${ago(latest.t)} ago, delivered ${l < 1.5 ? "under a second later on the fast path" : l < 90 ? l.toFixed(0) + " s later" : (l / 60).toFixed(1) + " min later on the archive path"}${latest.late ? ", flagged late" : ""}.`;
+  }
+}
+function renderAll() { renderPlant(); renderLiq(); renderOracle(); renderWallets(); renderStructure(); renderStrip(); renderKpis(); }
 
 // ── Live feed ─────────────────────────────────────────────────────────────
-let es = null;
 function connect() {
   if (es) es.close();
   es = new EventSource("stream");
-  es.addEventListener("hello", (m) => { const { recent } = JSON.parse(m.data); if (mode === "live") recent.forEach(add); $("dot").className = "dot on"; $("conn").textContent = "live"; });
-  es.onmessage = (m) => { if (mode === "live") add(JSON.parse(m.data)); };
+  es.addEventListener("hello", (m) => { const { recent } = JSON.parse(m.data); if (mode !== "live") return; recent.forEach((e) => add(e, false)); [...events.values()].slice(-60).forEach((e) => tapeRow(e, false)); $("dot").className = "dot on"; $("conn").textContent = "live"; renderAll(); });
+  es.onmessage = (m) => { if (mode === "live") { add(JSON.parse(m.data), true); renderLiq(); renderKpis(); } };
   es.onerror = () => { $("dot").className = "dot"; $("conn").textContent = "reconnecting"; };
 }
-let stats = null;
-async function refreshStats() {
-  try { stats = await (await fetch("stats", { cache:"no-store" })).json(); } catch {}
-}
+async function pollPlant() { if (mode !== "live") return; try { const p = await (await fetch("plant", { cache: "no-store" })).json(); plant = p.enabled ? p : null; renderPlant(); } catch {} }
 
-// ── Demo loop: the scripted incident, replayed through the same renderer ──
-const LOOP = 28000;
-const SCRIPT = [
-  { t:1.2,  type:"archive.gap_detected",     data:{ symbol:"lighter_fills", gap_s:47, incident_id:"g-1842" } },
-  { t:4.0,  type:"oracle.jump",              data:{ symbol:"xyz:NVDA", dex:"xyz", direction:"up", change_pct:2.1, interval_s:3.0 } },
-  { t:6.4,  type:"market.oi_delta",          data:{ symbol:"BTC", direction:"down", change_pct:-3.4, window_s:300 } },
-  { t:8.1,  type:"market.liquidation",       data:{ symbol:"BTC", side:"long", notional_usd:1200000, liquidated_user:"0x7a1c000000000000000000000000000000000b90e" } },
-  { t:8.7,  type:"market.liquidation",       data:{ symbol:"ETH", side:"long", notional_usd:410000, liquidated_user:"0x3f9000000000000000000000000000000000021aa" } },
-  { t:9.3,  type:"market.liquidation",       data:{ symbol:"SOL", side:"long", notional_usd:95000, liquidated_user:"0x11d0000000000000000000000000000000000c7f" } },
-  { t:10.2, type:"market.liquidation_burst", data:{ symbol:"BTC", total_usd:8400000, window_s:60, count:41 } },
-  { t:11.4, type:"market.funding_flip",      data:{ symbol:"BTC", flipped_to:"negative", funding_rate:-0.00012 } },
-  { t:13.0, type:"account.liquidated",       data:{ symbol:"BTC", account:"0x7a1c000000000000000000000000000000000b90e", notional_usd:1200000 } },
-  { t:16.5, type:"oracle.jump",              data:{ symbol:"xyz:NVDA", dex:"xyz", direction:"down", change_pct:-1.9, interval_s:3.1 } },
-  { t:19.8, type:"archive.gap_resolved",     data:{ symbol:"lighter_fills", gap_s:91, incident_id:"g-1842" } },
-  { t:22.4, type:"market.breadth_cross",     data:{ value:61, direction:"above", threshold:60 } },
-];
-const COPY = [
-  [0,    "A heatmap would already be drawing liquidations. We have not earned them yet."],
-  [1.2,  "Plant rail tears: archive.gap_detected. Every market print below this is untrusted until it heals."],
-  [4.0,  "Oracle rail spikes on xyz:NVDA. A HIP-3 oracle jump, not a candle."],
-  [8.1,  "Market rain: liquidations, still on a torn plant."],
-  [10.2, "liquidation_burst is the cell, not another drop. The gradient is yours to set."],
-  [13.0, "Watched account caught. Completeness includes who, not only the book."],
-  [19.8, "Gap resolved on the same incident_id. Now the cascade is a fact, not a rumor."],
-  [22.4, "Breadth crosses. A session field, not a ticker."],
-];
-let demoStart = 0, demoCursor = 0;
-function demoTick(now) {
-  const t = ((now - demoStart) % LOOP) / 1000;
-  if (t < demoCursor) { reset(); demoCursor = 0; }
-  for (const s of SCRIPT) {
-    if (s.t <= t && s.t >= demoCursor) {
-      const at = new Date(Date.now() - (t - s.t) * 1000).toISOString();
-      add({ id:`demo-${s.t}-${Math.floor((now - demoStart) / LOOP)}`, type:s.type, received_at:at, observed_at:at, chain_ts:at, late:false, late_ms:0, data:s.data });
-    }
-  }
+// ── Demo: a scripted 40 s incident that exercises every panel ─────────────
+const LOOP = 40000;
+const SCRIPT = [];
+function S(t, type, data) { SCRIPT.push({ t, type, data }); }
+S(1.0, "archive.gap_detected", { symbol: "lighter", stream: "lighter_fills", gap_s: 47, incident_id: "g-1842", venue: "lighter" });
+S(3.5, "oracle.jump", { symbol: "xyz:NVDA", dex: "xyz", direction: "up", change_pct: 2.1, interval_s: 3.0, prev_price: 181.2, price: 185.0, venue: "hip3" });
+S(5.0, "market.oi_delta", { symbol: "BTC", venue: "hyperliquid", direction: "down", delta_pct: -3.4, delta_usd: -41200000, window_s: 300 });
+const LIQS = [["BTC", 1200000, "long"], ["ETH", 410000, "long"], ["SOL", 95000, "long"], ["BTC", 660000, "long"], ["HYPE", 120000, "long"], ["ETH", 230000, "short"], ["BTC", 2100000, "long"], ["DOGE", 40000, "long"], ["xyz:NVDA", 310000, "long"], ["BTC", 880000, "long"], ["ETH", 150000, "long"], ["SOL", 60000, "short"]];
+LIQS.forEach(([s, v, side], i) => S(6.5 + i * 0.6, "market.liquidation", { symbol: s, venue: s.includes(":") ? "hip3" : "hyperliquid", side, notional_usd: v, liquidated_user: "0x7a1c" + String(i).padStart(34, "0") + "b90e" }));
+S(11.0, "market.liquidation_burst", { symbol: "BTC", venue: "hyperliquid", total_usd: 8400000, window_s: 60, count: 41 });
+S(12.5, "market.funding_flip", { symbol: "BTC", venue: "hyperliquid", flipped_to: "negative", funding_rate: -0.00012 });
+S(14.0, "account.liquidated", { symbol: "BTC", venue: "hyperliquid", account: "0x7a1c000000000000000000000000000000000b90e", notional_usd: 1200000 });
+S(15.0, "account.fill", { symbol: "BTC", venue: "hyperliquid", side: "buy", size: 2.5, vwap: 61230, notional_usd: 153075, account: "0x28f0233472b6a44e170e002a72845ca100be4a7e" });
+S(17.0, "oracle.jump", { symbol: "xyz:NVDA", dex: "xyz", direction: "down", change_pct: -1.9, interval_s: 3.1, prev_price: 185.0, price: 181.5, venue: "hip3" });
+S(21.0, "archive.gap_resolved", { symbol: "lighter", stream: "lighter_fills", gap_s: 91, incident_id: "g-1842", venue: "lighter" });
+S(24.0, "market.breadth_cross", { value: 61, direction: "above", threshold: 60, venue: "hyperliquid" });
+S(27.0, "account.transfer", { token: "USDC", amount: "250000", usdc_value: 250000, kind: "core_to_evm", role: "sender", address: "0x28f0233472b6a44e170e002a72845ca100be4a7e" });
+S(30.0, "market.pga_payment", { amount: 3.2, token: "HYPE", notional_usd: 96, venue: "hyperliquid" });
+const COPY = [[0, "A liquidation heatmap would already be drawing. We have not earned it yet: first, is the plant intact?"], [1, "Plant rail tears: archive.gap_detected on lighter fills. Everything below is untrusted until it heals."], [3.5, "HIP-3 oracle jump on xyz:NVDA. An oracle print, not a candle."], [6.5, "Liquidations start. Per account, exchange-wide, above the floor you set."], [11, "liquidation_burst: the cell, not another drop. Your window, your threshold."], [14, "A watched wallet is in the cascade. Completeness includes who."], [21, "Gap resolved on the same incident_id. Now the cascade is a fact, not a rumor."], [24, "Breadth crosses. Session structure, not a ticker."], [30, "Every panel on this page came from webhooks. Nothing here ran a node."]];
+let demoStart = 0, demoCursor = -1;
+function demoTick() {
+  const t = ((performance.now() - demoStart) % LOOP) / 1000;
+  if (t < demoCursor) { reset(); demoCursor = -1; }
+  for (const s of SCRIPT) if (s.t <= t && s.t > demoCursor) { const at = new Date(now() - (t - s.t) * 1000).toISOString(); add({ id: `demo-${s.t}-${s.type}-${Math.floor((performance.now() - demoStart) / LOOP)}`, type: s.type, received_at: at, observed_at: at, chain_ts: new Date(Date.parse(at) - 420).toISOString(), late: false, late_ms: 420, data: s.data }, true); }
   demoCursor = t;
-  return t;
+  let c = COPY[0][1]; for (const [ts, s] of COPY) if (t >= ts) c = s; $("now").textContent = c;
+  const openGap = t >= 1 && t < 21;
+  plant = { enabled: true, fetched_at: new Date().toISOString(), status: { status: openGap ? "degraded" : "operational", active_incidents: openGap ? 1 : 0, exchanges: { hyperliquid: { status: "operational", latency_ms: 440 }, hip3: { status: "operational", latency_ms: 440 }, spot: { status: "operational", latency_ms: 1025 }, hip4: { status: "operational", latency_ms: 1025 }, lighter: { status: openGap ? "degraded" : "operational", latency_ms: openGap ? 47000 : 900 } }, data_types: { fills: { status: openGap ? "degraded" : "operational", completeness_24h: openGap ? 99.2 : 99.9 }, orderbook: { status: "operational", completeness_24h: 100 }, open_interest: { status: "operational", completeness_24h: 99.8 }, funding: { status: "operational", completeness_24h: 99.9 } } }, latency: null, markets: { hyperliquid: { live: 234 }, hip3: { live: 282 }, spot: { live: 326 }, hip4: { live: 187 }, lighter: { live: 118 } } };
 }
 
-// ── Drawing ───────────────────────────────────────────────────────────────
-function resize() {
-  const dpr = Math.min(devicePixelRatio || 1, 2), r = canvas.getBoundingClientRect();
-  canvas.width = Math.max(1, r.width * dpr); canvas.height = Math.max(1, r.height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-addEventListener("resize", resize);
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const glyphs = [];  // hit targets for click
-
-function draw(now) {
-  const rect = canvas.getBoundingClientRect(), w = rect.width, h = rect.height;
-  const left = 150, right = w - 40, span = right - left;
-  let t0, t1, playhead = null, demoT = null;
-  if (mode === "demo") {
-    demoT = demoTick(now);
-    t1 = Date.now(); t0 = t1 - demoT * 1000;               // demo window grows with the loop: 0 .. 28 s
-    const total = LOOP; t0 = t1 - demoT * 1000; t1 = t0 + total;
-    playhead = left + (demoT * 1000 / total) * span;
-    $("clock").textContent = "t+" + demoT.toFixed(1) + "s · loop 28s";
-  } else {
-    t1 = Date.now(); t0 = t1 - win;
-    $("clock").textContent = new Date().toLocaleTimeString() + " · last " + (win / 60000) + " min";
-  }
-  const X = (ms) => left + ((ms - t0) / (t1 - t0)) * span;
-
-  ctx.fillStyle = "#050604"; ctx.fillRect(0, 0, w, h);
-  // time ticks
-  ctx.strokeStyle = "#14160e"; ctx.lineWidth = 1;
-  const ticks = mode === "demo" ? 28 : (win / 60000 <= 2 ? 24 : 20);
-  for (let i = 0; i <= ticks; i++) { const x = left + (i / ticks) * span; ctx.beginPath(); ctx.moveTo(x, h * 0.10); ctx.lineTo(x, h * 0.94); ctx.stroke(); }
-  if (playhead != null) {
-    ctx.fillStyle = "rgba(232,255,74,0.07)"; ctx.fillRect(left, h * 0.10, playhead - left, h * 0.84);
-    ctx.strokeStyle = "#e8ff4a"; ctx.beginPath(); ctx.moveTo(playhead, h * 0.08); ctx.lineTo(playhead, h * 0.96); ctx.stroke();
-  } else {
-    ctx.strokeStyle = "#e8ff4a55"; ctx.beginPath(); ctx.moveTo(right, h * 0.08); ctx.lineTo(right, h * 0.96); ctx.stroke();
-    ctx.fillStyle = "#7a7c6c"; ctx.font = "500 10px " + getComputedStyle(document.body).getPropertyValue("--mono"); ctx.fillText("now", right - 24, h * 0.07);
-  }
-  // rails
-  for (const r of RAILS) {
-    const y = h * r.y;
-    ctx.strokeStyle = r.color + "55"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-    ctx.fillStyle = r.color; ctx.font = "500 10px " + getComputedStyle(document.body).getPropertyValue("--mono"); ctx.fillText(r.label, 22, y + 3);
-  }
-  // open incidents: torn segments
-  for (const inc of incidents.values()) {
-    const y = h * RAIL[inc.rail].y, x0 = clamp(X(inc.openAt), left, right), x1 = clamp(X(inc.closeAt ?? t1), left, right);
-    if (x1 <= x0) continue;
-    ctx.strokeStyle = inc.closeAt ? "#ff5a3c88" : "#ff5a3c"; ctx.lineWidth = 3; ctx.setLineDash([5, 6]);
-    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.setLineDash([]);
-  }
-  // events
-  glyphs.length = 0;
-  const perRailLabels = { plant:0, oracle:0, market:0, acct:0 };
-  const list = [...events.values()].filter((e) => (e.t >= t0 - 5000 || e.rx >= t0) && e.t <= t1 + 5000).sort((a, b) => b.t - a.t);
-  const mono = getComputedStyle(document.body).getPropertyValue("--mono"), sans = getComputedStyle(document.body).getPropertyValue("--sans");
-  if (mode === "live") list.sort((a, b) => b.rx - a.rx);
-  for (const ev of list) {
-    const x = clamp(X(ev.t), left + 6, right);
-    const r = RAIL[ev.rail]; let y = h * r.y;
-    // Arrival halo: a delivery received in the last few seconds pulses in its
-    // rail colour, wherever its chain time puts it on the axis.
-    const sinceRx = (Date.now() - ev.rx) / 1000;
-    if (mode === "live" && sinceRx < 4) {
-      ctx.globalAlpha = 1 - sinceRx / 4; ctx.strokeStyle = r.color; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(x, y, 10 + sinceRx * 10, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
-    }
-    const v = ev.view, age = ((mode === "demo" ? t0 + demoT * 1000 : t1) - ev.t) / 1000;
-    const alpha = mode === "demo" ? clamp(1 - age / 18, 0.25, 1) : clamp(1 - age / ((t1 - t0) / 1000), 0.3, 1);
-    ctx.globalAlpha = reduced ? 1 : alpha;
-    const weight = v.weight ? clamp(Math.log10(Math.max(1, v.weight)) - 2, 0.5, 5) : 1;
-    let hit = 8;
-    if (v.tone === "burst") {
-      const rr = 16 + Math.min(age * 8, 28);
-      ctx.strokeStyle = "#e8ff4a"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "#e8ff4a"; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); hit = 18;
-    } else if (v.tone === "tear") {
-      ctx.fillStyle = "#ff5a3c"; ctx.fillRect(x - 2, y - 14, 4, 28); hit = 14;
-    } else if (v.tone === "ok") {
-      ctx.fillStyle = r.color; ctx.fillRect(x - 6, y - 6, 12, 12);
-    } else if (v.tone === "warn") {
-      ctx.fillStyle = "#ffb347"; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 8, y + 7); ctx.lineTo(x - 8, y + 7); ctx.closePath(); ctx.fill();
-    } else if (v.tone === "acct-liq") {
-      ctx.fillStyle = "#ff5a3c"; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 8, y + 7); ctx.lineTo(x - 8, y + 7); ctx.closePath(); ctx.fill();
-    } else if (v.tone === "acct") {
-      ctx.fillStyle = v.side === "sell" ? "#ff8c7a" : "#c4b5fd"; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y); ctx.lineTo(x, y + 6); ctx.lineTo(x - 6, y); ctx.closePath(); ctx.fill();
-    } else {
-      const rad = 4 + weight * 2.4;
-      ctx.fillStyle = "#e8ff4a"; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); hit = rad + 4;
-    }
-    if (ev.late) { ctx.strokeStyle = "#ffc857"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, hit + 3, 0, Math.PI * 2); ctx.stroke(); }
-    glyphs.push({ x, y, r: hit, ev });
-    const fresh = mode === "live" ? (Date.now() - ev.rx) / 1000 : age;
-    const wantLabel = ev === selected || v.tone === "burst" || v.tone === "tear" || v.tone === "ok" || (perRailLabels[ev.rail] < 3 && fresh < (t1 - t0) / 1000 * 0.35);
-    if (wantLabel) {
-      perRailLabels[ev.rail] += 1;
-      const lift = (perRailLabels[ev.rail] % 2) ? -22 : 14;
-      ctx.fillStyle = "#e6e4d4"; ctx.font = "500 11px " + mono; ctx.fillText(ev.type, x + 12, y + lift - 6);
-      ctx.fillStyle = "#7a7c6c"; ctx.font = "400 10px " + sans; ctx.fillText(v.title + (v.sub ? "  " + v.sub : ""), x + 12, y + lift + 8);
-    }
-    ctx.globalAlpha = 1;
-  }
-  if (selected && events.has(selected.id)) { const x = X(selected.t), y = h * RAIL[selected.rail].y; ctx.strokeStyle = "#e6e4d4"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI * 2); ctx.stroke(); }
-
-  // captions
-  if (mode === "demo") {
-    let line = COPY[0][1]; for (const [ts, s] of COPY) if (demoT >= ts) line = s;
-    $("now").textContent = line;
-  } else if (latest) {
-    const v = latest.view, ago = Math.max(0, (Date.now() - latest.t) / 1000);
-    const lagS = Math.max(0, (latest.rx - latest.t) / 1000);
-    $("now").textContent = `${latest.type}: ${v.title}${v.sub ? ", " + v.sub : ""}. On chain ${ago < 90 ? ago.toFixed(0) + " s ago" : "at " + new Date(latest.t).toLocaleTimeString()}, delivered ${lagS < 1.5 ? "under a second later (fast path)" : lagS < 90 ? lagS.toFixed(0) + " s later" : (lagS / 60).toFixed(1) + " min later (archive path)"}${latest.late ? ", flagged late" : ""}.`;
-  }
-  const open = [...incidents.values()].filter((i) => !i.closeAt).length;
-  const counts = { plant:0, oracle:0, market:0, acct:0 }; for (const e of list) counts[e.rail] += 1;
-  const lat = stats && stats.latencyMs ? stats.latencyMs.chainToReceived : null;
-  const fmt = (ms) => ms == null ? "–" : ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s";
-  $("stats").innerHTML = `<span>open incidents <b>${open}</b></span><span>plant <b>${counts.plant}</b></span><span>oracle <b>${counts.oracle}</b></span><span>market <b>${counts.market}</b></span><span>accounts <b>${counts.acct}</b></span>` +
-    (mode === "live" && stats ? `<span>block to here p50 <b>${fmt(lat && lat.p50)}</b> p95 <b>${fmt(lat && lat.p95)}</b></span><span>late <b>${stats.late}</b></span><span>rejected <b>${stats.rejected}</b></span>` : "");
-  requestAnimationFrame(draw);
-}
-
-// ── Interaction ───────────────────────────────────────────────────────────
-canvas.addEventListener("click", (e) => {
-  const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-  let best = null, bd = 1e9;
-  for (const g of glyphs) { const d = Math.hypot(g.x - mx, g.y - my); if (d < g.r + 6 && d < bd) { bd = d; best = g; } }
-  selected = best ? best.ev : null;
-  if (selected) { $("detail-body").textContent = JSON.stringify(selected, (k, v) => (k === "view" || k === "rail" || k === "t") ? undefined : v, 2); $("detail").style.display = "block"; }
-  else $("detail").style.display = "none";
-});
-$("detail-close").onclick = () => { selected = null; $("detail").style.display = "none"; };
 function setMode(m) {
-  mode = m; reset();
+  mode = m; reset(); plant = null;
   $("b-live").className = m === "live" ? "on" : ""; $("b-demo").className = m === "demo" ? "on" : "";
-  $("wins").style.visibility = m === "live" ? "visible" : "hidden";
-  if (m === "demo") { demoStart = performance.now(); demoCursor = 0; $("conn").textContent = "scripted incident"; $("dot").className = "dot"; }
-  else connect();
+  if (m === "demo") { if (es) es.close(); es = null; demoStart = performance.now(); demoCursor = -1; $("dot").className = "dot"; $("conn").textContent = "scripted incident"; }
+  else { connect(); pollPlant(); }
   history.replaceState(null, "", m === "demo" ? "?demo=1" : location.pathname);
+  renderAll();
 }
-$("b-live").onclick = () => setMode("live");
-$("b-demo").onclick = () => setMode("demo");
-for (const b of $("wins").querySelectorAll("button")) b.onclick = () => { win = Number(b.dataset.w); for (const o of $("wins").querySelectorAll("button")) o.className = o === b ? "on" : ""; };
-
-resize();
+$("b-live").onclick = () => setMode("live"); $("b-demo").onclick = () => setMode("demo");
+setInterval(() => { if (mode === "demo") demoTick(); renderAll(); }, 1000);
+setInterval(pollPlant, 15000);
+addEventListener("resize", renderAll);
 setMode(new URLSearchParams(location.search).get("demo") ? "demo" : "live");
-refreshStats(); setInterval(refreshStats, 5000);
-requestAnimationFrame(draw);
 })();
 </script>
 </body>

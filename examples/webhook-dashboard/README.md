@@ -56,16 +56,22 @@ Before enabling a condition you are unsure about, try it against real data with 
 
 ## What the dashboard shows
 
+A control room over the whole exchange, every panel fed by webhooks: plant health per venue and stream (with open gap and stall incidents), live liquidation flow with long and short split, top markets and a cascade badge, oracle and chain status per HIP-3 dex, market structure (open interest deltas, funding flips, breadth, auctions), watched wallets with their hour, a 60 minute incident tape across four rails, and the raw tape of every delivery with its latency. `?demo=1` replays a scripted 40 second incident through the same panels.
+
 - **Block to your server**: the time from the Hyperliquid block that carried the event to the moment this server accepted the delivery. Fills, transfers and liquidations ride the fast path and usually land under a second; events with `latency_class: minutes` in the catalog arrive a few minutes later by design.
 - **Block to 0xArchive** and **0xArchive to your server**: the same span split at `observed_at`, so you can tell our pipeline from the network hop to you.
 - **Marked late**: deliveries whose payload carries `late: true`, meaning the occurrence was more than ten minutes old when we caught up, for example after an outage on our side. Treat those as history, not as something that just happened.
-- The tape shows the newest 300 events; click a row for the full payload. Chips filter by event type.
+- The tape keeps the newest 250 deliveries; click a row for the full payload.
 
 ## How it verifies deliveries
 
 Every request carries `0xa-signature: t=<unix seconds>,v1=<hex>`. The server recomputes `HMAC-SHA256(secret, "<t>." + raw body)` over the exact bytes received, compares in constant time, and rejects anything older than five minutes. During the 24 hours after you rotate a secret, deliveries carry two `v1` values; put both secrets in `WEBHOOK_SECRET`, comma separated, and either will be accepted.
 
 It acknowledges with a 200 before doing anything else, and deduplicates on the event id, so a retried delivery never shows twice.
+
+## Plant status (optional)
+
+Set `OXARCHIVE_API_KEY` (and `OXARCHIVE_API_URL` if you are not on production) on the server and the plant panel fills in from the data-quality endpoints: venue health and data lag every 15 seconds, 24 hour completeness by data type, and the number of markets covered per venue. Without a key the page shows plant state from the webhook stream alone (open gap and stall incidents).
 
 ## Running it somewhere permanent
 
