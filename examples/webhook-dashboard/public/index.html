@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0xArchive webhooks, live</title>
+<style>
+  :root { --bg:#0b0d10; --panel:#12161b; --line:#1f262e; --text:#e6e9ee; --muted:#8a94a3; --accent:#5ad1ff; --green:#3ddc97; --red:#ff6b6b; --amber:#ffc857; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 16px; }
+  header { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px 20px; margin-bottom:14px; }
+  h1 { font-size:18px; margin:0; font-weight:600; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; vertical-align:middle; }
+  .dot.on { background:var(--green); }
+  .muted { color:var(--muted); }
+  .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .card .big { font-size:26px; font-weight:600; margin-top:4px; font-variant-numeric: tabular-nums; }
+  .card .sub { color:var(--muted); font-size:12px; margin-top:2px; }
+  .row { display:grid; gap:12px; grid-template-columns: 2fr 1fr; }
+  @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+  canvas { width:100%; height:80px; display:block; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 10px; }
+  .chip { border:1px solid var(--line); background:transparent; color:var(--text); border-radius:999px; padding:3px 10px; font-size:12px; cursor:pointer; }
+  .chip.on { border-color:var(--accent); color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover { background:#161c23; }
+  tr.new { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background:#1d3a4a; } to { background:transparent; } }
+  .badge { display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; border:1px solid var(--line); color:var(--muted); }
+  .badge.late { border-color:var(--amber); color:var(--amber); }
+  .badge.fast { border-color:var(--green); color:var(--green); }
+  .type { color:var(--accent); }
+  .buy { color:var(--green); } .sell { color:var(--red); }
+  pre { background:#0e1216; border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; max-height:60vh; font-size:12px; }
+  .tablewrap { overflow-x:auto; }
+  .empty { color:var(--muted); padding:24px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>0xArchive webhooks, live</h1>
+  <span class="muted"><span id="dot" class="dot"></span><span id="conn">connecting</span></span>
+  <span class="muted" id="totals"></span>
+</header>
+
+<div class="grid">
+  <div class="card"><div class="label">Block to your server</div><div class="big" id="l-chain-recv">–</div><div class="sub" id="l-chain-recv-sub">median, fast-path events only</div></div>
+  <div class="card"><div class="label">Block to 0xArchive</div><div class="big" id="l-chain-obs">–</div><div class="sub" id="l-chain-obs-sub">median</div></div>
+  <div class="card"><div class="label">0xArchive to your server</div><div class="big" id="l-obs-recv">–</div><div class="sub" id="l-obs-recv-sub">median, includes the network hop</div></div>
+  <div class="card"><div class="label">Marked late</div><div class="big" id="late">0</div><div class="sub">older than 10 minutes when we caught up</div></div>
+</div>
+
+<div class="row">
+  <div class="card">
+    <div class="label">Deliveries per minute</div>
+    <canvas id="spark" width="800" height="80"></canvas>
+    <div class="chips" id="chips"></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>received</th><th>event</th><th>subject</th><th>detail</th><th>latency</th><th></th></tr></thead>
+        <tbody id="tape"></tbody>
+      </table>
+      <div class="empty" id="empty">Waiting for the first delivery. Create a subscription that points at this endpoint and it will appear here.</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Selected event</div>
+    <pre id="detail" class="muted">Click a row to see the full payload.</pre>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const tape = $("tape"), chips = $("chips"), detail = $("detail");
+  const events = new Map();   // id -> event, insertion order = arrival order
+  let filter = null;
+  const MAX_ROWS = 300;
+
+  const fmtMs = (ms) => ms == null ? "–" : ms < 1000 ? `${Math.round(ms)} ms` : ms < 120000 ? `${(ms/1000).toFixed(2)} s` : `${(ms/60000).toFixed(1)} min`;
+  const num = (v, d = 2) => v == null || v === "" || isNaN(Number(v)) ? "" : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+  const short = (a) => typeof a === "string" && a.length > 12 ? a.slice(0, 6) + "…" + a.slice(-4) : (a || "");
+
+  function subject(ev) {
+    const d = ev.data || {};
+    return d.symbol || d.coin || d.token || d.dex || d.stream || d.venue || "";
+  }
+  function detailText(ev) {
+    const d = ev.data || {};
+    switch (ev.type) {
+      case "account.fill": return `<span class="${d.side === "sell" ? "sell" : "buy"}">${d.side || ""}</span> ${num(d.size, 4)} @ ${num(d.vwap ?? d.price, 4)} · $${num(d.notional_usd, 0)} · ${short(d.account)}`;
+      case "account.transfer": return `${d.kind || ""} ${num(d.amount, 2)} ${d.token || ""} ($${num(d.usdc_value, 0)}) · ${short(d.address)} as ${d.role || ""}`;
+      case "market.liquidation": return `$${num(d.notional_usd, 0)} · ${d.side || ""} · ${short(d.liquidated_user)}`;
+      case "account.liquidated": return `$${num(d.notional_usd, 0)} · ${short(d.account)}`;
+      case "market.liquidation_burst": return `$${num(d.total_usd ?? d.notional_usd, 0)} in ${d.window_s || ""}s · ${d.count ?? ""} liquidations`;
+      case "oracle.jump": return `${d.direction || ""} ${num(d.change_pct, 2)}% in ${num(d.interval_s, 1)}s · ${num(d.prev_price, 4)} to ${num(d.price, 4)}`;
+      case "market.pga_payment": return `${num(d.amount, 3)} ${d.token || "HYPE"} ($${num(d.notional_usd, 0)})`;
+      case "market.funding_flip": return `${d.flipped_to || ""} · rate ${num(d.funding_rate, 6)}`;
+      default: return Object.entries(d).filter(([k, v]) => ["number", "string", "boolean"].includes(typeof v) && k !== "timestamp").slice(0, 3).map(([k, v]) => `${k}=${v}`).join(" · ");
+    }
+  }
+  function latency(ev) {
+    const r = Date.parse(ev.received_at), c = ev.chain_ts ? Date.parse(ev.chain_ts) : NaN;
+    return Number.isFinite(c) ? r - c : null;
+  }
+
+  function row(ev) {
+    const tr = document.createElement("tr");
+    tr.dataset.id = ev.id;
+    const lat = latency(ev);
+    tr.innerHTML = `<td class="muted">${new Date(ev.received_at).toLocaleTimeString()}</td>
+      <td class="type">${ev.type}</td>
+      <td>${subject(ev)}</td>
+      <td>${detailText(ev)}</td>
+      <td>${fmtMs(lat)} ${lat != null && lat < 1500 ? '<span class="badge fast">fast path</span>' : ""}</td>
+      <td>${ev.late ? '<span class="badge late">late ' + fmtMs(ev.late_ms) + '</span>' : ""}</td>`;
+    tr.onclick = () => { detail.className = ""; detail.textContent = JSON.stringify(ev, null, 2); };
+    return tr;
+  }
+
+  function render() {
+    const list = [...events.values()].filter((e) => !filter || e.type === filter).slice(-MAX_ROWS).reverse();
+    tape.replaceChildren(...list.map(row));
+    $("empty").style.display = events.size ? "none" : "block";
+    const counts = {};
+    for (const e of events.values()) counts[e.type] = (counts[e.type] || 0) + 1;
+    chips.replaceChildren(...[["all", events.size], ...Object.entries(counts).sort((a, b) => b[1] - a[1])].map(([t, n]) => {
+      const b = document.createElement("button");
+      b.className = "chip" + ((t === "all" && !filter) || t === filter ? " on" : "");
+      b.textContent = `${t} ${n}`;
+      b.onclick = () => { filter = t === "all" ? null : t; render(); };
+      return b;
+    }));
+  }
+
+  function add(ev, live) {
+    if (events.has(ev.id)) return;
+    events.set(ev.id, ev);
+    if (events.size > 2000) events.delete(events.keys().next().value);
+    if (live && (!filter || ev.type === filter)) {
+      const tr = row(ev); tr.classList.add("new");
+      tape.prepend(tr);
+      while (tape.children.length > MAX_ROWS) tape.lastChild.remove();
+      $("empty").style.display = "none";
+      render();
+    }
+  }
+
+  async function refreshStats() {
+    try {
+      const s = await (await fetch("stats", { cache: "no-store" })).json();
+      $("totals").textContent = `${s.accepted} accepted · ${s.duplicates} duplicates · ${s.rejected} rejected · since ${new Date(s.startedAt).toLocaleString()}`;
+      $("late").textContent = s.late;
+      const L = s.latencyMs;
+      $("l-chain-recv").textContent = fmtMs(L.chainToReceived.p50);
+      $("l-chain-recv-sub").textContent = `p95 ${fmtMs(L.chainToReceived.p95)} · n ${L.chainToReceived.n}`;
+      $("l-chain-obs").textContent = fmtMs(L.chainToObserved.p50);
+      $("l-chain-obs-sub").textContent = `p95 ${fmtMs(L.chainToObserved.p95)}`;
+      $("l-obs-recv").textContent = fmtMs(L.observedToReceived.p50);
+      $("l-obs-recv-sub").textContent = `p95 ${fmtMs(L.observedToReceived.p95)} · includes the network hop`;
+      spark(s.perMinute);
+    } catch {}
+  }
+
+  function spark(perMinute) {
+    const c = $("spark"), ctx = c.getContext("2d");
+    const now = Date.now();
+    const keys = []; for (let i = 59; i >= 0; i--) keys.push(new Date(now - i * 60000).toISOString().slice(0, 16));
+    const vals = keys.map((k) => perMinute[k] || 0);
+    const max = Math.max(1, ...vals);
+    ctx.clearRect(0, 0, c.width, c.height);
+    const w = c.width / vals.length;
+    vals.forEach((v, i) => { ctx.fillStyle = i === vals.length - 1 ? "#5ad1ff" : "#2a5f75"; const h = (v / max) * (c.height - 4); ctx.fillRect(i * w + 1, c.height - h, w - 2, h); });
+    ctx.fillStyle = "#8a94a3"; ctx.font = "11px sans-serif"; ctx.fillText(`peak ${max}/min · last 60 min`, 6, 12);
+  }
+
+  function connect() {
+    const es = new EventSource("stream");
+    es.addEventListener("hello", (m) => { const { recent } = JSON.parse(m.data); recent.forEach((e) => add(e, false)); render(); $("dot").className = "dot on"; $("conn").textContent = "live"; });
+    es.onmessage = (m) => add(JSON.parse(m.data), true);
+    es.onerror = () => { $("dot").className = "dot"; $("conn").textContent = "reconnecting"; };
+  }
+  connect();
+  refreshStats();
+  setInterval(refreshStats, 5000);
+})();
+</script>
+</body>
+</html>
