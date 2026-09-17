@@ -70,6 +70,18 @@ const seen = new Set();
 const stats = { received: 0, accepted: 0, duplicates: 0, rejected: 0, startedAt: new Date().toISOString() };
 const clients = new Set();
 
+// Warm the store from the JSONL file so a restart does not blank the tape.
+if (DATA_FILE && fs.existsSync(DATA_FILE)) {
+  const lines = fs.readFileSync(DATA_FILE, "utf8").split("\n").filter(Boolean).slice(-MAX_EVENTS);
+  for (const line of lines) {
+    try {
+      const ev = JSON.parse(line);
+      if (ev && ev.id && !seen.has(ev.id)) { events.push(ev); seen.add(ev.id); }
+    } catch {}
+  }
+  if (events.length) console.log(`restored ${events.length} events from ${DATA_FILE}`);
+}
+
 function remember(ev) {
   events.push(ev);
   seen.add(ev.id);
