@@ -69,6 +69,7 @@
   .tr .t { color:var(--dim); } .tr .tag { font-size:9px; letter-spacing:.12em; text-transform:uppercase; }
   .tr .x { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tr .lat { font-size:10px; padding:1px 5px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .unv { font-size:9px; padding:1px 5px; border:1px solid #3b1d16; color:var(--tear); letter-spacing:.08em; margin-left:4px; }
   .lat.fast { color:var(--plant); border-color:#1a3d32; } .lat.arch { color:var(--late); border-color:#3b3418; } .lat.late { color:var(--tear); border-color:#3b1d16; }
   .r-plant { border-left-color:var(--plant); } .r-oracle { border-left-color:var(--oracle); } .r-market { border-left-color:var(--market); } .r-acct { border-left-color:var(--acct); }
   .r-plant .tag { color:var(--plant); } .r-oracle .tag { color:var(--oracle); } .r-market .tag { color:var(--market); } .r-acct .tag { color:var(--acct); }
@@ -250,7 +251,7 @@ function latChip(ev) {
 function tapeRow(ev, fresh) {
   const div = document.createElement("div");
   div.className = `tr r-${ev.rail}` + (fresh ? " new" : "");
-  div.innerHTML = `<span class="t">${new Date(ev.rx).toISOString().slice(11, 19)}</span><span class="tag">${esc(TAGS[ev.type] || ev.type)}</span><span class="x">${line(ev)}</span>${latChip(ev)}`;
+  div.innerHTML = `<span class="t">${new Date(ev.rx).toISOString().slice(11, 19)}</span><span class="tag">${esc(TAGS[ev.type] || ev.type)}</span><span class="x">${line(ev)}${ev.verified === false ? '<span class="unv" title="' + esc(ev.signature_error || "signature not verified") + '">unverified</span>' : ""}</span>${latChip(ev)}`;
   div.onclick = () => { $("detail-body").textContent = JSON.stringify(ev, (k, v) => ["rail", "t", "rx", "lag"].includes(k) ? undefined : v, 2); $("detail").style.display = "block"; };
   const rows = $("tape-rows");
   rows.prepend(div);

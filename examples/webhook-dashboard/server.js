@@ -11,6 +11,10 @@
 //
 // Environment:
 //   WEBHOOK_SECRET   required; comma-separate two secrets during a rotation
+//   ALLOW_UNVERIFIED set to 1 while you do not have the secret yet (first
+//                    setup, a shared inbox): deliveries that fail the signature
+//                    check are still accepted and shown, marked verified=false.
+//                    Never run production processing this way.
 //   PORT             listen port (default 3200)
 //   MAX_EVENTS       events kept in memory (default 2000)
 //   DATA_FILE        optional JSONL file every accepted event is appended to
@@ -33,6 +37,7 @@ const MAX_EVENTS = Number(process.env.MAX_EVENTS || 2000);
 const TOLERANCE_S = Number(process.env.TOLERANCE_S || 300);
 const WEBHOOK_PATH = process.env.WEBHOOK_PATH || "/webhook";
 const DATA_FILE = process.env.DATA_FILE || "";
+const ALLOW_UNVERIFIED = process.env.ALLOW_UNVERIFIED === "1";
 const API_KEY = process.env.OXARCHIVE_API_KEY || "";
 const API_URL = (process.env.OXARCHIVE_API_URL || "https://api.0xarchive.io").replace(/\/$/, "");
 const SECRETS = String(process.env.WEBHOOK_SECRET || "")
@@ -40,8 +45,8 @@ const SECRETS = String(process.env.WEBHOOK_SECRET || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-if (SECRETS.length === 0) {
-  console.error("WEBHOOK_SECRET is required (the secret shown once when you created the endpoint).");
+if (SECRETS.length === 0 && !ALLOW_UNVERIFIED) {
+  console.error("WEBHOOK_SECRET is required (the secret shown once when you created the endpoint), or set ALLOW_UNVERIFIED=1 for a first look.");
   process.exit(1);
 }
 
@@ -73,7 +78,7 @@ function verifySignature(sigHeader, rawBody) {
 // ---------------------------------------------------------------------------
 const events = [];
 const seen = new Set();
-const stats = { received: 0, accepted: 0, duplicates: 0, rejected: 0, startedAt: new Date().toISOString() };
+const stats = { received: 0, accepted: 0, duplicates: 0, rejected: 0, unverified: 0, startedAt: new Date().toISOString() };
 const clients = new Set();
 
 // Warm the store from the JSONL file so a restart does not blank the tape.
@@ -224,10 +229,14 @@ const server = http.createServer(async (req, res) => {
       return send(res, 413, JSON.stringify({ error: String(e.message) }));
     }
     const check = verifySignature(req.headers["0xa-signature"], raw);
-    if (!check.ok) {
+    if (!check.ok && !ALLOW_UNVERIFIED) {
       stats.rejected += 1;
       console.warn(`rejected delivery: ${check.reason}`);
       return send(res, 401, JSON.stringify({ error: check.reason }));
+    }
+    if (!check.ok) {
+      stats.unverified += 1;
+      console.warn(`accepted UNVERIFIED delivery (ALLOW_UNVERIFIED=1): ${check.reason}`);
     }
     let payload;
     try {
@@ -257,6 +266,8 @@ const server = http.createServer(async (req, res) => {
       chain_ts: typeof data.timestamp === "string" ? data.timestamp : null,
       late: payload.late === true,
       late_ms: typeof payload.late_ms === "number" ? payload.late_ms : null,
+      verified: check.ok,
+      signature_error: check.ok ? null : check.reason,
       data,
     });
     return;
