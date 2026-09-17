@@ -444,11 +444,11 @@ LIQS.forEach(([s, v, side], i) => S(6.5 + i * 0.6, "market.liquidation", { symbo
 S(11.0, "market.liquidation_burst", { symbol: "BTC", venue: "hyperliquid", total_usd: 8400000, window_s: 60, count: 41 });
 S(12.5, "market.funding_flip", { symbol: "BTC", venue: "hyperliquid", flipped_to: "negative", funding_rate: -0.00012 });
 S(14.0, "account.liquidated", { symbol: "BTC", venue: "hyperliquid", account: "0x7a1c000000000000000000000000000000000b90e", notional_usd: 1200000 });
-S(15.0, "account.fill", { symbol: "BTC", venue: "hyperliquid", side: "buy", size: 2.5, vwap: 61230, notional_usd: 153075, account: "0x28f0233472b6a44e170e002a72845ca100be4a7e" });
+S(15.0, "account.fill", { symbol: "BTC", venue: "hyperliquid", side: "buy", size: 2.5, vwap: 61230, notional_usd: 153075, account: "0x1111000000000000000000000000000000001111" });
 S(17.0, "oracle.jump", { symbol: "xyz:NVDA", dex: "xyz", direction: "down", change_pct: -1.9, interval_s: 3.1, prev_price: 185.0, price: 181.5, venue: "hip3" });
 S(21.0, "archive.gap_resolved", { symbol: "lighter", stream: "lighter_fills", gap_s: 91, incident_id: "g-1842", venue: "lighter" });
 S(24.0, "market.breadth_cross", { value: 61, direction: "above", threshold: 60, venue: "hyperliquid" });
-S(27.0, "account.transfer", { token: "USDC", amount: "250000", usdc_value: 250000, kind: "core_to_evm", role: "sender", address: "0x28f0233472b6a44e170e002a72845ca100be4a7e" });
+S(27.0, "account.transfer", { token: "USDC", amount: "250000", usdc_value: 250000, kind: "core_to_evm", role: "sender", address: "0x1111000000000000000000000000000000001111" });
 S(30.0, "market.pga_payment", { amount: 3.2, token: "HYPE", notional_usd: 96, venue: "hyperliquid" });
 const COPY = [[0, "Realtime intelligence on a trusted tape. First question: is the plant intact?"], [1, "Plant tears: archive.gap_detected on Lighter fills. Market prints below this are untrusted."], [3.5, "HIP-3 oracle jump on xyz:NVDA. An oracle print, not a candle. Named rail, not NVDA."], [6.5, "Liquidations. Per account, exchange-wide, above the floor you set."], [11, "liquidation_burst is the cell, not another drop. Your window, your threshold."], [14, "A watched wallet is in the cascade. Completeness includes who."], [21, "Gap resolved on the same incident_id. Now the cascade is a fact."], [24, "Breadth crosses. Session structure, not a ticker."], [30, "Every panel is a webhook. Nothing here ran a node."]];
 let demoStart = 0, demoCursor = -1;
