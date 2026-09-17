@@ -1,0 +1,11 @@
+{
+  "name": "oxarchive-webhook-dashboard-example",
+  "version": "1.0.0",
+  "description": "Receiver and live dashboard for 0xArchive webhooks: verifies signatures, shows events, latency and late deliveries as they arrive.",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
