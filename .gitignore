@@ -40,3 +40,7 @@ Thumbs.db
 
 # Misc
 *.tgz
+
+# Agent working directories. Never source, never packaged.
+.claude/
+.codex/

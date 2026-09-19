@@ -1,0 +1,30 @@
+name: Package contents
+
+# package.json carries a `files` allowlist, so npm already ships only dist and
+# the readme. This job fails if that allowlist is ever removed.
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  tarball-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Plant a stray directory the way an agent would
+        run: mkdir -p .claude/worktrees/probe && echo leak > .claude/worktrees/probe/leak.rs
+      - name: The tarball must contain only the built package
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e '
+            const files = require("/tmp/pack.json")[0].files.map(f => f.path);
+            const tops = [...new Set(files.map(f => f.split("/")[0]))].sort();
+            console.log("top-level entries in the tarball:", tops.join(", "));
+            const bad = tops.filter(t => /^\.claude|^\.codex|^backend|^crates|^migrations/.test(t));
+            if (bad.length) { console.error("::error::tarball contains " + bad.join(", ")); process.exit(1); }
+          '
