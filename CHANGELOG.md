@@ -5,6 +5,49 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## 1.10.0 (unreleased)
+
+### Added
+- **Webhooks**: `client.webhooks` covers the full management surface, typed.
+  Endpoints (`listEndpoints`, `createEndpoint`, `deleteEndpoint`,
+  `rotateSecret`, `enableEndpoint`, `testEndpoint`), subscriptions
+  (`listSubscriptions`, `createSubscription`, `updateSubscription`,
+  `deleteSubscription`), watched wallets (`listAddresses`, `addAddress`,
+  `deleteAddress`), deliveries (`listDeliveries`, `redeliver`), the event
+  catalog (`eventTypes`), and the two preview routes (`estimate`, `dryRun`).
+- **Webhook signature verification**: `constructWebhookEvent` verifies a
+  delivery and returns the parsed event; `verifyWebhookSignature` answers the
+  same question as a boolean; `assertWebhookSignature` names the check that
+  failed. They take the raw body as a string, `Buffer`, `Uint8Array`, or
+  `ArrayBuffer`, never a re-serialised object, compare in constant time,
+  collect every `v1` in the header so a rotation overlap verifies, and enforce
+  a 300 second replay window by default. Built on WebCrypto, so they run on
+  Node 18 and later, in browsers, and on edge runtimes.
+  `createWebhookSignatureHeader`, `parseWebhookSignatureHeader`, and
+  `readWebhookHeader` support testing a receiver without waiting for a
+  delivery.
+- Plan allowances for webhooks are documented in the README. Free has no
+  webhook delivery at all and keeps `estimate` and `dryRun`, so a rule can be
+  designed and measured against real history before upgrading to receive it.
+
+### Changed
+- The HTTP layer gained `PATCH` and `DELETE`, which the webhook routes need,
+  and the four verbs now share one request path. Behaviour for existing
+  resources is unchanged.
+- Response key transformation can now leave a subtree exactly as the API sent
+  it. Free-form JSON is no longer camelCased: a subscription's `filters`, a
+  delivery's `payload`, an occurrence's `data`, and the event catalog's
+  `params`, `metrics`, `operators`, and `filters_example` keep their wire
+  keys, because those keys are data. Every other resource is unaffected.
+
+### Fixed
+- `OxArchiveError.requestId` is populated on failed requests. It had always
+  been `undefined`: the SDK looked for the id under `meta`, but an error
+  response has no `meta` and carries `request_id` at the top level instead.
+  The README has been telling people to print a field that could never have a
+  value, which is exactly the field support asks for. Success envelopes are
+  read as before. Applies to every resource, not just webhooks.
+
 ## 1.9.1 (2026-08-31)
 
 ### Added

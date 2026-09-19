@@ -6,7 +6,7 @@ TypeScript client for 0xArchive market data in Node services, dashboards, coding
 
 0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. Hyperliquid includes core perps (`/v1/hyperliquid`), HIP-3 builder perps (`/v1/hyperliquid/hip3`), HIP-4 outcome markets (`/v1/hyperliquid/hip4`), and Hyperliquid Spot (`/v1/hyperliquid/spot`). Lighter.xyz is the second top-level venue API at `/v1/lighter`. In this SDK these map to `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, and `client.lighter`.
 
-Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, and order-book reconstruction utilities.
+Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, webhook management with signature verification, and order-book reconstruction utilities.
 
 ## Installation
 
@@ -1169,6 +1169,255 @@ const orderbook = await client.orderbook.get('BTC');
 const trades = await client.trades.list('BTC', { start, end });
 ```
 
+## Webhooks
+
+Events pushed to your server instead of polled: liquidations, fills on wallets you watch, oracle jumps, settlements, export jobs finishing, and the rest of the catalog. Deliveries are signed, retried, and logged.
+
+Three objects make a working integration:
+
+- an **endpoint**, a URL of yours plus the signing secret its deliveries are signed with,
+- a **subscription**, one rule saying which occurrences of one event type go to that endpoint,
+- a **watched wallet**, which puts one of your addresses in scope for account events such as `account.fill`.
+
+```typescript
+const client = new OxArchive({ apiKey: '0xa_your_api_key' });
+
+// 1. Where deliveries go. The secret is returned exactly once: store it now.
+const endpoint = await client.webhooks.createEndpoint({
+  url: 'https://example.com/webhooks/0xarchive',
+  description: 'trading desk',
+});
+console.log(endpoint.secret); // whsec_..., put it in your secret manager
+
+// 2. What to send. Every key in `filters` is validated against the event
+//    type's declaration, so a typo is an error here, not silence later.
+await client.webhooks.createSubscription({
+  endpointId: endpoint.id,
+  eventType: 'market.liquidation',
+  filters: {
+    venue: 'hyperliquid',
+    conditions: [{ metric: 'notional_usd', op: '>=', value: 250_000 }],
+  },
+});
+
+// 3. Prove the receiver works: a real signed delivery through the real dispatcher.
+await client.webhooks.testEndpoint(endpoint.id);
+```
+
+### Try a rule before you create it
+
+`estimate` answers "how often would this have fired?" over up to 30 days, with a per-day series, a median, a busiest day, and a ladder showing the rate at other thresholds. `dryRun` returns the actual occurrences a rule would have delivered over up to 24 hours. Both validate the configuration exactly as `createSubscription` does, so an error here is the error you would have hit later.
+
+```typescript
+const estimate = await client.webhooks.estimate({
+  eventType: 'market.liquidation',
+  config: { venue: 'hyperliquid', min_notional_usd: 250_000 },
+  lookbackDays: 7,
+});
+console.log(`${estimate.perDayP50} a day, busiest day ${estimate.perDayMax}`);
+for (const rung of estimate.ladder) {
+  console.log(`>= ${rung.value}: ${rung.perDay} a day`);
+}
+
+const preview = await client.webhooks.dryRun({
+  eventType: 'market.liquidation',
+  config: { venue: 'hyperliquid', min_notional_usd: 250_000 },
+  lookbackS: 86_400,
+});
+console.log(`${preview.matched} matched in the last 24 hours`);
+console.log(preview.occurrences[0]?.data);
+```
+
+Both routes share a budget of 6 calls a minute per account.
+
+### Configuration is wire-shaped
+
+Everywhere else in this SDK, response keys arrive camelCased. A subscription's `filters` is the exception, in both directions: the API stores it, normalises it, and hands it back, so the SDK sends and returns it exactly as written. Use `min_notional_usd`, `params.window_s`, and `conditions[].metric`, not camelCase spellings of them. The same applies to a delivery's `payload`, which is the exact JSON that was signed, and to the catalog's `params` and `metrics`, whose keys are the parameter and metric names conditions are written against.
+
+`client.webhooks.eventTypes()` is the only source of truth for what a rule may say: which filters an event type accepts, which parameters it declares with their defaults and bounds, which metrics conditions can test, and which operators apply to each metric type. Operator symbols are accepted and stored canonically, so a condition sent as `>=` reads back as `greater_than_or_equal`.
+
+### Plans
+
+| Plan | Endpoints | Subscriptions | Watched wallets | Deliveries per day |
+| --- | --- | --- | --- | --- |
+| Free | none | none | none | none |
+| Build | 1 | 8 | 2 | 5,000 |
+| Pro | 4 | 40 | 15 | 50,000 |
+| Scale | 12 | 200 | 50 | 500,000 |
+| Enterprise | negotiated | negotiated | negotiated | negotiated |
+
+Free has no webhook delivery at all: no endpoints, no subscriptions, no watched wallets, no deliveries. What Free does keep is the preview surface. `estimate` and `dryRun` answer on every plan, so a Free account can design a rule against real history and see exactly what it would have caught before paying to receive anything. A Build trial carries Build's allowances.
+
+When an account goes past its deliveries-per-day allowance, the subscription responsible is paused and reports that it is paused. Events are not dropped in silence, and your other rules keep delivering. Nothing is queued while a rule is paused, so a paused subscriber recovers the gap by querying the REST archive over the paused interval for the same event type and filters. The fields carrying the pause state are still settling in this release, so the SDK does not type them yet.
+
+### Verifying a delivery
+
+This is the part worth getting right. Every delivery carries these headers, emitted lowercase and, like all HTTP headers, to be looked up case-insensitively:
+
+| Header | Value |
+| --- | --- |
+| `0xa-signature` | `t=<unix seconds>,v1=<64 hex>` and a second `v1` during a rotation |
+| `0xa-event-id` | Event UUID, stable across every retry and manual redelivery |
+| `0xa-event-type` | The event type, for example `webhook.test` |
+| `user-agent` | `0xArchive-Webhooks/1.0` |
+
+There is no separate timestamp header, no delivery id header, no key id. The timestamp lives inside `0xa-signature` and is covered by the signature, which is what makes a replay window enforceable.
+
+`v1` is `HMAC-SHA256(secret, "<t>." + raw body)`, hex encoded. The key is the whole `whsec_...` string exactly as you received it: do not strip the prefix, do not hex-decode it, do not base64-decode anything.
+
+**Verify the raw body.** The bytes on the wire are PostgreSQL's rendering of the stored JSON, so they match neither the emitter's key order nor any JSON library's default output. `JSON.stringify(req.body)` produces different bytes and every signature fails. Capture the body before any parser touches it.
+
+```typescript
+import express from 'express';
+import { constructWebhookEvent, WebhookSignatureError } from '@0xarchive/sdk';
+
+const app = express();
+
+app.post(
+  '/webhooks/0xarchive',
+  express.raw({ type: 'application/json' }), // raw Buffer, not express.json()
+  async (req, res) => {
+    let event;
+    try {
+      event = await constructWebhookEvent({
+        payload: req.body,
+        headers: req.headers,
+        secret: process.env.OXARCHIVE_WEBHOOK_SECRET!,
+      });
+    } catch (err) {
+      // A bad signature is not retryable. Answer 4xx, never 5xx.
+      if (err instanceof WebhookSignatureError) {
+        console.warn(`rejected delivery: ${err.reason}`);
+        return res.sendStatus(400);
+      }
+      throw err;
+    }
+
+    res.sendStatus(202);        // acknowledge within 10 seconds
+    void handle(event);         // then do the work out of band
+  }
+);
+```
+
+Next.js route handlers and other fetch-style servers read the body as text:
+
+```typescript
+import { verifyWebhookSignature } from '@0xarchive/sdk';
+
+export async function POST(request: Request): Promise<Response> {
+  const raw = await request.text();   // before any JSON parsing
+  const ok = await verifyWebhookSignature({
+    payload: raw,
+    headers: request.headers,
+    secret: [process.env.WEBHOOK_SECRET!, process.env.WEBHOOK_SECRET_PREVIOUS!].filter(Boolean),
+  });
+  if (!ok) return new Response('bad signature', { status: 400 });
+
+  const event = JSON.parse(raw);
+  queue(event);
+  return new Response(null, { status: 202 });
+}
+```
+
+Both helpers accept the body as a string, a `Buffer`, a `Uint8Array`, or an `ArrayBuffer`, compare in constant time, collect every `v1` in the header rather than the first, and enforce a 300 second replay window by default (`toleranceSeconds` changes it). They run anywhere WebCrypto does, which is Node 18 and later, browsers, and edge runtimes.
+
+What to do on the receiving side, in order:
+
+1. **Deduplicate on the event id.** Delivery is at least once, retries reuse the id, and a manual redelivery reuses it on purpose. `event.id` is the signed copy of the `0xa-event-id` header; prefer it, since the header is not covered by the signature.
+2. **Answer 2xx quickly.** The request times out after 10 seconds. Anything outside 200 to 299, redirects included, counts as a failure and enters the retry ladder: 5s, 30s, 2m, 10m, 1h, then hourly, giving up after 24 hours. Ten consecutive failures spanning at least 6 hours disable the endpoint, leaving its status `auto_disabled`, which `client.webhooks.enableEndpoint(id)` undoes.
+3. **Answer 4xx on a verification failure.** A 5xx replays the same bad delivery at you for a day.
+4. **Serve it over HTTPS.** The destination URL is not part of the signed string, so an observed delivery could otherwise be replayed at a different path on the same host.
+
+If you are writing a receiver in another language, these vectors let you check it. The secrets are placeholders, and the body is 186 bytes with no trailing newline, so the signed string is 197 bytes.
+
+```
+t      = 1758240000
+body   = {"id": "11111111-1111-4111-8111-111111111111", "data": {"message": "Test event from 0xArchive."}, "type": "webhook.test", "observed_at": "2026-09-19T00:00:00+00:00", "schema_version": 1}
+
+secret = whsec_0000000000000000000000000000000000000000000000000000000000000000
+  0xa-signature: t=1758240000,v1=027f40e95c9aa4e8097c22493f6f019ad25407ddf35b13103f95e5501d49ec0b
+
+during a rotation, with the previous secret
+prev   = whsec_1111111111111111111111111111111111111111111111111111111111111111
+  0xa-signature: t=1758240000,v1=027f40e95c9aa4e8097c22493f6f019ad25407ddf35b13103f95e5501d49ec0b,v1=f8e6ae6781adad70ed0f94773fa2745147b718136e83fc22cafa09ded928095c
+```
+
+A verifier holding only the previous secret must accept the second header and reject the first. A verifier that reads only the first `v1` passes every other test and fails that one, which is the bug worth catching before a rotation catches it for you.
+
+### Rotating a secret
+
+`rotateSecret` returns a new secret once and keeps the previous one valid for 24 hours. Every delivery in that window carries two `v1` signatures, one per secret, so a receiver holding either keeps working.
+
+```typescript
+const { secret } = await client.webhooks.rotateSecret(endpoint.id);
+// Accept both until every instance has the new one, then drop the old one.
+const ok = await verifyWebhookSignature({
+  payload: rawBody,
+  headers,
+  secret: [secret, previousSecret],
+});
+```
+
+Only one previous secret is ever carried, so rotating twice inside the window invalidates the first secret immediately.
+
+### Deliveries and replay
+
+`listDeliveries` returns recent attempts for an endpoint, newest first, each with its state, HTTP status, error, latency, and the exact payload that was sent. `redeliver` sends one again with the same event id, which is the safe way to test a receiver that has fixed a bug.
+
+```typescript
+const deliveries = await client.webhooks.listDeliveries(endpoint.id, { limit: 20 });
+const failed = deliveries.filter((d) => d.state !== 'delivered');
+for (const delivery of failed) {
+  console.log(`${delivery.eventType}: ${delivery.lastStatusCode} ${delivery.lastError}`);
+  await client.webhooks.redeliver(delivery.id);
+}
+```
+
+### Watched wallets
+
+Account events are scoped to wallets you have claimed. Add them first, then subscribe.
+
+```typescript
+await client.webhooks.addAddress({
+  address: '0x1111111111111111111111111111111111111111', // your wallet
+  label: 'desk',
+});
+
+const { addresses, limit } = await client.webhooks.listAddresses();
+console.log(`watching ${addresses.length} of ${limit}`);
+
+await client.webhooks.createSubscription({
+  endpointId: endpoint.id,
+  eventType: 'account.fill',
+  filters: { min_notional_usd: 25_000 },
+});
+```
+
+### Method reference
+
+| Method | Route |
+| --- | --- |
+| `webhooks.eventTypes()` | `GET /v1/webhooks/event-types` |
+| `webhooks.listEndpoints()` | `GET /v1/webhooks/endpoints` |
+| `webhooks.createEndpoint()` | `POST /v1/webhooks/endpoints` |
+| `webhooks.deleteEndpoint(id)` | `DELETE /v1/webhooks/endpoints/{id}` |
+| `webhooks.rotateSecret(id)` | `POST /v1/webhooks/endpoints/{id}/rotate` |
+| `webhooks.enableEndpoint(id)` | `POST /v1/webhooks/endpoints/{id}/enable` |
+| `webhooks.testEndpoint(id)` | `POST /v1/webhooks/endpoints/{id}/test` |
+| `webhooks.listDeliveries(id, params)` | `GET /v1/webhooks/endpoints/{id}/deliveries` |
+| `webhooks.redeliver(deliveryId)` | `POST /v1/webhooks/deliveries/{id}/redeliver` |
+| `webhooks.listSubscriptions()` | `GET /v1/webhooks/subscriptions` |
+| `webhooks.createSubscription()` | `POST /v1/webhooks/subscriptions` |
+| `webhooks.updateSubscription(id, params)` | `PATCH /v1/webhooks/subscriptions/{id}` |
+| `webhooks.deleteSubscription(id)` | `DELETE /v1/webhooks/subscriptions/{id}` |
+| `webhooks.dryRun(params)` | `POST /v1/webhooks/subscriptions/dry-run` |
+| `webhooks.estimate(params)` | `POST /v1/webhooks/subscriptions/estimate` |
+| `webhooks.listAddresses()` | `GET /v1/webhooks/addresses` |
+| `webhooks.addAddress(params)` | `POST /v1/webhooks/addresses` |
+| `webhooks.deleteAddress(id)` | `DELETE /v1/webhooks/addresses/{id}` |
+
+A runnable receiver with a live dashboard, including signature verification, is in [`examples/webhook-dashboard`](examples/webhook-dashboard).
+
 ## WebSocket Client
 
 The WebSocket client supports live subscriptions for supported Hyperliquid channels and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
@@ -1601,6 +1850,17 @@ import type {
   ReconstructedOrderBook,
   ReconstructOptions,
   TickHistoryParams,
+  // Webhooks
+  WebhookEvent,
+  WebhookEndpoint,
+  WebhookSubscription,
+  WebhookSubscriptionConfig,
+  WebhookCondition,
+  WebhookDelivery,
+  WebhookEventTypeDeclaration,
+  WebhookEstimateResult,
+  WebhookDryRunResult,
+  WebhookWatchedAddress,
 } from '@0xarchive/sdk';
 
 // Import reconstructor class

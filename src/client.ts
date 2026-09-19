@@ -9,6 +9,7 @@ import {
   OpenInterestResource,
   DataQualityResource,
   Web3Resource,
+  WebhooksResource,
 } from './resources';
 
 const DEFAULT_BASE_URL = 'https://api.0xarchive.io';
@@ -90,6 +91,12 @@ export class OxArchive {
   public readonly web3: Web3Resource;
 
   /**
+   * Webhooks: endpoints, subscriptions, watched wallets, deliveries, and the
+   * event catalog. Pair with `verifyWebhookSignature` on your receiver.
+   */
+  public readonly webhooks: WebhooksResource;
+
+  /**
    * @deprecated Use client.hyperliquid.orderbook instead
    */
   public readonly orderbook: OrderBookResource;
@@ -141,6 +148,9 @@ export class OxArchive {
 
     // Web3 wallet-based authentication
     this.web3 = new Web3Resource(this.http);
+
+    // Webhooks (endpoints, subscriptions, watched addresses, deliveries)
+    this.webhooks = new WebhooksResource(this.http);
 
     // Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
     // These will be removed in v2.0

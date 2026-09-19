@@ -1,3 +1,5 @@
+import type { WebhookEvent } from './webhook-signature';
+
 /**
  * Configuration options for the 0xarchive client
  */
@@ -1692,11 +1694,17 @@ export interface Web3SubscribeResult {
 // =============================================================================
 
 /**
- * API error response
+ * API error response.
+ *
+ * Error responses have no `meta`: the request id sits at the top level,
+ * alongside the code and the message. It is the value to quote when asking
+ * about a failed call.
  */
 export interface ApiError {
   code: number;
   error: string;
+  /** Request id for support correlation. Surfaced as `OxArchiveError.requestId`. */
+  requestId?: string;
 }
 
 /**
@@ -2031,4 +2039,440 @@ export interface SlaParams {
   year?: number;
   /** Month 1-12 (defaults to current month) */
   month?: number;
+}
+
+// =============================================================================
+// Webhooks
+// =============================================================================
+
+/**
+ * A subscription's configuration: which occurrences of an event type should
+ * be delivered.
+ *
+ * Unlike every other type in this file, the keys here are **wire keys**.
+ * This object is stored and replayed by the API verbatim, so the SDK sends
+ * it and returns it exactly as written. Use `min_notional_usd`, not
+ * `minNotionalUsd`.
+ *
+ * Every key is optional and every key is validated against the event type's
+ * declaration from `client.webhooks.eventTypes()`. An empty config means
+ * "every occurrence of this event that is in scope for me".
+ */
+export interface WebhookSubscriptionConfig {
+  /** One venue or several, for event types that declare a `venue` filter. */
+  venue?: string | string[];
+  /** Markets to restrict to, for event types that declare a `symbols` filter. */
+  symbols?: string[];
+  /** Wallets to restrict to. Must already be on your watched list. */
+  addresses?: string[];
+  /**
+   * Declared parameters for the event type, such as `window_s` or
+   * `threshold_usd`. Undeclared parameters are rejected; declared ones may
+   * also be written at the top level of this object.
+   */
+  params?: Record<string, unknown>;
+  /** Up to 16 conditions on the event type's declared metrics. All must hold. */
+  conditions?: WebhookCondition[];
+  /** Shorthand for a `notional_usd >=` condition, where the type has one. */
+  min_notional_usd?: number;
+  /** Declared parameters written at the top level. */
+  [key: string]: unknown;
+}
+
+/**
+ * Operators accepted in a {@link WebhookCondition}.
+ *
+ * Which ones apply depends on the metric's type, and the event type's
+ * declaration lists them per type. Symbol spellings are accepted and stored
+ * in their canonical form, so a condition that went out as `>=` reads back
+ * as `greater_than_or_equal`.
+ */
+export type WebhookConditionOperator =
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal'
+  | 'equal'
+  | 'not_equal'
+  | 'between'
+  | 'not_between'
+  | 'in'
+  | 'not_in'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'before'
+  | 'after'
+  | 'is_empty'
+  | 'is_not_empty'
+  | '>'
+  | '>='
+  | '<'
+  | '<='
+  | '=='
+  | '!=';
+
+/** One test against a declared metric. */
+export interface WebhookCondition {
+  /** A metric declared by the event type. */
+  metric: string;
+  /** Comparison to apply. */
+  op: WebhookConditionOperator;
+  /**
+   * What to compare against: a number, a string, a boolean, an RFC 3339
+   * timestamp, a `[low, high]` pair for `between`, or a list for `in`.
+   * Omitted for `is_empty` and `is_not_empty`.
+   */
+  value?: unknown;
+}
+
+/** A parameter an event type declares. */
+export interface WebhookParamDeclaration {
+  /** `number`, `integer`, `string`, or `array_of_number`. */
+  type: string;
+  /** Value used when the subscription does not set this parameter. */
+  default?: unknown;
+  /** Unit the value is expressed in, for example `USD`, `s`, or `%`. */
+  unit?: string;
+  /** Lower bound, for numeric parameters. */
+  min?: number;
+  /** Upper bound, for numeric parameters. */
+  max?: number;
+  /** The only accepted values, when the parameter is an enum. */
+  enum?: unknown[];
+  /** What the parameter means. */
+  description?: string;
+}
+
+/** A metric an event type declares, which conditions can be written against. */
+export interface WebhookMetricDeclaration {
+  /** `number`, `integer`, `string`, `boolean`, or `timestamp`. */
+  type: string;
+  /** Unit the value is expressed in. */
+  unit?: string;
+  /** The only accepted values, for enumerated string metrics. */
+  values?: string[];
+  /** What the metric means. */
+  description?: string;
+}
+
+/**
+ * One entry in the event catalog: everything that can be subscribed to, and
+ * everything a subscription may say about it.
+ *
+ * This is the only source of truth for filters, parameters, metrics, and
+ * operators. Read it rather than hardcoding a catalog.
+ */
+export interface WebhookEventTypeDeclaration {
+  /** Event type, for example `market.liquidation`. */
+  type: string;
+  /** Envelope version delivered for this type. */
+  schemaVersion: number;
+  /** Whether subscriptions are accepted. `false` means announced, not ready. */
+  live: boolean;
+  /**
+   * `public` for market-wide events, `addresses` for events about your
+   * watched wallets, `user` for events about your own account.
+   */
+  scope: string;
+  /** Venues this event type covers. */
+  venues: string[];
+  /** Filters this event type accepts: `venue`, `symbols`, `addresses`. */
+  filters: string[];
+  /** Declared parameters, keyed by parameter name. */
+  params: Record<string, WebhookParamDeclaration>;
+  /** Declared metrics, keyed by metric name. */
+  metrics: Record<string, WebhookMetricDeclaration>;
+  /** Minimum notional an occurrence must reach to be detected, if any. */
+  costFloor: number | null;
+  /** Roughly how quickly this type is detected, for example `seconds`. */
+  latencyClass: string;
+  /** What the event means. */
+  description: string;
+  /** A filled-in configuration to copy from. */
+  filtersExample: WebhookSubscriptionConfig;
+  /** Operators valid per metric type, keyed by `number`, `text`, and so on. */
+  operators: Record<string, string[]>;
+}
+
+/** A destination 0xArchive posts deliveries to. */
+export interface WebhookEndpoint {
+  /** Endpoint id. */
+  id: string;
+  /** HTTPS URL deliveries are posted to. */
+  url: string;
+  /** Your label for it. */
+  description: string;
+  /**
+   * `active`, `disabled`, or `auto_disabled`. An endpoint auto-disables
+   * after 10 consecutive failures spanning at least 6 hours;
+   * `enableEndpoint()` returns it to `active`.
+   */
+  status: string;
+  /** Failures since the last success. Resets to 0 on a 2xx. */
+  consecutiveFailures: number;
+  /** When the endpoint was created (RFC 3339). */
+  createdAt: string;
+  /** Signing secret. Returned by create and rotate only, never by list. */
+  secret?: string;
+}
+
+/** The create response, which is the only place the secret is ever shown. */
+export interface CreatedWebhookEndpoint extends WebhookEndpoint {
+  /** Store this now: no route returns it again. */
+  secret: string;
+}
+
+/** Parameters for creating an endpoint. */
+export interface CreateWebhookEndpointParams {
+  /** HTTPS URL to deliver to. Private and loopback addresses are rejected. */
+  url: string;
+  /** Optional label. */
+  description?: string;
+}
+
+/** The new secret, returned once, by a rotation. */
+export interface RotatedWebhookSecret {
+  /** The new signing secret. The previous one keeps verifying for 24 hours. */
+  secret: string;
+}
+
+/**
+ * A rule: one event type, one configuration, one endpoint.
+ *
+ * Deliveries that exceed your plan's daily allowance pause the offending
+ * subscription and say so on this object rather than being dropped in
+ * silence. Those fields are still settling in this release, so the SDK does
+ * not type them yet; a paused subscriber recovers the gap by querying the
+ * REST archive over the paused interval.
+ */
+export interface WebhookSubscription {
+  /** Subscription id. */
+  id: string;
+  /** Endpoint the matches are delivered to. */
+  endpointId: string;
+  /** Event type this rule watches. */
+  eventType: string;
+  /** The stored configuration, normalised. Wire keys, sent back verbatim. */
+  filters: WebhookSubscriptionConfig;
+  /** Your own on and off switch. */
+  enabled: boolean;
+  /** When the rule was created (RFC 3339). */
+  createdAt: string;
+}
+
+/** Parameters for creating a subscription. */
+export interface CreateWebhookSubscriptionParams {
+  /** Endpoint to deliver matches to. */
+  endpointId: string;
+  /** Event type to watch. Must be `live` in the catalog. */
+  eventType: string;
+  /** Configuration. Omit for every in-scope occurrence. */
+  filters?: WebhookSubscriptionConfig;
+}
+
+/** Parameters for editing a subscription in place. */
+export interface UpdateWebhookSubscriptionParams {
+  /** Replacement configuration. Replaces the old one wholesale. */
+  filters?: WebhookSubscriptionConfig;
+  /** Turn the rule on or off without deleting it. */
+  enabled?: boolean;
+}
+
+/** One attempt log for one event on one endpoint. */
+export interface WebhookDelivery {
+  /** Delivery id. Pass it to `redeliver()`. */
+  id: string;
+  /** Event UUID. Stable across retries and redeliveries: dedupe on it. */
+  eventId: string;
+  /** Event type delivered. */
+  eventType: string;
+  /** `pending`, `delivered`, `failed`, or `exhausted`. */
+  state: string;
+  /** Attempts made so far. */
+  attempts: number;
+  /** HTTP status from the last attempt, if the request completed. */
+  lastStatusCode: number | null;
+  /** Error from the last attempt, if it failed. */
+  lastError: string | null;
+  /** Round trip of the last attempt, in ms. */
+  lastLatencyMs: number | null;
+  /** When the next retry is due (RFC 3339). */
+  nextAttemptAt: string;
+  /** When a 2xx was received (RFC 3339), if one ever was. */
+  deliveredAt: string | null;
+  /** When the delivery was queued (RFC 3339). */
+  createdAt: string;
+  /** The event body, exactly as it was signed. Wire keys. */
+  payload: WebhookEvent;
+}
+
+/** Parameters for listing deliveries. */
+export interface ListWebhookDeliveriesParams {
+  /** Rows to return, newest first. Defaults to 50, clamped to 1 to 200. */
+  limit?: number;
+}
+
+/** What a test fire queued. */
+export interface WebhookTestFireResult {
+  /** The queued delivery. */
+  deliveryId: string;
+  /** The event id it will carry. */
+  eventId: string;
+}
+
+/** What a redelivery queued. */
+export interface WebhookRedeliveryResult {
+  /** The new delivery. It carries the original `eventId`. */
+  deliveryId: string;
+}
+
+/** A wallet you have asked to receive account-scoped events about. */
+export interface WebhookWatchedAddress {
+  /** Watched-address id. */
+  id: string;
+  /** The address, lowercased. */
+  address: string;
+  /** Your label for it. */
+  label: string;
+  /** When it was added (RFC 3339). */
+  createdAt: string;
+}
+
+/** The watched list, with the plan's allowance alongside it. */
+export interface WebhookWatchedAddressList {
+  /** Every wallet on the list. */
+  addresses: WebhookWatchedAddress[];
+  /** How many your plan allows. */
+  limit: number;
+}
+
+/** Parameters for watching a wallet. */
+export interface AddWebhookAddressParams {
+  /** A 0x-prefixed EVM address. Stored lowercased. */
+  address: string;
+  /** Optional label, up to 64 characters. */
+  label?: string;
+}
+
+/** The window an estimate or dry-run answer vouches for. */
+export interface WebhookWindow {
+  /** Start (RFC 3339). Moves up if a capped scan did not reach the request. */
+  from: string;
+  /** End (RFC 3339). */
+  to: string;
+}
+
+/** One occurrence a rule would have delivered. */
+export interface WebhookOccurrence {
+  /**
+   * The occurrence's own timestamp. A real delivery's `observed_at` is this
+   * plus the detector's ingest lag.
+   */
+  observedAtEstimate: string;
+  /** What the event's `data` would have carried. Wire keys. */
+  data: unknown;
+}
+
+/** Parameters for a dry run. */
+export interface WebhookDryRunParams {
+  /** Event type to evaluate. */
+  eventType: string;
+  /** The configuration you would create, validated identically. */
+  config?: WebhookSubscriptionConfig;
+  /** Seconds of history to scan, ending now. 60 to 86400. Default 3600. */
+  lookbackS?: number;
+  /** Occurrences to return, newest first. 1 to 200. Default 100. */
+  limit?: number;
+}
+
+/** Which occurrences a rule would have delivered over a recent window. */
+export interface WebhookDryRunResult {
+  /** Event type evaluated. */
+  eventType: string;
+  /** The window actually covered. */
+  window: WebhookWindow;
+  /** Occurrences that matched inside the window, before `limit`. */
+  matched: number;
+  /** True when the answer was cut short by `limit` or by a scan cap. */
+  truncated: boolean;
+  /** Newest first, at most `limit`. */
+  occurrences: WebhookOccurrence[];
+}
+
+/** Parameters for an estimate. */
+export interface WebhookEstimateParams {
+  /** Event type to evaluate. */
+  eventType: string;
+  /** The configuration you would create, validated identically. */
+  config?: WebhookSubscriptionConfig;
+  /** Days of history to evaluate, ending now. 1 to 30. Default 7. */
+  lookbackDays?: number;
+}
+
+/** Matches in one 24 hour bin. */
+export interface WebhookDayCount {
+  /** UTC date the bin ends on. */
+  date: string;
+  /** Matches in the bin. */
+  count: number;
+}
+
+/** What the rate would have been at a different threshold. */
+export interface WebhookEstimateRung {
+  /** Threshold on the primary metric. */
+  value: number;
+  /** Matches per day at that threshold, everything else unchanged. */
+  perDay: number;
+}
+
+/** Quantiles of the primary metric over the matched occurrences. */
+export interface WebhookEstimateDistribution {
+  /** Occurrences the quantiles are computed from. */
+  n: number;
+  /** Median. */
+  p50: number;
+  /** 90th percentile. */
+  p90: number;
+  /** 99th percentile. */
+  p99: number;
+  /** Largest observed value. */
+  max: number;
+}
+
+/** How the estimate was produced. */
+export interface WebhookEstimateBasis {
+  /** `exact` when counted from stored rows, `replayed` when recomputed. */
+  mode: string;
+  /** Anything worth knowing about the answer's accuracy. */
+  note: string | null;
+}
+
+/** How often a rule would have fired, and how that varies with its threshold. */
+export interface WebhookEstimateResult {
+  /** Event type evaluated. */
+  eventType: string;
+  /** The window actually covered. */
+  window: WebhookWindow;
+  /** Days covered. */
+  days: number;
+  /** Matches across the whole window. */
+  total: number;
+  /** One entry per day, oldest first, zero filled. */
+  perDay: WebhookDayCount[];
+  /** Median matches per day. */
+  perDayP50: number;
+  /** Busiest day's matches. */
+  perDayMax: number;
+  /** The metric the ladder and distribution are about, if the type has one. */
+  primaryMetric: string | null;
+  /** Ascending thresholds and the daily rate each would have produced. */
+  ladder: WebhookEstimateRung[];
+  /** Quantiles of the primary metric, when there is one. */
+  distribution: WebhookEstimateDistribution | null;
+  /** Newest matches first, same shape as a dry run's occurrences. */
+  sample: WebhookOccurrence[];
+  /** How the answer was produced. */
+  basis: WebhookEstimateBasis;
 }

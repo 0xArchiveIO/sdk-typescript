@@ -61,6 +61,34 @@ export {
   type L4Checkpoint,
 } from './l4-reconstructor';
 
+// Webhooks: signature verification for your receiver
+export {
+  constructWebhookEvent,
+  verifyWebhookSignature,
+  assertWebhookSignature,
+  createWebhookSignatureHeader,
+  parseWebhookSignatureHeader,
+  readWebhookHeader,
+  WebhookSignatureError,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_EVENT_ID_HEADER,
+  WEBHOOK_EVENT_TYPE_HEADER,
+  WEBHOOK_USER_AGENT,
+  DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+  type WebhookEvent,
+  type WebhookHeaders,
+  type WebhookPayload,
+  type WebhookDeliveryContext,
+  type WebhookVerificationFailure,
+  type ParsedWebhookSignature,
+  type VerifyWebhookOptions,
+  type SubtleCryptoLike,
+  type WebhookCryptoKey,
+} from './webhook-signature';
+
+// Webhooks management resource
+export { WebhooksResource } from './resources/webhooks';
+
 // L2 Full-Depth Orderbook resource
 export { L2OrderBookResource, type L2OrderBookParams } from './resources/l2-orderbook';
 export { Hip3BreadthResource } from './resources/hip3-breadth';
@@ -348,6 +376,37 @@ export type {
   WsL4BatchEvent,
   // HIP-4 settlement event
   WsOutcomeSettled,
+  // Webhooks
+  WebhookEventTypeDeclaration,
+  WebhookParamDeclaration,
+  WebhookMetricDeclaration,
+  WebhookEndpoint,
+  CreatedWebhookEndpoint,
+  CreateWebhookEndpointParams,
+  RotatedWebhookSecret,
+  WebhookSubscription,
+  WebhookSubscriptionConfig,
+  WebhookCondition,
+  WebhookConditionOperator,
+  CreateWebhookSubscriptionParams,
+  UpdateWebhookSubscriptionParams,
+  WebhookDelivery,
+  ListWebhookDeliveriesParams,
+  WebhookTestFireResult,
+  WebhookRedeliveryResult,
+  WebhookWatchedAddress,
+  WebhookWatchedAddressList,
+  AddWebhookAddressParams,
+  WebhookWindow,
+  WebhookOccurrence,
+  WebhookDryRunParams,
+  WebhookDryRunResult,
+  WebhookEstimateParams,
+  WebhookEstimateResult,
+  WebhookDayCount,
+  WebhookEstimateRung,
+  WebhookEstimateDistribution,
+  WebhookEstimateBasis,
   // Errors
   ApiError,
 } from './types';
