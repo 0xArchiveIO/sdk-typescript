@@ -141,15 +141,25 @@ export interface Trade {
   orderId?: number;
   /** True if taker (crossed the spread), false if maker */
   crossed?: boolean;
-  /** Trading fee amount */
+  /**
+   * Fee paid on this fill in `feeToken`, including any builder fee; negative is
+   * a rebate. `"0"` is a recorded zero fee. Absent when the source did not
+   * record fees, for example fills from 2025-03-22 to 2025-05-25.
+   */
   fee?: string;
-  /** Fee denomination (e.g., USDC) */
+  /** Fee denomination (e.g., USDC). Present exactly when `fee` and `closedPnl` were recorded. */
   feeToken?: string;
-  /** Realized PnL if closing a position */
+  /**
+   * Realized PnL on this fill. `"0"` when the fill opened or added to a
+   * position. Absent when the source did not record it (same cases as `fee`).
+   */
   closedPnl?: string;
   /** Position direction */
   direction?: TradeDirection;
-  /** Position size before this trade */
+  /**
+   * Position size (spot: balance) before this fill; negative is short. `"0"`
+   * means flat. Absent when the source did not record it.
+   */
   startPosition?: string;
   /** User's wallet address (for fill-level data from REST API) */
   userAddress?: string;
