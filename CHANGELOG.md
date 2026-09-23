@@ -5,6 +5,21 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## 1.10.0 (2026-09-23)
+
+Versions 1.9.0 and 1.9.1 were not published to npm. This release includes
+their changes, listed in the sections below, and aligns the TypeScript,
+Python and Rust SDKs on one version.
+
+### Changed
+- Trade `fee`, `closedPnl` and `startPosition` are now returned as `"0"` when
+  the venue recorded a zero, instead of being omitted. A missing value now
+  means the source did not record it (for example fills from 2025-03-22 to
+  2025-05-25), never zero. This is a server-side change and applies to every
+  SDK version.
+- HIP-3 and HIP-4 trades now include `fee`, `feeToken`, `closedPnl` and
+  `startPosition`.
+
 ## 1.9.1 (2026-08-31)
 
 ### Added
