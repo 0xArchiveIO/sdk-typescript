@@ -1,0 +1,35 @@
+name: Package contents
+
+# Builds the package with a stray directory planted in the tree and fails
+# unless every file in the npm tarball sits under an allowed top-level entry.
+# The check is an allowlist on purpose: anything not named here is a failure.
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  tarball-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Plant a stray directory that must not be packaged
+        run: mkdir -p .claude/worktrees/probe && echo stray > .claude/worktrees/probe/stray.rs
+      - name: The tarball contains only the allowed entries
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e '
+            const allowed = new Set(["dist", "README.md", "LICENSE", "package.json"]);
+            const files = require("/tmp/pack.json")[0].files.map(f => f.path);
+            const tops = [...new Set(files.map(f => f.split("/")[0]))].sort();
+            console.log("top-level entries in the tarball:", tops.join(", "));
+            if (!tops.includes("dist")) { console.error("::error::tarball has no dist"); process.exit(1); }
+            const bad = tops.filter(t => !allowed.has(t));
+            if (bad.length) { console.error("::error::unexpected tarball entries: " + bad.join(", ")); process.exit(1); }
+          '
