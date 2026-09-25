@@ -1317,8 +1317,8 @@ const ws = new OxArchiveWs({
 | `trades` | Trade/fill updates | Yes | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | No | Yes |
 | `liquidations` | Liquidation events (May 2025+) | Yes | Yes | Yes |
-| `open_interest` | Open interest snapshots | Yes | No | Yes |
-| `funding` | Funding rate snapshots | Yes | No | Yes |
+| `open_interest` | Open interest snapshots | Yes | Yes | Yes |
+| `funding` | Funding rate snapshots | Yes | Yes | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
 | `all_tickers` | All market tickers | No | Yes | No |
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |

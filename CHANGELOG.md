@@ -7,6 +7,10 @@ semver in spirit.
 
 ## 1.11.0 (2026-09-25)
 
+Versions 1.9.0, 1.9.1 and 1.10.0 were not published to npm, so upgrading
+from npm goes straight from 1.8.0 to 1.11.0. This release includes their
+changes, listed in the sections below.
+
 ### Added
 - Live WebSocket subscriptions for four Lighter.xyz channels:
   `lighter_orderbook`, `lighter_trades`, `lighter_open_interest` and
