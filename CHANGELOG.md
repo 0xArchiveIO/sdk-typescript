@@ -5,6 +5,53 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## 1.11.0 (2026-09-25)
+
+### Added
+- Live WebSocket subscriptions for four Lighter.xyz channels:
+  `lighter_orderbook`, `lighter_trades`, `lighter_open_interest` and
+  `lighter_funding`, served on `wss://api.0xarchive.io/ws` (the client
+  default). They use the same subscribe, ack and `data` envelope as
+  Hyperliquid live data and the same symbols as
+  `client.lighter.instruments.list()`.
+- `ws.subscribeLighter(channel, symbol, options?)` and
+  `ws.unsubscribeLighter(channel, symbol)`, accepting the short
+  (`'orderbook'`) or full (`'lighter_orderbook'`) channel name.
+- `intervalMs` subscribe option (`WsSubscribeOptions`), sent as
+  `interval_ms`. Live Lighter books default to one per second; pass 100 to
+  5000 to choose the rate. Each book sent is one metered message. It is
+  accepted on `lighter_orderbook` only, is checked before anything is sent,
+  and is re-sent on reconnect.
+- `onLighterOrderbook()`, `onLighterTrades()` and `onLighterStats()`
+  handlers with typed payloads: `LighterLiveOrderbook` (a full top-20 book per
+  message), `LighterLiveTrade` (two legs per trade sharing `tid`) and
+  `LighterLiveStats` / `LighterLiveAssetCtx` (the message shared by
+  `lighter_open_interest` and `lighter_funding`), plus matching Zod schemas.
+- `Trade.accountIndex`: the Lighter account index of a fill's owner, set on
+  live Lighter trade legs and present on Lighter REST trades.
+- `symbol` on `WsSubscribed`, `WsUnsubscribed` and `WsData`.
+- `LighterLiveChannel`, `LighterReplayOnlyChannel` and `WsSubscribeOptions`
+  types.
+
+### Changed
+- `subscribe()` no longer throws for the four live Lighter channels.
+  `lighter_candles` and `lighter_l3_orderbook` remain replay-only and still
+  throw before sending; the error text now names those two channels.
+- Live Lighter books and trades go to `onLighterOrderbook()` and
+  `onLighterTrades()` when those are registered, so Lighter `BTC` is not mixed
+  with Hyperliquid `BTC`. Without them they still reach `onOrderbook()` and
+  `onTrades()`. Converted Lighter trades carry `accountIndex`, `orderId`,
+  `crossed` and `startPosition` instead of a maker address; fee, fee token,
+  closed PnL and direction are not in live messages. Live trades are
+  preliminary; `client.lighter.trades.list()` serves the reconciled record.
+- Lighter replay is unchanged. Replay rows keep their existing shapes, which
+  differ from the live payloads.
+
+### Fixed
+- Reconnect re-sent HIP-3 subscriptions with a truncated symbol (for example
+  `km` instead of `km:US500`). Stored subscriptions now keep channel, symbol
+  and options separately.
+
 ## 1.10.0 (2026-09-23)
 
 Versions 1.9.0 and 1.9.1 were not published to npm. This release includes
