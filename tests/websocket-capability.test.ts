@@ -711,3 +711,54 @@ describe('Live Lighter schemas (real frames)', () => {
     expect(LighterLiveOrderbookSchema.safeParse(bad).success).toBe(false);
   });
 });
+
+// The error the server sends for any bulk stream request since the feature
+// was discontinued.
+const BULK_STREAM_DISCONTINUED_ERROR = {
+  type: 'error',
+  message:
+    'Bulk streaming has been discontinued. For large dataset downloads, use our S3 Parquet bulk export at ' +
+    'https://0xarchive.io/data or contact enterprise@0xarchive.io.',
+} as const;
+
+describe('Deprecated bulk streaming', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps sending the original stream frames', () => {
+    const { ws, send } = openClient();
+    ws.stream('orderbook', 'BTC', { start: 1, end: 2 });
+    ws.multiStream(['orderbook', 'trades'], 'BTC', { start: 1, end: 2, batchSize: 500 });
+    ws.streamStop();
+
+    expect(send.mock.calls.map(([payload]) => JSON.parse(payload))).toEqual([
+      { op: 'stream', channel: 'orderbook', symbol: 'BTC', start: 1, end: 2, batch_size: 1000 },
+      { op: 'stream', channels: ['orderbook', 'trades'], symbol: 'BTC', start: 1, end: 2, batch_size: 500 },
+      { op: 'stream.stop' },
+    ]);
+  });
+
+  it('delivers the server refusal to onMessage and calls no stream handler', async () => {
+    FakeSocket.instances = [];
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const ws = new OxArchiveWs({ apiKey: 'test-key', autoReconnect: false });
+    const onMessage = vi.fn();
+    const onBatch = vi.fn();
+    const onStreamComplete = vi.fn();
+    ws.onBatch(onBatch);
+    ws.onStreamComplete(onStreamComplete);
+    const connected = ws.connect({ onMessage });
+    const socket = FakeSocket.instances[FakeSocket.instances.length - 1]!;
+    socket.open();
+    await connected;
+
+    ws.stream('orderbook', 'BTC', { start: 1, end: 2 });
+    socket.receive(BULK_STREAM_DISCONTINUED_ERROR);
+
+    expect(WsServerMessageSchema.safeParse(BULK_STREAM_DISCONTINUED_ERROR).success).toBe(true);
+    expect(onMessage).toHaveBeenCalledWith(BULK_STREAM_DISCONTINUED_ERROR);
+    expect(onBatch).not.toHaveBeenCalled();
+    expect(onStreamComplete).not.toHaveBeenCalled();
+  });
+});

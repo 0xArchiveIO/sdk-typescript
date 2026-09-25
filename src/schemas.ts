@@ -441,7 +441,12 @@ export const WsL4BatchSchema = z.object({
   data: z.array(z.union([WsL4DiffEventSchema, WsL4OrderEventSchema])),
 });
 
-// Stream messages
+// Stream messages (bulk streaming has been discontinued; kept for compatibility)
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamStartedSchema = z.object({
   type: z.literal('stream_started'),
   channel: WsChannelSchema,
@@ -450,16 +455,31 @@ export const WsStreamStartedSchema = z.object({
   end: z.number(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamProgressSchema = z.object({
   type: z.literal('stream_progress'),
   snapshots_sent: z.number(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends batches of these records. For large dataset downloads, use the S3
+ * Parquet bulk export at https://www.0xarchive.io/data.
+ */
 export const TimestampedRecordSchema = z.object({
   timestamp: z.number(),
   data: z.unknown(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsHistoricalBatchSchema = z.object({
   type: z.literal('historical_batch'),
   channel: WsChannelSchema,
@@ -467,6 +487,11 @@ export const WsHistoricalBatchSchema = z.object({
   data: z.array(TimestampedRecordSchema),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamCompletedSchema = z.object({
   type: z.literal('stream_completed'),
   channel: WsChannelSchema,
@@ -474,6 +499,11 @@ export const WsStreamCompletedSchema = z.object({
   snapshots_sent: z.number(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamStoppedSchema = z.object({
   type: z.literal('stream_stopped'),
   snapshots_sent: z.number(),

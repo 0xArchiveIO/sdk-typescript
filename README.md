@@ -1173,6 +1173,8 @@ const trades = await client.trades.list('BTC', { start, end });
 
 The WebSocket client supports live subscriptions for supported Hyperliquid and Lighter.xyz channels, and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
 
+> Bulk streaming over WebSocket has been discontinued. `ws.stream()`, `ws.multiStream()`, and `ws.streamStop()` remain for compatibility but are deprecated: the server answers them with an error message and sends no data. For large downloads, use the S3 Parquet bulk export from the [Data Catalog](https://www.0xarchive.io/data).
+
 > Lighter `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` support live subscriptions and replay. `lighter_candles` and `lighter_l3_orderbook` are replay-only. See [Live Lighter.xyz Channels](#live-lighterxyz-channels).
 
 ```typescript
