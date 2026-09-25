@@ -1116,8 +1116,9 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  *   shapes.
  * - lighter_candles, lighter_l3_orderbook: historical replay only; use Lighter
  *   REST for current data
- * - open_interest, funding, hip3_open_interest, hip3_funding: historical only
- *   (replay/stream)
+ * - open_interest, funding: Hyperliquid core live subscriptions + historical
+ *   replay
+ * - hip3_open_interest, hip3_funding: historical only (replay)
  *
  * HIP-4 channels (outcome contracts; no funding or liquidations):
  * - hip4_trades: realtime + replay
@@ -1276,7 +1277,14 @@ export interface WsReplayResume { op: 'replay.resume'; }
 export interface WsReplaySeek { op: 'replay.seek'; timestamp: number; }
 export interface WsReplayStop { op: 'replay.stop'; }
 
-/** Stream message from client - bulk download historical data */
+/**
+ * Stream message from client - bulk download historical data.
+ *
+ * @deprecated Bulk streaming has been discontinued on the server, which
+ * answers this request with an `error` message and sends no data. For large
+ * dataset downloads, use the S3 Parquet bulk export at
+ * https://www.0xarchive.io/data.
+ */
 export interface WsStream {
   op: 'stream';
   /** Single channel for streaming. Mutually exclusive with `channels`. */
@@ -1298,7 +1306,14 @@ export interface WsStream {
   interval?: string;
 }
 
-/** Stream control messages */
+/**
+ * Stream control message.
+ *
+ * @deprecated Bulk streaming has been discontinued on the server, which
+ * answers this request with an `error` message and sends no data. For large
+ * dataset downloads, use the S3 Parquet bulk export at
+ * https://www.0xarchive.io/data.
+ */
 export interface WsStreamStop { op: 'stream.stop'; }
 
 /** Client message union type */
@@ -1402,7 +1417,7 @@ export interface WsHistoricalData<T = unknown> {
 
 /**
  * Replay snapshot providing initial state for a channel before the timeline starts.
- * Sent in multi-channel replay/stream mode to provide the most recent data point
+ * Sent in multi-channel replay mode to provide the most recent data point
  * for each channel at the replay start time. This allows clients to initialize
  * their state (e.g., current orderbook, latest funding rate) before timeline
  * data begins arriving via `historical_data` messages.
@@ -1440,7 +1455,13 @@ export interface WsHistoricalTickData {
   deltas: OrderbookDelta[];
 }
 
-/** Stream started response */
+/**
+ * Stream started response.
+ *
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export interface WsStreamStarted {
   type: 'stream_started';
   channel: WsChannel;
@@ -1451,19 +1472,37 @@ export interface WsStreamStarted {
   end: number;
 }
 
-/** Stream progress response (sent periodically during streaming) */
+/**
+ * Stream progress response (sent periodically during streaming).
+ *
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export interface WsStreamProgress {
   type: 'stream_progress';
   snapshots_sent: number;
 }
 
-/** A record with timestamp for batched data */
+/**
+ * A record with timestamp for batched data (bulk streaming).
+ *
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends batches of these records. For large dataset downloads, use the S3
+ * Parquet bulk export at https://www.0xarchive.io/data.
+ */
 export interface TimestampedRecord<T = unknown> {
   timestamp: number;
   data: T;
 }
 
-/** Batch of historical data (bulk streaming) */
+/**
+ * Batch of historical data (bulk streaming).
+ *
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export interface WsHistoricalBatch<T = unknown> {
   type: 'historical_batch';
   channel: WsChannel;
@@ -1471,7 +1510,13 @@ export interface WsHistoricalBatch<T = unknown> {
   data: TimestampedRecord<T>[];
 }
 
-/** Stream completed response */
+/**
+ * Stream completed response.
+ *
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export interface WsStreamCompleted {
   type: 'stream_completed';
   channel: WsChannel;
@@ -1479,7 +1524,13 @@ export interface WsStreamCompleted {
   snapshots_sent: number;
 }
 
-/** Stream stopped response */
+/**
+ * Stream stopped response.
+ *
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export interface WsStreamStopped {
   type: 'stream_stopped';
   snapshots_sent: number;

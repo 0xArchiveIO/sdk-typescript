@@ -1,5 +1,7 @@
 /**
- * WebSocket client for 0xarchive real-time streaming, replay, and bulk download
+ * WebSocket client for 0xarchive real-time streaming and historical replay.
+ * For large historical downloads, use the S3 Parquet bulk export at
+ * https://www.0xarchive.io/data.
  *
  * @example Real-time streaming
  * ```typescript
@@ -28,24 +30,6 @@
  *   start: Date.now() - 86400000,
  *   end: Date.now(),
  *   speed: 10 // 10x speed
- * });
- * ```
- *
- * @example Bulk streaming (like Databento)
- * ```typescript
- * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
- * const batches: OrderBook[] = [];
- * ws.onBatch((coin, records) => {
- *   batches.push(...records.map(r => r.data));
- * });
- * ws.onStreamComplete((channel, coin, count) => {
- *   console.log(`Downloaded ${count} records`);
- * });
- * await ws.connect();
- * ws.stream('orderbook', 'ETH', {
- *   start: Date.now() - 3600000,
- *   end: Date.now(),
- *   batchSize: 1000
  * });
  * ```
  */
@@ -820,24 +804,21 @@ export class OxArchiveWs {
   }
 
   // ==========================================================================
-  // Bulk Streaming (Option D) - Like Databento
+  // Bulk Streaming (discontinued)
   // ==========================================================================
 
   /**
-   * Start bulk streaming for fast data download
+   * Request a bulk stream of historical data for one channel.
+   *
+   * @deprecated Bulk streaming has been discontinued on the server. This
+   * method still sends the request, but the server replies with an `error`
+   * message (delivered to `onMessage`) and sends no data. For large dataset
+   * downloads, use the S3 Parquet bulk export at https://www.0xarchive.io/data.
+   * For paced historical data over WebSocket, use `replay()`.
    *
    * @param channel - Data channel to stream
    * @param coin - Trading pair (e.g., 'BTC', 'ETH')
    * @param options - Stream options
-   *
-   * @example
-   * ```typescript
-   * ws.stream('orderbook', 'ETH', {
-   *   start: Date.now() - 3600000, // 1 hour ago
-   *   end: Date.now(),
-   *   batchSize: 1000
-   * });
-   * ```
    */
   stream(
     channel: WsChannel,
@@ -864,29 +845,17 @@ export class OxArchiveWs {
   }
 
   /**
-   * Start a multi-channel bulk stream for fast data download.
-   * Data from all channels arrives in batches without timing delays.
-   * Before batches begin, `replay_snapshot` messages provide initial state
-   * for each channel.
+   * Request a multi-channel bulk stream of historical data.
+   *
+   * @deprecated Bulk streaming has been discontinued on the server. This
+   * method still sends the request, but the server replies with an `error`
+   * message (delivered to `onMessage`) and sends no data. For large dataset
+   * downloads, use the S3 Parquet bulk export at https://www.0xarchive.io/data.
+   * For paced multi-channel history over WebSocket, use `multiReplay()`.
    *
    * @param channels - Array of data channels to stream simultaneously
    * @param coin - Trading pair (e.g., 'BTC', 'ETH')
    * @param options - Stream options
-   *
-   * @example
-   * ```typescript
-   * ws.onReplaySnapshot((channel, coin, timestamp, data) => {
-   *   console.log(`Initial ${channel} state`);
-   * });
-   * ws.onBatch((coin, records) => {
-   *   // Batches contain data from all requested channels
-   * });
-   * ws.multiStream(['orderbook', 'trades', 'open_interest'], 'BTC', {
-   *   start: Date.now() - 3600000,
-   *   end: Date.now(),
-   *   batchSize: 1000
-   * });
-   * ```
    */
   multiStream(
     channels: WsChannel[],
@@ -912,14 +881,19 @@ export class OxArchiveWs {
   }
 
   /**
-   * Stop the current bulk stream
+   * Stop the current bulk stream.
+   *
+   * @deprecated Bulk streaming has been discontinued on the server, so there
+   * is never an active stream to stop. The server replies with an `error`
+   * message (delivered to `onMessage`). For large dataset downloads, use the
+   * S3 Parquet bulk export at https://www.0xarchive.io/data.
    */
   streamStop(): void {
     this.send({ op: 'stream.stop' });
   }
 
   // ==========================================================================
-  // Event Handlers for Replay/Stream
+  // Event Handlers for Replay
   // ==========================================================================
 
   /**
@@ -943,7 +917,11 @@ export class OxArchiveWs {
   }
 
   /**
-   * Handle batched data (bulk stream mode)
+   * Handle batched data (bulk stream mode).
+   *
+   * @deprecated Bulk streaming has been discontinued on the server, so this
+   * handler is never called. For large dataset downloads, use the S3 Parquet
+   * bulk export at https://www.0xarchive.io/data.
    */
   onBatch<T = unknown>(
     handler: (coin: string, records: Array<{ timestamp: number; data: T }>) => void
@@ -971,7 +949,7 @@ export class OxArchiveWs {
 
   /**
    * Handle replay snapshot events (multi-channel mode).
-   * Called with the initial state for each channel before the replay/stream
+   * Called with the initial state for each channel before the replay
    * timeline begins. Use this to initialize local state (e.g., set the current
    * orderbook or latest funding rate) before `historical_data` messages start
    * arriving.
@@ -996,7 +974,11 @@ export class OxArchiveWs {
   }
 
   /**
-   * Handle stream started event
+   * Handle stream started event.
+   *
+   * @deprecated Bulk streaming has been discontinued on the server, so this
+   * handler is never called. For large dataset downloads, use the S3 Parquet
+   * bulk export at https://www.0xarchive.io/data.
    */
   onStreamStart(
     handler: (channel: WsChannel, coin: string, start: number, end: number) => void
@@ -1005,7 +987,11 @@ export class OxArchiveWs {
   }
 
   /**
-   * Handle stream progress event
+   * Handle stream progress event.
+   *
+   * @deprecated Bulk streaming has been discontinued on the server, so this
+   * handler is never called. For large dataset downloads, use the S3 Parquet
+   * bulk export at https://www.0xarchive.io/data.
    */
   onStreamProgress(
     handler: (snapshotsSent: number) => void
@@ -1014,7 +1000,11 @@ export class OxArchiveWs {
   }
 
   /**
-   * Handle stream completed event
+   * Handle stream completed event.
+   *
+   * @deprecated Bulk streaming has been discontinued on the server, so this
+   * handler is never called. For large dataset downloads, use the S3 Parquet
+   * bulk export at https://www.0xarchive.io/data.
    */
   onStreamComplete(
     handler: (channel: WsChannel, coin: string, snapshotsSent: number) => void
@@ -1023,7 +1013,7 @@ export class OxArchiveWs {
   }
 
   /**
-   * Handle gap detected events during replay or streaming.
+   * Handle gap detected events during replay.
    * Called when there's a gap in the historical data exceeding the threshold.
    * Thresholds: 2 minutes for orderbook/candles/liquidations, 60 minutes for trades.
    *

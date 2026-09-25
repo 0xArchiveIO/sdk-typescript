@@ -341,7 +341,7 @@ export type {
   WsHistoricalData,
   WsHistoricalTickData,
   OrderbookDelta,
-  // WebSocket Bulk Stream (Option D)
+  // WebSocket Bulk Stream (deprecated: discontinued on the server)
   WsStream,
   WsStreamStop,
   WsStreamStarted,

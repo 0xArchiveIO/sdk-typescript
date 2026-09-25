@@ -51,6 +51,18 @@ changes, listed in the sections below.
 - Lighter replay is unchanged. Replay rows keep their existing shapes, which
   differ from the live payloads.
 
+### Deprecated
+- Bulk streaming: `ws.stream()`, `ws.multiStream()` and `ws.streamStop()`;
+  the `onBatch()`, `onStreamStart()`, `onStreamProgress()` and
+  `onStreamComplete()` handlers; and the `WsStream`, `WsStreamStop`,
+  `WsStreamStarted`, `WsStreamProgress`, `WsHistoricalBatch`,
+  `TimestampedRecord`, `WsStreamCompleted` and `WsStreamStopped` types with
+  their Zod schemas. The server has discontinued bulk streaming and answers a
+  stream request with an error message instead of data. They stay in the SDK
+  so existing code still compiles. For large downloads, use the S3 Parquet
+  bulk export at https://www.0xarchive.io/data. For paced history over
+  WebSocket, use `ws.replay()` or `ws.multiReplay()`.
+
 ### Fixed
 - Reconnect re-sent HIP-3 subscriptions with a truncated symbol (for example
   `km` instead of `km:US500`). Stored subscriptions now keep channel, symbol
