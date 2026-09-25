@@ -163,6 +163,13 @@ export {
   WsStreamCompletedSchema,
   WsStreamStoppedSchema,
   WsOutcomeSettledSchema,
+  // Live Lighter WebSocket payload schemas
+  LighterLiveBookLevelSchema,
+  LighterLiveOrderbookSchema,
+  LighterLiveTradeSchema,
+  LighterLiveTradesSchema,
+  LighterLiveAssetCtxSchema,
+  LighterLiveStatsSchema,
   // Validated types (inferred from schemas)
   type ValidatedApiMeta,
   type ValidatedPriceLevel,
@@ -175,6 +182,9 @@ export {
   type ValidatedCandle,
   type ValidatedLiquidation,
   type ValidatedWsServerMessage,
+  type ValidatedLighterLiveOrderbook,
+  type ValidatedLighterLiveTrade,
+  type ValidatedLighterLiveStats,
 } from './schemas';
 
 // Types
@@ -294,6 +304,8 @@ export type {
   Hip4L4Channel,
   SpotL4Channel,
   HyperliquidL4LiveOnlyChannel,
+  LighterLiveChannel,
+  LighterReplayOnlyChannel,
   WsReplayableChannel,
   WsStandardReplayChannel,
   WsOptions,
@@ -302,6 +314,7 @@ export type {
   WsConnectionState,
   WsEventHandlers,
   WsSubscribe,
+  WsSubscribeOptions,
   WsUnsubscribe,
   WsPing,
   WsSubscribed,
@@ -328,7 +341,7 @@ export type {
   WsHistoricalData,
   WsHistoricalTickData,
   OrderbookDelta,
-  // WebSocket Bulk Stream (Option D)
+  // WebSocket Bulk Stream (deprecated: discontinued on the server)
   WsStream,
   WsStreamStop,
   WsStreamStarted,
@@ -346,6 +359,12 @@ export type {
   WsL4DiffEvent,
   WsL4OrderEvent,
   WsL4BatchEvent,
+  // Live Lighter WebSocket payloads
+  LighterLiveBookLevel,
+  LighterLiveOrderbook,
+  LighterLiveTrade,
+  LighterLiveAssetCtx,
+  LighterLiveStats,
   // HIP-4 settlement event
   WsOutcomeSettled,
   // Errors

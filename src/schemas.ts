@@ -81,6 +81,7 @@ export const TradeSchema = z.object({
   direction: TradeDirectionSchema.optional(),
   startPosition: z.string().optional(),
   userAddress: z.string().optional(),
+  accountIndex: z.string().optional(),
   makerAddress: z.string().optional(),
   takerAddress: z.string().optional(),
   builderAddress: z.string().optional(),
@@ -250,12 +251,14 @@ export const WsSubscribedSchema = z.object({
   type: z.literal('subscribed'),
   channel: WsChannelSchema,
   coin: z.string().optional(),
+  symbol: z.string().optional(),
 });
 
 export const WsUnsubscribedSchema = z.object({
   type: z.literal('unsubscribed'),
   channel: WsChannelSchema,
   coin: z.string().optional(),
+  symbol: z.string().optional(),
 });
 
 export const WsPongSchema = z.object({
@@ -271,7 +274,60 @@ export const WsDataSchema = z.object({
   type: z.literal('data'),
   channel: WsChannelSchema,
   coin: z.string(),
+  symbol: z.string().optional(),
   data: z.unknown(),
+});
+
+// Live Lighter payloads (the `data` of live lighter_* messages). Replay rows
+// for the same channels keep their own shapes and are not described here.
+export const LighterLiveBookLevelSchema = z.object({
+  px: z.string(),
+  sz: z.string(),
+  n: z.number(),
+});
+
+export const LighterLiveOrderbookSchema = z.object({
+  coin: z.string(),
+  time: z.number(),
+  levels: z.tuple([z.array(LighterLiveBookLevelSchema), z.array(LighterLiveBookLevelSchema)]),
+});
+
+export const LighterLiveTradeSchema = z.object({
+  coin: z.string(),
+  side: TradeSideSchema,
+  px: z.string(),
+  sz: z.string(),
+  time: z.number(),
+  hash: z.string().nullable(),
+  tid: z.number(),
+  oid: z.number().nullable(),
+  crossed: z.boolean(),
+  dir: z.string().nullable(),
+  fee: z.string().nullable(),
+  fee_token: z.string().nullable(),
+  closed_pnl: z.string().nullable(),
+  start_position: z.string().nullable(),
+  users: z.array(z.string()),
+});
+
+export const LighterLiveTradesSchema = z.array(LighterLiveTradeSchema);
+
+export const LighterLiveAssetCtxSchema = z.object({
+  openInterest: z.string().nullable(),
+  funding: z.string().nullable(),
+  premium: z.string().nullable(),
+  markPx: z.string().nullable(),
+  oraclePx: z.string().nullable(),
+  midPx: z.string().nullable(),
+  dayNtlVlm: z.string().nullable(),
+  dayBaseVlm: z.string().nullable(),
+  prevDayPx: z.string().nullable(),
+  impactPxs: z.null(),
+});
+
+export const LighterLiveStatsSchema = z.object({
+  coin: z.string(),
+  ctx: LighterLiveAssetCtxSchema,
 });
 
 // Replay messages
@@ -385,7 +441,12 @@ export const WsL4BatchSchema = z.object({
   data: z.array(z.union([WsL4DiffEventSchema, WsL4OrderEventSchema])),
 });
 
-// Stream messages
+// Stream messages (bulk streaming has been discontinued; kept for compatibility)
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamStartedSchema = z.object({
   type: z.literal('stream_started'),
   channel: WsChannelSchema,
@@ -394,16 +455,31 @@ export const WsStreamStartedSchema = z.object({
   end: z.number(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamProgressSchema = z.object({
   type: z.literal('stream_progress'),
   snapshots_sent: z.number(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends batches of these records. For large dataset downloads, use the S3
+ * Parquet bulk export at https://www.0xarchive.io/data.
+ */
 export const TimestampedRecordSchema = z.object({
   timestamp: z.number(),
   data: z.unknown(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsHistoricalBatchSchema = z.object({
   type: z.literal('historical_batch'),
   channel: WsChannelSchema,
@@ -411,6 +487,11 @@ export const WsHistoricalBatchSchema = z.object({
   data: z.array(TimestampedRecordSchema),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamCompletedSchema = z.object({
   type: z.literal('stream_completed'),
   channel: WsChannelSchema,
@@ -418,6 +499,11 @@ export const WsStreamCompletedSchema = z.object({
   snapshots_sent: z.number(),
 });
 
+/**
+ * @deprecated Bulk streaming has been discontinued, so the server no longer
+ * sends this message. For large dataset downloads, use the S3 Parquet bulk
+ * export at https://www.0xarchive.io/data.
+ */
 export const WsStreamStoppedSchema = z.object({
   type: z.literal('stream_stopped'),
   snapshots_sent: z.number(),
@@ -657,3 +743,6 @@ export type ValidatedHip4OpenInterest = z.infer<typeof Hip4OpenInterestSchema>;
 export type ValidatedCandle = z.infer<typeof CandleSchema>;
 export type ValidatedLiquidation = z.infer<typeof LiquidationSchema>;
 export type ValidatedWsServerMessage = z.infer<typeof WsServerMessageSchema>;
+export type ValidatedLighterLiveOrderbook = z.infer<typeof LighterLiveOrderbookSchema>;
+export type ValidatedLighterLiveTrade = z.infer<typeof LighterLiveTradeSchema>;
+export type ValidatedLighterLiveStats = z.infer<typeof LighterLiveStatsSchema>;
