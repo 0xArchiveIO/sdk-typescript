@@ -1171,9 +1171,9 @@ const trades = await client.trades.list('BTC', { start, end });
 
 ## WebSocket Client
 
-The WebSocket client supports live subscriptions for supported Hyperliquid channels and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
+The WebSocket client supports live subscriptions for supported Hyperliquid and Lighter.xyz channels, and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
 
-> Lighter channels support historical replay but not live subscriptions through the 0xArchive WebSocket. Use REST for current data and REST, WebSocket replay, or exports for historical data.
+> Lighter `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` support live subscriptions and replay. `lighter_candles` and `lighter_l3_orderbook` are replay-only. See [Live Lighter.xyz Channels](#live-lighterxyz-channels).
 
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
@@ -1183,7 +1183,7 @@ const ws = new OxArchiveWs({ apiKey: '0xa_your_api_key' });
 
 ### Real-time Streaming
 
-Subscribe to live market data from Hyperliquid.
+Subscribe to live market data from Hyperliquid. Live Lighter.xyz data uses the same client; see [Live Lighter.xyz Channels](#live-lighterxyz-channels).
 
 ```typescript
 ws.connect({
@@ -1246,8 +1246,8 @@ ws.replay('orderbook', 'BTC', {
   speed: 10                       // Optional, defaults to 1x
 });
 
-// Lighter.xyz replay with granularity (Lighter channels are replay-only;
-// use the Lighter REST resources for current data)
+// Lighter.xyz replay with granularity. Replay keeps its existing row shapes,
+// which differ from the live Lighter payloads.
 ws.replay('lighter_orderbook', 'BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -1426,14 +1426,104 @@ ws.subscribeHip3Liquidations('hyna:BTC');
 
 | Channel | Description | Requires Coin | Live Subscription | Historical Replay | Current Data Path |
 |---------|-------------|---------------|-------------------|-------------------|-------------------|
-| `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | No | Yes | Lighter REST |
-| `lighter_trades` | Lighter trade/fill updates | Yes | No | Yes | Lighter REST |
+| `lighter_orderbook` | Lighter L2 order book (top 20 levels per side when live) | Yes | Yes | Yes | Live subscription or Lighter REST |
+| `lighter_trades` | Lighter trade/fill updates | Yes | Yes | Yes | Live subscription or Lighter REST |
 | `lighter_candles` | Lighter OHLCV candle data | Yes | No | Yes | Lighter REST |
-| `lighter_open_interest` | Lighter open interest snapshots | Yes | No | Yes | Lighter REST |
-| `lighter_funding` | Lighter funding rate snapshots | Yes | No | Yes | Lighter REST |
+| `lighter_open_interest` | Lighter open interest and market context | Yes | Yes | Yes | Live subscription or Lighter REST |
+| `lighter_funding` | Lighter funding rate and market context | Yes | Yes | Yes | Live subscription or Lighter REST |
 | `lighter_l3_orderbook` | Lighter L3 order-level orderbook | Yes | No | Yes | Lighter REST |
 
-Current Lighter data is available through the REST resources. Historical Lighter data is available through REST, WebSocket replay, or exports.
+Historical Lighter data is available through REST, WebSocket replay, or exports.
+
+#### Live Lighter.xyz Channels
+
+Live Lighter data uses the same subscribe, ack, and `data` envelope as Hyperliquid live data, and the live payloads use Hyperliquid-style shapes. It is available on every plan and is served on `wss://api.0xarchive.io/ws`, the client's default URL. `wss://stream.0xarchive.io/ws` serves only Hyperliquid node-sourced channels and answers a Lighter subscribe with an error that points to `wss://api.0xarchive.io/ws`.
+
+Live Lighter messages are metered per message in the same way as Hyperliquid live data, and the usual plan limits on connections and subscriptions apply, as does the limit of 10 subscribe requests per second per connection. Symbols are the same as `client.lighter.instruments.list()`; they are case-insensitive when you subscribe and the server echoes them uppercase.
+
+```typescript
+import { OxArchiveWs } from '@0xarchive/sdk';
+
+const ws = new OxArchiveWs({ apiKey: '0xa_your_api_key' });
+
+// Full top-20 book, as published
+ws.onLighterOrderbook((coin, book) => {
+  const [bids, asks] = book.levels;
+  console.log(`${coin} ${bids[0]?.px} / ${asks[0]?.px} at ${book.time}`);
+});
+
+// Trade legs, as published: two legs per trade, sharing tid
+ws.onLighterTrades((coin, legs) => {
+  const trades = new Set(legs.map((leg) => leg.tid)).size;
+  console.log(`${coin}: ${trades} trades`);
+});
+
+// lighter_open_interest and lighter_funding carry the same message
+ws.onLighterStats((channel, coin, stats) => {
+  console.log(`${channel} ${coin}: OI ${stats.ctx.openInterest}, funding ${stats.ctx.funding}`);
+});
+
+// Server errors, including lag notices, arrive as { type: 'error' } messages
+ws.on('onMessage', (message) => {
+  if (message.type === 'error') console.warn(message.message);
+});
+
+await ws.connect();
+
+ws.subscribeLighter('orderbook', 'BTC');                       // one book a second
+ws.subscribeLighter('orderbook', 'ETH', { intervalMs: 250 });  // at most one book every 250 ms
+ws.subscribeLighter('trades', 'BTC');
+ws.subscribeLighter('open_interest', 'BTC');
+ws.subscribeLighter('funding', 'BTC');
+
+// Equivalent generic form; intervalMs is sent on the wire as interval_ms
+ws.subscribe('lighter_orderbook', 'SOL', { intervalMs: 500 });
+
+ws.unsubscribeLighter('trades', 'BTC');
+```
+
+While an `onLighterOrderbook` or `onLighterTrades` handler is registered, Lighter books or trades go only to that handler, so Lighter `BTC` is not mixed with Hyperliquid `BTC` in `onOrderbook` or `onTrades`. Without one, `onOrderbook` and `onTrades` receive live Lighter data converted to the SDK `OrderBook` and `Trade` types; each converted Lighter trade is one leg and carries its Lighter account index in `accountIndex`.
+
+**`lighter_orderbook`** (`LighterLiveOrderbook`), shown truncated to two levels per side:
+
+```json
+{"coin":"BTC","time":1790294171459,"levels":[[{"px":"84368.7","sz":"0.00020","n":1},{"px":"84368.6","sz":"0.00020","n":1}],[{"px":"84368.8","sz":"0.05720","n":1},{"px":"84368.9","sz":"0.14223","n":1}]]}
+```
+
+- `levels[0]` holds bids, best (highest) first; `levels[1]` holds asks, best (lowest) first; up to 20 levels per side.
+- Every message is a full book, not a diff. `time` is Lighter's book update time in milliseconds.
+- `px` and `sz` are decimal strings exactly as Lighter publishes them. `n` is always 1 because Lighter does not publish per-level order counts.
+- The newest book is sent at most once per interval: one second by default, or `intervalMs` from 100 to 5000 (inclusive). Each book sent is one metered message. `intervalMs` is accepted only on `lighter_orderbook`, and the SDK throws before sending when it is used on another channel or is out of range.
+- On subscribe, the current book is sent immediately when one is available. Illiquid markets can go minutes without a change.
+
+**`lighter_trades`** (`LighterLiveTrade[]`)
+
+```json
+[{"coin":"BTC","side":"A","px":"84367.9","sz":"0.00003","time":1790294182211,"hash":"0000001dc8774b28000001a0d5d94943000000000000000000000000000000000000000000000000","tid":31944180930,"oid":562953419896990,"crossed":false,"dir":null,"fee":null,"fee_token":null,"closed_pnl":null,"start_position":"109.79011","users":["281474976623827"]},
+ {"coin":"BTC","side":"B","px":"84367.9","sz":"0.00003","time":1790294182211,"hash":"0000001dc8774b28000001a0d5d94943000000000000000000000000000000000000000000000000","tid":31944180930,"oid":844421425107071,"crossed":true,"dir":null,"fee":null,"fee_token":null,"closed_pnl":null,"start_position":"0.03940","users":["713845"]}]
+```
+
+- Each trade arrives as two legs, one per side, with the same `tid`. Count trades by distinct `tid`, not by array length, and compute volume as the sum of `sz` over one leg per `tid`.
+- `side` is `"A"` for the ask side and `"B"` for the bid side. `crossed: true` marks the taker leg. `users` holds that side's Lighter account index as a string, `oid` is that side's order id, and `start_position` is that account's signed position before the trade. `hash` is the Lighter transaction hash and `time` is in milliseconds.
+- `fee`, `fee_token`, `closed_pnl`, and `dir` are always `null` in live messages because Lighter's live stream does not carry them.
+- Live trades are delivered as they happen, typically batched within about 100 ms, and are preliminary. The finalized record, with fields the live stream does not carry such as fees, is served by `client.lighter.trades.list()` (`GET /v1/lighter/trades/{symbol}`), which returns only reconciled trades (see `meta.finalized_through`). `client.lighter.trades.recent()` serves the preliminary tier.
+
+**`lighter_open_interest` and `lighter_funding`** (`LighterLiveStats`)
+
+Both channels carry the same message:
+
+```json
+{"coin":"BTC","ctx":{"openInterest":"172706178.266310","funding":"0.000012","premium":"-0.000327","markPx":"84363.5","oraclePx":"84397.0","midPx":"84368.8","dayNtlVlm":"908611371.550746","dayBaseVlm":"10808.97087","prevDayPx":"84285.9","impactPxs":null}}
+```
+
+- `openInterest` is Lighter's reported open interest, the same value as `open_interest` from `GET /v1/lighter/openinterest/{symbol}/current`.
+- `funding` is Lighter's current funding rate as a fraction, the same as the REST `funding_rate` (Lighter publishes percent, which is divided by 100). `premium` is also a fraction.
+- `markPx` is the mark price, `oraclePx` is Lighter's index price, and `midPx` is the mid price. `dayNtlVlm` is 24h quote volume and `dayBaseVlm` is 24h base volume. `prevDayPx` is derived from the last trade price and Lighter's 24h percent change. `impactPxs` is always `null` because Lighter has no impact prices.
+- Updates arrive as Lighter publishes them, about once per second per market. On subscribe, the latest values are sent immediately when available.
+
+**Falling behind.** A client that falls behind `lighter_trades`, `lighter_open_interest`, or `lighter_funding` receives an error message such as `Dropped ~N live lighter_trades messages for BTC: your connection fell behind the Lighter stream, and those trades were not delivered.` If the lag persists, the server stops that subscription with `Stopped the lighter_trades stream for BTC: your connection is too slow to keep up. Re-subscribe to resume.` `lighter_orderbook` sends the newest book at each interval and never sends an older book after a newer one.
+
+**Replay is unchanged.** All six Lighter channels still support replay, and replay keeps its existing `historical_data` row shapes. Those rows are not the live shapes above, so handle them separately in `onHistoricalData`.
 
 #### Candle Replay
 
@@ -1595,6 +1685,11 @@ import type {
   WsChannel,
   WsConnectionState,
   WsReplaySnapshot,
+  WsSubscribeOptions,
+  // Live Lighter WebSocket payloads
+  LighterLiveOrderbook,
+  LighterLiveTrade,
+  LighterLiveStats,
   // Orderbook reconstruction
   OrderbookDelta,
   TickData,

@@ -9,6 +9,14 @@
  * ws.subscribeOrderbook('BTC');
  * ```
  *
+ * @example Live Lighter.xyz data
+ * ```typescript
+ * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
+ * ws.onLighterOrderbook((coin, book) => console.log(coin, book.levels[0][0]?.px));
+ * await ws.connect();
+ * ws.subscribeLighter('orderbook', 'BTC', { intervalMs: 250 });
+ * ```
+ *
  * @example Historical replay (like Tardis.dev)
  * ```typescript
  * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
@@ -53,6 +61,13 @@ import type {
   WsCoreL4ReplayOptions,
   HyperliquidCoreL4Channel,
   HyperliquidL4LiveOnlyChannel,
+  LighterLiveChannel,
+  LighterReplayOnlyChannel,
+  LighterLiveOrderbook,
+  LighterLiveTrade,
+  LighterLiveStats,
+  WsSubscribe,
+  WsSubscribeOptions,
   WsConnectionState,
   WsEventHandlers,
   OrderBook,
@@ -77,6 +92,7 @@ const DEFAULT_PING_INTERVAL = 30000; // 30 seconds
 const DEFAULT_RECONNECT_DELAY = 1000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
 
+/** Every Lighter channel. All six support historical replay. */
 export const LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = new Set([
   'lighter_orderbook',
   'lighter_trades',
@@ -86,9 +102,32 @@ export const LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = new Set([
   'lighter_l3_orderbook',
 ]);
 
+/** Lighter channels that also accept live subscriptions. */
+export const LIGHTER_LIVE_CHANNELS: ReadonlySet<LighterLiveChannel> = new Set([
+  'lighter_orderbook',
+  'lighter_trades',
+  'lighter_open_interest',
+  'lighter_funding',
+]);
+
+/** Lighter channels that support historical replay only. */
+export const LIGHTER_REPLAY_ONLY_CHANNELS: ReadonlySet<LighterReplayOnlyChannel> = new Set([
+  'lighter_candles',
+  'lighter_l3_orderbook',
+]);
+
 export const LIGHTER_SUBSCRIPTION_ERROR =
-  'Lighter WebSocket channels support replay, not live subscriptions. ' +
-  'Use REST for current data or a replay request for stored history.';
+  'lighter_candles and lighter_l3_orderbook support replay, not live subscriptions. ' +
+  'Use REST for current data or a replay request for stored history. Live Lighter ' +
+  'subscriptions are available on lighter_orderbook, lighter_trades, ' +
+  'lighter_open_interest and lighter_funding.';
+
+/** Smallest `intervalMs` accepted for a `lighter_orderbook` subscription. */
+export const LIGHTER_BOOK_INTERVAL_MIN_MS = 100;
+/** Largest `intervalMs` accepted for a `lighter_orderbook` subscription. */
+export const LIGHTER_BOOK_INTERVAL_MAX_MS = 5000;
+
+export const LIGHTER_INTERVAL_CHANNEL_ERROR = 'intervalMs is only supported on lighter_orderbook.';
 
 export const HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR =
   'Hyperliquid HIP-3, HIP-4, and Spot L4 channels support live subscriptions only; replay is unavailable.';
@@ -107,10 +146,45 @@ export const HYPERLIQUID_L4_LIVE_ONLY_CHANNELS: ReadonlySet<HyperliquidL4LiveOnl
   'spot_l4_orders',
 ]);
 
-function validateLiveSubscription(channel: WsChannel): void {
-  if (LIGHTER_REPLAY_CHANNELS.has(channel)) {
+function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptions): void {
+  if (LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as LighterReplayOnlyChannel)) {
     throw new Error(LIGHTER_SUBSCRIPTION_ERROR);
   }
+  const intervalMs = options?.intervalMs;
+  // `== null` also treats an explicit null from JavaScript callers as omitted.
+  if (intervalMs == null) {
+    return;
+  }
+  if (channel !== 'lighter_orderbook') {
+    throw new Error(LIGHTER_INTERVAL_CHANNEL_ERROR);
+  }
+  if (
+    !Number.isInteger(intervalMs) ||
+    intervalMs < LIGHTER_BOOK_INTERVAL_MIN_MS ||
+    intervalMs > LIGHTER_BOOK_INTERVAL_MAX_MS
+  ) {
+    throw new Error(
+      `intervalMs must be an integer between ${LIGHTER_BOOK_INTERVAL_MIN_MS} and ` +
+        `${LIGHTER_BOOK_INTERVAL_MAX_MS} for lighter_orderbook (got ${intervalMs}). ` +
+        'Leave it out for one book a second.',
+    );
+  }
+}
+
+/** A live subscription the client re-sends after a reconnect. */
+interface StoredSubscription {
+  channel: WsChannel;
+  coin?: string;
+  intervalMs?: number;
+}
+
+/** Short and full channel names accepted by `subscribeLighter`. */
+type LighterLiveChannelInput =
+  | 'orderbook' | 'trades' | 'open_interest' | 'funding'
+  | LighterLiveChannel;
+
+function lighterLiveChannel(channel: LighterLiveChannelInput): LighterLiveChannel {
+  return (channel.startsWith('lighter_') ? channel : `lighter_${channel}`) as LighterLiveChannel;
 }
 
 function validateReplayChannel(channel: WsChannel, end?: number): void {
@@ -180,6 +254,35 @@ function transformTrades(coin: string, rawTrades: unknown): Trade[] {
 }
 
 /**
+ * Transform one live Lighter fill leg to the SDK Trade type. Each leg carries
+ * one account (`users[0]`, a Lighter account index), so it maps to
+ * `accountIndex` rather than to maker/taker addresses. Fields the live stream
+ * does not carry (fee, fee token, closed PnL, direction) are left out.
+ */
+function transformLighterLiveTrade(coin: string, raw: LighterLiveTrade): Trade {
+  const trade: Trade = {
+    coin,
+    side: raw.side === 'A' ? 'A' : 'B',
+    price: raw.px ?? '0',
+    size: raw.sz ?? '0',
+    timestamp: typeof raw.time === 'number' ? new Date(raw.time).toISOString() : new Date().toISOString(),
+  };
+  if (typeof raw.tid === 'number') trade.tradeId = raw.tid;
+  if (typeof raw.hash === 'string') trade.txHash = raw.hash;
+  if (typeof raw.oid === 'number') trade.orderId = raw.oid;
+  if (typeof raw.crossed === 'boolean') trade.crossed = raw.crossed;
+  if (typeof raw.start_position === 'string') trade.startPosition = raw.start_position;
+  if (Array.isArray(raw.users) && typeof raw.users[0] === 'string') trade.accountIndex = raw.users[0];
+  return trade;
+}
+
+/** Normalise a live `lighter_trades` payload to an array of fill legs. */
+function lighterLiveTrades(data: unknown): LighterLiveTrade[] {
+  if (Array.isArray(data)) return data as LighterLiveTrade[];
+  return data ? [data as LighterLiveTrade] : [];
+}
+
+/**
  * Transform raw Hyperliquid orderbook format to SDK OrderBook type.
  * Raw format: { coin, levels: [[{px, sz, n}, ...], [{px, sz, n}, ...]], time }
  * SDK format: { coin, timestamp, bids: [{px, sz, n}], asks: [{px, sz, n}], mid_price, spread, spread_bps }
@@ -237,6 +340,11 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
 /**
  * WebSocket client for supported live data and historical replay.
  *
+ * Live subscriptions cover Hyperliquid channels and four Lighter.xyz channels
+ * (`lighter_orderbook`, `lighter_trades`, `lighter_open_interest`,
+ * `lighter_funding`). `lighter_candles` and `lighter_l3_orderbook` are
+ * replay-only.
+ *
  * **Keep-Alive:** The server sends WebSocket ping frames every 30 seconds
  * and will disconnect idle connections after 60 seconds. This SDK automatically
  * handles keep-alive by sending application-level pings at the configured interval
@@ -247,7 +355,7 @@ export class OxArchiveWs {
   private ws: WebSocket | null = null;
   private options: Required<WsOptions>;
   private handlers: WsEventHandlers = {};
-  private subscriptions: Set<string> = new Set();
+  private subscriptions: Map<string, StoredSubscription> = new Map();
   private state: WsConnectionState = 'disconnected';
   private reconnectAttempts = 0;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -268,6 +376,9 @@ export class OxArchiveWs {
   private liquidationsHandlers: Array<(channel: WsChannel, coin: string, data: Trade[]) => void> = [];
   private gapHandlers: Array<(channel: WsChannel, coin: string, gapStart: number, gapEnd: number, durationMinutes: number) => void> = [];
   private outcomeSettledHandlers: Array<(coin: string, outcomeId: number, side: number, settlementValue?: number, settlementAt?: string) => void> = [];
+  private lighterOrderbookHandlers: Array<(coin: string, data: LighterLiveOrderbook) => void> = [];
+  private lighterTradesHandlers: Array<(coin: string, data: LighterLiveTrade[]) => void> = [];
+  private lighterStatsHandlers: Array<(channel: 'lighter_open_interest' | 'lighter_funding', coin: string, data: LighterLiveStats) => void> = [];
 
   constructor(options: WsOptions) {
     this.options = {
@@ -364,18 +475,30 @@ export class OxArchiveWs {
   /**
    * Subscribe to a supported live channel.
    *
-   * Lighter channels are available through `replay`, not live subscriptions.
-   * Use REST for current data or a bounded replay request for stored history.
+   * Live Lighter subscriptions are available on `lighter_orderbook`,
+   * `lighter_trades`, `lighter_open_interest` and `lighter_funding`.
+   * `lighter_candles` and `lighter_l3_orderbook` are replay-only and throw
+   * here; use REST for current data or a bounded replay for stored history.
+   *
+   * @param channel - Channel to subscribe to
+   * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive
+   * @param options - `intervalMs` sets the book rate for `lighter_orderbook`
+   *   only (100 to 5000 ms, default one book a second)
+   * @throws Error for a replay-only Lighter channel, or an `intervalMs` on
+   *   another channel or outside 100 to 5000
    */
-  subscribe(channel: WsChannel, coin?: string): void {
-    validateLiveSubscription(channel);
-    const key = this.subscriptionKey(channel, coin);
-    this.subscriptions.add(key);
+  subscribe(channel: WsChannel, coin?: string, options?: WsSubscribeOptions): void {
+    validateLiveSubscription(channel, options);
+    const subscription: StoredSubscription = { channel, coin };
+    if (options?.intervalMs != null) {
+      subscription.intervalMs = options.intervalMs;
+    }
+    // A repeat subscribe to the same channel and symbol replaces the stored
+    // options, so a reconnect re-sends the latest interval.
+    this.subscriptions.set(this.subscriptionKey(channel, coin), subscription);
 
     if (this.isConnected()) {
-      // Wire field is `symbol`; `coin` is the deprecated alias kept on the
-      // SDK surface for backward compatibility.
-      this.send({ op: 'subscribe', channel, symbol: coin });
+      this.send(this.subscribeMessage(subscription));
     }
   }
 
@@ -507,6 +630,37 @@ export class OxArchiveWs {
   }
 
   /**
+   * Subscribe to a live Lighter.xyz channel.
+   *
+   * @param channel One of `orderbook`, `trades`, `open_interest`, `funding`
+   *   (or the full `lighter_*` form). Candles and L3 are replay-only.
+   * @param symbol Lighter symbol, as listed by `client.lighter.instruments.list()`
+   *   (case-insensitive; the server echoes it uppercase).
+   * @param options `intervalMs` for `orderbook` only: send the newest book at
+   *   most once per 100 to 5000 ms (default 1000).
+   *
+   * @example
+   * ```typescript
+   * ws.onLighterOrderbook((coin, book) => console.log(coin, book.levels[0][0]?.px));
+   * ws.subscribeLighter('orderbook', 'BTC', { intervalMs: 250 });
+   * ws.subscribeLighter('trades', 'BTC');
+   * ```
+   */
+  subscribeLighter(
+    channel: LighterLiveChannelInput,
+    symbol: string,
+    options?: WsSubscribeOptions,
+  ): void {
+    this.subscribe(lighterLiveChannel(channel), symbol, options);
+  }
+
+  /** Unsubscribe from a live Lighter.xyz channel. Accepts the short form
+   * (`'orderbook'`) or the full form (`'lighter_orderbook'`). */
+  unsubscribeLighter(channel: LighterLiveChannelInput, symbol: string): void {
+    this.unsubscribe(lighterLiveChannel(channel), symbol);
+  }
+
+  /**
    * Subscribe to a HIP-4 channel for a given outcome coin.
    *
    * @param channel One of `hip4_orderbook`, `hip4_trades`, `hip4_open_interest`,
@@ -542,7 +696,8 @@ export class OxArchiveWs {
 
   /**
    * Start historical replay with timing preserved.
-   * Lighter channels support bounded replay only; use REST for current data.
+   * All six Lighter channels support replay. Replay rows keep their existing
+   * shapes, which differ from the live Lighter payloads.
    *
    * @param channel - Data channel to replay
    * @param coin - Trading pair (e.g., 'BTC', 'ETH')
@@ -948,6 +1103,52 @@ export class OxArchiveWs {
   }
 
   /**
+   * Handle live `lighter_orderbook` messages as published: a full book of up to
+   * 20 levels per side (`levels[0]` bids, `levels[1]` asks, best first), not a
+   * diff. While any `onLighterOrderbook` handler is registered, Lighter books
+   * are not passed to `onOrderbook`, so Lighter `BTC` is not mixed with
+   * Hyperliquid `BTC`. Without one, `onOrderbook` receives them converted to
+   * `OrderBook`.
+   */
+  onLighterOrderbook(handler: (coin: string, data: LighterLiveOrderbook) => void): void {
+    this.lighterOrderbookHandlers.push(handler);
+  }
+
+  /**
+   * Handle live `lighter_trades` messages as published. Each trade arrives as
+   * two legs (one per side) sharing `tid`: count trades by distinct `tid` and
+   * sum volume over one leg per `tid`. `fee`, `fee_token`, `closed_pnl` and
+   * `dir` are null in live messages; the finalized record with fees is served
+   * by `client.lighter.trades.list()`. While any `onLighterTrades` handler is
+   * registered, Lighter trades are not passed to `onTrades`; without one,
+   * `onTrades` receives them converted to `Trade` (one entry per leg, with the
+   * account index in `accountIndex`).
+   *
+   * @example
+   * ```typescript
+   * ws.onLighterTrades((coin, legs) => {
+   *   const trades = new Set(legs.map((leg) => leg.tid)).size;
+   *   console.log(`${coin}: ${trades} trades`);
+   * });
+   * ws.subscribeLighter('trades', 'BTC');
+   * ```
+   */
+  onLighterTrades(handler: (coin: string, data: LighterLiveTrade[]) => void): void {
+    this.lighterTradesHandlers.push(handler);
+  }
+
+  /**
+   * Handle live `lighter_open_interest` and `lighter_funding` messages. Both
+   * channels carry the same `{coin, ctx}` message; `channel` says which
+   * subscription delivered it. `ctx.funding` and `ctx.premium` are fractions.
+   */
+  onLighterStats(
+    handler: (channel: 'lighter_open_interest' | 'lighter_funding', coin: string, data: LighterLiveStats) => void
+  ): void {
+    this.lighterStatsHandlers.push(handler);
+  }
+
+  /**
    * Handle HIP-4 outcome settlement events. Pushed once per `(outcome_id, side)`
    * when the outcome flips to settled. After this event the server proactively
    * unsubscribes the client from every hip4_* subscription on the settled coin —
@@ -994,14 +1195,29 @@ export class OxArchiveWs {
   }
 
   private subscriptionKey(channel: WsChannel, coin?: string): string {
-    return coin ? `${channel}:${coin}` : channel;
+    if (!coin) return channel;
+    // Lighter symbols are case-insensitive on the server, so 'btc' and 'BTC'
+    // are one subscription.
+    const symbol = LIGHTER_REPLAY_CHANNELS.has(channel) ? coin.toUpperCase() : coin;
+    return `${channel}:${symbol}`;
+  }
+
+  private subscribeMessage(subscription: StoredSubscription): WsSubscribe {
+    // Wire field is `symbol`; `coin` is the deprecated alias kept on the
+    // SDK surface for backward compatibility.
+    const message: WsSubscribe = { op: 'subscribe', channel: subscription.channel, symbol: subscription.coin };
+    if (subscription.intervalMs !== undefined) {
+      message.interval_ms = subscription.intervalMs;
+    }
+    return message;
   }
 
   private resubscribe(): void {
-    for (const key of this.subscriptions) {
-      const [channel, coin] = key.split(':') as [WsChannel, string | undefined];
-      // Wire field is `symbol`; mirror the canonical form used by `subscribe()`.
-      this.send({ op: 'subscribe', channel, symbol: coin });
+    // Stored entries keep channel and symbol separately, so symbols that
+    // contain ':' (HIP-3, e.g. 'km:US500') and Lighter book intervals survive
+    // a reconnect intact.
+    for (const subscription of this.subscriptions.values()) {
+      this.send(this.subscribeMessage(subscription));
     }
   }
 
@@ -1111,7 +1327,13 @@ export class OxArchiveWs {
         break;
       }
       case 'data': {
-        if (
+        if (message.channel === 'lighter_orderbook' && this.lighterOrderbookHandlers.length > 0) {
+          // A Lighter-specific handler takes the book, so Lighter 'BTC' does
+          // not reach onOrderbook alongside Hyperliquid 'BTC'.
+          for (const handler of this.lighterOrderbookHandlers) {
+            handler(message.coin, message.data as LighterLiveOrderbook);
+          }
+        } else if (
           message.channel === 'orderbook' ||
           message.channel === 'hip3_orderbook' ||
           message.channel === 'hip4_orderbook' ||
@@ -1126,11 +1348,30 @@ export class OxArchiveWs {
           for (const handler of this.orderbookHandlers) {
             handler(message.coin, orderbook);
           }
+        } else if (message.channel === 'lighter_trades') {
+          const legs = lighterLiveTrades(message.data);
+          if (this.lighterTradesHandlers.length > 0) {
+            // A Lighter-specific handler takes the legs, so Lighter 'BTC'
+            // does not reach onTrades alongside Hyperliquid 'BTC'.
+            for (const handler of this.lighterTradesHandlers) {
+              handler(message.coin, legs);
+            }
+          } else {
+            // Live Lighter legs carry one account each, so they get their own
+            // transform instead of the Hyperliquid users[maker, taker] mapping.
+            const trades = legs.map((leg) => transformLighterLiveTrade(message.coin, leg));
+            for (const handler of this.tradesHandlers) {
+              handler(message.coin, trades);
+            }
+          }
+        } else if (message.channel === 'lighter_open_interest' || message.channel === 'lighter_funding') {
+          for (const handler of this.lighterStatsHandlers) {
+            handler(message.channel, message.coin, message.data as LighterLiveStats);
+          }
         } else if (
           message.channel === 'trades' ||
           message.channel === 'hip3_trades' ||
           message.channel === 'hip4_trades' ||
-          message.channel === 'lighter_trades' ||
           message.channel === 'spot_trades'
         ) {
           // Transform raw trade payload to SDK Trade type. Covers the bare

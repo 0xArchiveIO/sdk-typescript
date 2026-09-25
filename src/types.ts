@@ -163,6 +163,12 @@ export interface Trade {
   startPosition?: string;
   /** User's wallet address (for fill-level data from REST API) */
   userAddress?: string;
+  /**
+   * Lighter account index that owns this fill, as a string. Present on Lighter
+   * trades (REST and live `lighter_trades`); Lighter identifies accounts by
+   * index rather than wallet address.
+   */
+  accountIndex?: string;
   /** Maker's wallet address when the route provides per-fill maker/taker context */
   makerAddress?: string;
   /** Taker's wallet address when the route provides per-fill maker/taker context */
@@ -1103,9 +1109,13 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  * - ticker/all_tickers: live subscriptions only
  * - liquidations: live + replay (Hyperliquid; live as of 1.6.0)
  * - hip3_liquidations: live + replay (HIP-3; live as of 1.6.0)
- * - lighter_orderbook, lighter_trades, lighter_candles,
- *   lighter_open_interest, lighter_funding, lighter_l3_orderbook:
- *   historical replay only; use Lighter REST for current data
+ * - lighter_orderbook, lighter_trades, lighter_open_interest, lighter_funding:
+ *   live subscriptions + historical replay. Live messages use the
+ *   Hyperliquid-style payloads described by `LighterLiveOrderbook`,
+ *   `LighterLiveTrade` and `LighterLiveStats`; replay rows keep their own
+ *   shapes.
+ * - lighter_candles, lighter_l3_orderbook: historical replay only; use Lighter
+ *   REST for current data
  * - open_interest, funding, hip3_open_interest, hip3_funding: historical only
  *   (replay/stream)
  *
@@ -1148,6 +1158,16 @@ export type SpotL4Channel = 'spot_l4_diffs' | 'spot_l4_orders';
 /** L4 channels that must not be sent in a historical replay request. */
 export type HyperliquidL4LiveOnlyChannel = Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
 
+/** Lighter channels that accept live subscriptions as well as replay. */
+export type LighterLiveChannel =
+  | 'lighter_orderbook'
+  | 'lighter_trades'
+  | 'lighter_open_interest'
+  | 'lighter_funding';
+
+/** Lighter channels that support historical replay only. */
+export type LighterReplayOnlyChannel = 'lighter_candles' | 'lighter_l3_orderbook';
+
 /** Replay-capable channels, including the existing Lighter replay channels. */
 export type WsReplayableChannel = Exclude<WsChannel, HyperliquidL4LiveOnlyChannel>;
 
@@ -1163,6 +1183,23 @@ export interface WsSubscribe {
   symbol?: string;
   /** @deprecated Use `symbol`. The server still accepts `coin` for now. */
   coin?: string;
+  /**
+   * `lighter_orderbook` only: the newest book is sent at most once per this
+   * many milliseconds (integer, 100 to 5000 inclusive). Omitted means one book
+   * a second. The server rejects it on every other channel.
+   */
+  interval_ms?: number;
+}
+
+/** Options for a live subscription. */
+export interface WsSubscribeOptions {
+  /**
+   * `lighter_orderbook` only: send the newest book at most once per this many
+   * milliseconds. Must be an integer from 100 to 5000 inclusive; leave it out
+   * for one book a second. Each book sent is one metered message. Sent on the
+   * wire as `interval_ms`.
+   */
+  intervalMs?: number;
 }
 
 /** Unsubscribe message from client */
@@ -1193,7 +1230,7 @@ export interface WsStandardReplayOptions {
   interval?: string;
 }
 
-/** Standard replay request, including the existing Lighter replay-only path. */
+/** Standard replay request, including Lighter replay. */
 export interface WsStandardReplay extends WsStandardReplayOptions {
   op: 'replay';
   /** Single channel for replay. Mutually exclusive with `channels`. */
@@ -1282,6 +1319,8 @@ export interface WsSubscribed {
   type: 'subscribed';
   channel: WsChannel;
   coin?: string;
+  /** Canonical symbol echoed by the server (Lighter symbols are echoed uppercase). */
+  symbol?: string;
 }
 
 /** Unsubscription confirmed from server */
@@ -1289,6 +1328,8 @@ export interface WsUnsubscribed {
   type: 'unsubscribed';
   channel: WsChannel;
   coin?: string;
+  /** Canonical symbol echoed by the server. */
+  symbol?: string;
 }
 
 /** Pong response from server */
@@ -1307,6 +1348,8 @@ export interface WsData<T = unknown> {
   type: 'data';
   channel: WsChannel;
   coin: string;
+  /** Canonical symbol; the same value as `coin`. */
+  symbol?: string;
   data: T;
 }
 
@@ -1532,6 +1575,114 @@ export interface WsL4Batch<T extends WsL4BatchEvent = WsL4BatchEvent> {
   coin: string;
   symbol: string;
   data: T[];
+}
+
+// -----------------------------------------------------------------------------
+// Live Lighter payloads
+//
+// Live `lighter_*` data messages use the same shapes as Hyperliquid live data.
+// Replay of the same channels is unchanged and keeps its own `historical_data`
+// row shapes, which differ from these.
+// -----------------------------------------------------------------------------
+
+/** One price level in a live `lighter_orderbook` message. */
+export interface LighterLiveBookLevel {
+  /** Price, as a decimal string exactly as Lighter publishes it. */
+  px: string;
+  /** Size at this price, as a decimal string exactly as Lighter publishes it. */
+  sz: string;
+  /** Always 1: Lighter does not publish per-level order counts. */
+  n: number;
+}
+
+/**
+ * Live `lighter_orderbook` payload. Every message is a full book of up to 20
+ * levels per side, not a diff. The newest book is sent at most once per
+ * subscription interval (default 1000 ms).
+ */
+export interface LighterLiveOrderbook {
+  coin: string;
+  /** Lighter's book update time (Unix ms). */
+  time: number;
+  /** `[bids, asks]`: bids best (highest) first, asks best (lowest) first. */
+  levels: [bids: LighterLiveBookLevel[], asks: LighterLiveBookLevel[]];
+}
+
+/**
+ * One fill leg in a live `lighter_trades` message. Each trade arrives as two
+ * legs, one per side, sharing `tid`. Count trades by distinct `tid`, not by
+ * array length, and sum `sz` over one leg per `tid` for volume.
+ *
+ * Live trades are preliminary. The finalized record, including fees, is served
+ * by `client.lighter.trades.list()` (`GET /v1/lighter/trades/{symbol}`), which
+ * returns reconciled trades only.
+ */
+export interface LighterLiveTrade {
+  coin: string;
+  /** 'A' = ask side, 'B' = bid side. */
+  side: 'A' | 'B';
+  /** Price, as a decimal string. */
+  px: string;
+  /** Size, as a decimal string. */
+  sz: string;
+  /** Trade time (Unix ms). */
+  time: number;
+  /** Lighter transaction hash. */
+  hash: string | null;
+  /** Trade id, shared by both legs of the trade. */
+  tid: number;
+  /** This side's order id. */
+  oid: number | null;
+  /** `true` for the taker leg, `false` for the maker leg. */
+  crossed: boolean;
+  /** Null in live messages: Lighter's live stream does not carry it. */
+  dir: string | null;
+  /** Null in live messages: Lighter's live stream does not carry it. */
+  fee: string | null;
+  /** Null in live messages: Lighter's live stream does not carry it. */
+  fee_token: string | null;
+  /** Null in live messages: Lighter's live stream does not carry it. */
+  closed_pnl: string | null;
+  /** This account's signed position before the trade, as a decimal string. */
+  start_position: string | null;
+  /** `[account index]` of this side's Lighter account, as a string. */
+  users: string[];
+}
+
+/**
+ * Market context carried by live `lighter_open_interest` and
+ * `lighter_funding` messages. Values are decimal strings.
+ */
+export interface LighterLiveAssetCtx {
+  /** Lighter's reported open interest (the same value as the REST current open interest). */
+  openInterest: string | null;
+  /** Current funding rate as a fraction (Lighter publishes percent; divided by 100). */
+  funding: string | null;
+  /** Premium as a fraction. */
+  premium: string | null;
+  /** Mark price. */
+  markPx: string | null;
+  /** Lighter's index price. */
+  oraclePx: string | null;
+  /** Mid price. */
+  midPx: string | null;
+  /** 24h quote volume. */
+  dayNtlVlm: string | null;
+  /** 24h base volume. */
+  dayBaseVlm: string | null;
+  /** Derived from the last trade price and Lighter's 24h percent change. */
+  prevDayPx: string | null;
+  /** Always null: Lighter has no impact prices. */
+  impactPxs: null;
+}
+
+/**
+ * Live `lighter_open_interest` and `lighter_funding` payload. Both channels
+ * carry the same message, updated as Lighter publishes market stats.
+ */
+export interface LighterLiveStats {
+  coin: string;
+  ctx: LighterLiveAssetCtx;
 }
 
 /**
