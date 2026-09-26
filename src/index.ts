@@ -6,7 +6,10 @@
  * - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
  * - Hyperliquid HIP-4 outcome markets at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
  * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (candles from 2025-03-22T10:50:22Z; trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
- * - Lighter.xyz (perpetuals data)
+ * - Lighter.xyz, with two deployments: mainnet at /v1/lighter and client.lighter,
+ *   and Robinhood Chain at /v1/rh-lighter and client.rhLighter
+ * - Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
+ *   client.lighter.positions and client.rhLighter.positions
  *
  * @example
  * ```typescript
@@ -37,7 +40,25 @@
 export { OxArchive } from './client';
 
 // Exchange clients
-export { HyperliquidClient, Hip3Client, Hip4Client, LighterClient, SpotClient } from './exchanges';
+export {
+  HyperliquidClient,
+  Hip3Client,
+  Hip4Client,
+  LighterClient,
+  LighterDeploymentClient,
+  RhLighterClient,
+  SpotClient,
+} from './exchanges';
+
+// Account positions and Lighter liquidations resources
+export {
+  HyperliquidPositionsResource,
+  Hip3PositionsResource,
+  LighterPositionsResource,
+  LighterAccountsResource,
+  LighterLiquidationsResource,
+  type LighterAccountIndex,
+} from './resources';
 
 // WebSocket client
 export { OxArchiveWs } from './websocket';
@@ -116,6 +137,30 @@ export {
   LiquidationArrayResponseSchema,
   LiquidationVolumeSchema,
   LiquidationVolumeArrayResponseSchema,
+  // Lighter liquidation schemas (mainnet and Robinhood Chain)
+  LighterLiquidationSchema,
+  LighterLiquidationVolumeSchema,
+  LighterLiquidationArrayResponseSchema,
+  LighterLiquidationVolumeArrayResponseSchema,
+  // Account positions schemas
+  PositionSideSchema,
+  PositionLeverageSchema,
+  PositionCumFundingSchema,
+  PositionSchema,
+  MarketPositionSchema,
+  PositionChangeSchema,
+  AccountSummarySchema,
+  MarketPositionsSummarySchema,
+  WalletPositionsSchema,
+  LighterL1AccountSchema,
+  LighterL1AccountsSchema,
+  WalletPositionsResponseSchema,
+  PositionArrayResponseSchema,
+  MarketPositionArrayResponseSchema,
+  PositionChangeArrayResponseSchema,
+  AccountSummaryArrayResponseSchema,
+  MarketPositionsSummaryArrayResponseSchema,
+  LighterL1AccountsResponseSchema,
   // Liquidation Levels schemas
   LiquidationLevelBucketSchema,
   LiquidationLevelsSchema,
@@ -185,6 +230,14 @@ export {
   type ValidatedLighterLiveOrderbook,
   type ValidatedLighterLiveTrade,
   type ValidatedLighterLiveStats,
+  type ValidatedLighterLiquidation,
+  type ValidatedLighterLiquidationVolume,
+  type ValidatedPosition,
+  type ValidatedMarketPosition,
+  type ValidatedPositionChange,
+  type ValidatedAccountSummary,
+  type ValidatedMarketPositionsSummary,
+  type ValidatedWalletPositions,
 } from './schemas';
 
 // Types
@@ -240,6 +293,39 @@ export type {
   LiquidationsByUserParams,
   LiquidationVolume,
   LiquidationVolumeParams,
+  // Lighter liquidations (mainnet and Robinhood Chain)
+  LighterLiquidation,
+  LighterLiquidationVolume,
+  // Account positions
+  PositionSide,
+  PositionsSource,
+  PositionQuality,
+  AccountSeen,
+  PositionLeverage,
+  PositionCumFunding,
+  Position,
+  MarketPosition,
+  PositionChange,
+  AccountSummary,
+  MarketPositionsSummary,
+  WalletPositions,
+  LighterL1Account,
+  LighterL1Accounts,
+  PositionsResponse,
+  PositionsTime,
+  PositionsGetParams,
+  Hip3PositionsGetParams,
+  PositionsRangeParams,
+  Hip3PositionsRangeParams,
+  PositionsAccountParams,
+  PositionsAccountHistoryParams,
+  PositionsMarketParams,
+  LighterPositionsMarketParams,
+  PositionsMarketSummaryParams,
+  LighterPositionsMarketSummaryParams,
+  PositionsBulkParams,
+  LighterPositionsBulkParams,
+  LighterAccountsByL1Params,
   // Liquidation Levels
   LevelsSide,
   LiquidationLevelBucket,
@@ -306,6 +392,8 @@ export type {
   HyperliquidL4LiveOnlyChannel,
   LighterLiveChannel,
   LighterReplayOnlyChannel,
+  RhLighterLiveChannel,
+  RhLighterReplayOnlyChannel,
   WsReplayableChannel,
   WsStandardReplayChannel,
   WsOptions,

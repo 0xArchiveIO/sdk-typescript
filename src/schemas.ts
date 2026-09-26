@@ -27,6 +27,20 @@ export const ApiMetaSchema = z.object({
   requestId: z.string(),
   coverageFrom: z.string().optional(),
   notice: z.string().optional(),
+  // Finalization (Lighter trades, account positions)
+  finalizedThrough: z.string().optional(),
+  requestedEnd: z.string().optional(),
+  clampedTo: z.string().optional(),
+  preliminaryRowCount: z.number().optional(),
+  // Account positions context
+  asOf: z.string().optional(),
+  snapshotTs: z.string().optional(),
+  source: z.string().optional(),
+  quality: z.string().optional(),
+  stale: z.boolean().optional(),
+  // Defined further down with the positions schemas.
+  totals: z.lazy(() => MarketPositionsSummarySchema).optional(),
+  builtThrough: z.string().optional(),
 });
 
 export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
@@ -235,6 +249,8 @@ export const WsChannelSchema = z.enum([
   'open_interest', 'funding',
   'lighter_orderbook', 'lighter_trades', 'lighter_candles',
   'lighter_open_interest', 'lighter_funding', 'lighter_l3_orderbook',
+  'rh_lighter_orderbook', 'rh_lighter_trades', 'rh_lighter_candles',
+  'rh_lighter_open_interest', 'rh_lighter_funding',
   'hip3_orderbook', 'hip3_trades', 'hip3_candles',
   'hip3_open_interest', 'hip3_funding', 'hip3_liquidations',
   'hip4_orderbook', 'hip4_trades', 'hip4_open_interest',
@@ -589,6 +605,227 @@ export const LiquidationVolumeArrayResponseSchema = z.object({
 });
 
 // =============================================================================
+// Lighter Liquidation Schemas (mainnet and Robinhood Chain)
+// =============================================================================
+
+export const LighterLiquidationSchema = z.object({
+  symbol: z.string(),
+  timestamp: z.number(),
+  transactionTimeUs: z.number(),
+  tradeId: z.number(),
+  liquidationType: z.string(),
+  price: z.number(),
+  size: z.number(),
+  usdAmount: z.number(),
+  askAccount: z.string(),
+  bidAccount: z.string(),
+  askOrderId: z.number(),
+  bidOrderId: z.number(),
+  isMakerAsk: z.boolean(),
+  takerPositionSizeBefore: z.number(),
+  makerPositionSizeBefore: z.number(),
+  takerEntryQuoteBefore: z.number(),
+  makerEntryQuoteBefore: z.number(),
+  takerInitialMarginFractionBefore: z.number(),
+  makerInitialMarginFractionBefore: z.number(),
+  takerAllocatedMarginUsdcBefore: z.number(),
+  takerAllocatedMarginUsdcAfter: z.number(),
+  makerAllocatedMarginUsdcBefore: z.number(),
+  makerAllocatedMarginUsdcAfter: z.number(),
+  takerFee: z.number(),
+  makerFee: z.number(),
+  takerPositionSignChanged: z.boolean(),
+  makerPositionSignChanged: z.boolean(),
+  blockHeight: z.number(),
+  txHash: z.string(),
+  rawJson: z.string(),
+  source: z.string(),
+});
+
+export const LighterLiquidationVolumeSchema = z.object({
+  symbol: z.string(),
+  timestamp: z.number(),
+  totalUsd: z.number(),
+  count: z.number(),
+});
+
+export const LighterLiquidationArrayResponseSchema = ApiResponseSchema(z.array(LighterLiquidationSchema));
+export const LighterLiquidationVolumeArrayResponseSchema = ApiResponseSchema(
+  z.array(LighterLiquidationVolumeSchema)
+);
+
+// =============================================================================
+// Account Positions Schemas
+// =============================================================================
+
+export const PositionSideSchema = z.enum(['long', 'short']);
+
+export const PositionLeverageSchema = z.object({
+  type: z.string(),
+  value: z.string().nullable(),
+});
+
+export const PositionCumFundingSchema = z.object({
+  allTime: z.string().nullable(),
+  sinceOpen: z.string().nullable(),
+  sinceChange: z.string().nullable(),
+});
+
+export const PositionSchema = z.object({
+  snapshotTs: z.string().optional(),
+  accountIndex: z.string().optional(),
+  accountKind: z.string().optional(),
+  symbol: z.string(),
+  coin: z.string(),
+  dex: z.string().optional(),
+  size: z.string(),
+  side: PositionSideSchema,
+  entryPrice: z.string().nullable(),
+  markPrice: z.string().nullable(),
+  markTime: z.string().nullable(),
+  positionValue: z.string().nullable(),
+  unrealizedPnl: z.string().nullable(),
+  returnOnEquity: z.string().nullable(),
+  leverage: PositionLeverageSchema,
+  maxLeverage: z.number().nullable(),
+  marginUsed: z.string().nullable(),
+  liquidationPrice: z.string().nullable(),
+  liquidationPriceStatus: z.string(),
+  cumFunding: PositionCumFundingSchema,
+  openedAt: z.string().nullable(),
+  snapshotAsOf: z.string().nullable(),
+  quality: z.string(),
+  initialMarginFraction: z.string().nullable().optional(),
+  allocatedMargin: z.string().nullable().optional(),
+  marginMode: z.string().optional(),
+  markSource: z.string().optional(),
+  finalized: z.boolean().optional(),
+});
+
+export const MarketPositionSchema = z.object({
+  snapshotTs: z.string().optional(),
+  userAddress: z.string().optional(),
+  accountIndex: z.string().optional(),
+  accountKind: z.string().optional(),
+  symbol: z.string(),
+  coin: z.string(),
+  dex: z.string().optional(),
+  size: z.string(),
+  side: PositionSideSchema,
+  entryPrice: z.string().nullable(),
+  markPrice: z.string().nullable(),
+  positionValue: z.string().nullable(),
+  unrealizedPnl: z.string().nullable(),
+  leverageType: z.string(),
+  liquidationPrice: z.string().nullable(),
+  quality: z.string(),
+});
+
+export const PositionChangeSchema = z.object({
+  timestamp: z.string(),
+  accountIndex: z.string().optional(),
+  accountKind: z.string().optional(),
+  symbol: z.string(),
+  coin: z.string(),
+  dex: z.string().optional(),
+  side: TradeSideSchema,
+  price: z.string().nullable(),
+  size: z.string().nullable(),
+  startPosition: z.string().nullable(),
+  endPosition: z.string().nullable(),
+  entryPriceAfter: z.string().nullable(),
+  eventType: z.string(),
+  cause: z.string(),
+  direction: z.string().optional(),
+  closedPnl: z.string().nullable().optional(),
+  realizedPnl: z.string().optional(),
+  fee: z.string().nullable(),
+  feeToken: z.string(),
+  crossed: z.boolean().optional(),
+  isMaker: z.boolean().optional(),
+  tradeId: z.number(),
+  orderId: z.number().nullable(),
+  openedAt: z.string().nullable(),
+  seq: z.number().optional(),
+  blockNumber: z.number().optional(),
+  eventIndex: z.number().optional(),
+  continuity: z.string(),
+  positionSizeBefore: z.string().optional(),
+  positionSizeAfter: z.string().optional(),
+  feeRate: z.string().nullable().optional(),
+  feeUsdc: z.string().nullable().optional(),
+  usdcAmount: z.string().optional(),
+  finalized: z.boolean().optional(),
+});
+
+export const AccountSummarySchema = z.object({
+  snapshotTs: z.string().optional(),
+  accountIndex: z.string().optional(),
+  dex: z.string().optional(),
+  accountValue: z.string().nullable().optional(),
+  crossAccountValue: z.string().nullable().optional(),
+  collateral: z.string().nullable().optional(),
+  totalMarginUsed: z.string().nullable().optional(),
+  crossMaintenanceMarginUsed: z.string().nullable().optional(),
+  withdrawable: z.string().nullable().optional(),
+  totalPositionValue: z.string().nullable(),
+  totalUnrealizedPnl: z.string().nullable(),
+  longValue: z.string().nullable(),
+  shortValue: z.string().nullable(),
+  nPositions: z.number(),
+  accountMode: z.string().optional(),
+  snapshotAsOf: z.string().nullable().optional(),
+  quality: z.string(),
+});
+
+export const MarketPositionsSummarySchema = z.object({
+  snapshotTs: z.string().nullable(),
+  symbol: z.string(),
+  coin: z.string(),
+  dex: z.string().optional(),
+  longCount: z.number(),
+  shortCount: z.number(),
+  longSize: z.string(),
+  shortSize: z.string(),
+  longValue: z.string().nullable(),
+  shortValue: z.string().nullable(),
+  longAvgEntryPrice: z.string().nullable(),
+  shortAvgEntryPrice: z.string().nullable(),
+  longPositionsWithEntry: z.number(),
+  shortPositionsWithEntry: z.number(),
+  longTop10ValueShare: z.string().nullable(),
+  shortTop10ValueShare: z.string().nullable(),
+  top10ValueShare: z.string().nullable(),
+  quality: z.string(),
+});
+
+export const WalletPositionsSchema = z.object({
+  positions: z.array(PositionSchema),
+  account: AccountSummarySchema.nullable(),
+  accountSeen: z.string().optional(),
+});
+
+export const LighterL1AccountSchema = z.object({
+  accountIndex: z.string(),
+  accountType: z.number(),
+  firstSeen: z.string().nullable(),
+});
+
+export const LighterL1AccountsSchema = z.object({
+  l1Address: z.string(),
+  totalAccounts: z.number(),
+  accounts: z.array(LighterL1AccountSchema),
+});
+
+export const WalletPositionsResponseSchema = ApiResponseSchema(WalletPositionsSchema);
+export const PositionArrayResponseSchema = ApiResponseSchema(z.array(PositionSchema));
+export const MarketPositionArrayResponseSchema = ApiResponseSchema(z.array(MarketPositionSchema));
+export const PositionChangeArrayResponseSchema = ApiResponseSchema(z.array(PositionChangeSchema));
+export const AccountSummaryArrayResponseSchema = ApiResponseSchema(z.array(AccountSummarySchema));
+export const MarketPositionsSummaryArrayResponseSchema = ApiResponseSchema(z.array(MarketPositionsSummarySchema));
+export const LighterL1AccountsResponseSchema = ApiResponseSchema(LighterL1AccountsSchema);
+
+// =============================================================================
 // Liquidation Levels Schemas (projected forced-liquidation levels)
 // =============================================================================
 
@@ -746,3 +983,11 @@ export type ValidatedWsServerMessage = z.infer<typeof WsServerMessageSchema>;
 export type ValidatedLighterLiveOrderbook = z.infer<typeof LighterLiveOrderbookSchema>;
 export type ValidatedLighterLiveTrade = z.infer<typeof LighterLiveTradeSchema>;
 export type ValidatedLighterLiveStats = z.infer<typeof LighterLiveStatsSchema>;
+export type ValidatedLighterLiquidation = z.infer<typeof LighterLiquidationSchema>;
+export type ValidatedLighterLiquidationVolume = z.infer<typeof LighterLiquidationVolumeSchema>;
+export type ValidatedPosition = z.infer<typeof PositionSchema>;
+export type ValidatedMarketPosition = z.infer<typeof MarketPositionSchema>;
+export type ValidatedPositionChange = z.infer<typeof PositionChangeSchema>;
+export type ValidatedAccountSummary = z.infer<typeof AccountSummarySchema>;
+export type ValidatedMarketPositionsSummary = z.infer<typeof MarketPositionsSummarySchema>;
+export type ValidatedWalletPositions = z.infer<typeof WalletPositionsSchema>;

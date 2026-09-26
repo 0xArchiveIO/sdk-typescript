@@ -26,6 +26,50 @@ export interface ApiMeta {
   coverageFrom?: string;
   /** Advisory notice explaining an empty response (e.g. window predates coverage) */
   notice?: string;
+  /**
+   * Finalization boundary (RFC 3339 UTC). Data before it is final and will not
+   * change; data after it is preliminary. Set on Lighter trades (both
+   * deployments) and on account-positions history and change routes.
+   */
+  finalizedThrough?: string;
+  /**
+   * The request's original `end` (RFC 3339 UTC), set only when the request was
+   * clamped to `clampedTo`.
+   */
+  requestedEnd?: string;
+  /**
+   * Set only when the requested window ended past the served boundary: the
+   * boundary it was clamped to (RFC 3339 UTC). On Lighter trades this equals
+   * `finalizedThrough`; on account positions it equals `builtThrough`.
+   */
+  clampedTo?: string;
+  /**
+   * Number of preliminary (not yet reconciled) rows in the page. Set on routes
+   * that intentionally serve the preliminary tier, such as Lighter
+   * `/trades/{symbol}/recent`.
+   */
+  preliminaryRowCount?: number;
+  /** Account positions: the instant (RFC 3339 UTC) the returned state describes, taken from the data. */
+  asOf?: string;
+  /** Account positions: the committed snapshot (RFC 3339 UTC) the response was read from. */
+  snapshotTs?: string;
+  /** Account positions: how the rows were produced (`snapshot`, `reconstructed` or `changes`). */
+  source?: PositionsSource;
+  /** Account positions: completeness of the snapshot the response was read from. */
+  quality?: PositionQuality;
+  /** Account positions: true when the latest live snapshot is older than 12 minutes (paired with `notice`). */
+  stale?: boolean;
+  /**
+   * Account positions: totals over the whole filtered result set of a market
+   * listing (not only this page). Sent on the first page only.
+   */
+  totals?: MarketPositionsSummary;
+  /**
+   * Account positions: every event before this instant (RFC 3339 UTC) is built
+   * into the change log and the as-of state. Reads are clamped to it. Data up
+   * to it may still be preliminary; `finalizedThrough` says how far it is final.
+   */
+  builtThrough?: string;
 }
 
 /**
@@ -220,6 +264,11 @@ export interface CursorResponse<T> {
   data: T;
   /** Cursor for next page (use as cursor parameter) */
   nextCursor?: string;
+  /**
+   * Response metadata, where the method returns it. Trade history returns it
+   * so Lighter callers can read `finalizedThrough` and `clampedTo`.
+   */
+  meta?: ApiMeta;
 }
 
 // =============================================================================
@@ -1014,6 +1063,499 @@ export interface LiquidationVolumeParams extends CursorPaginationParams {
 }
 
 // =============================================================================
+// Lighter Liquidation Types (mainnet and Robinhood Chain)
+// =============================================================================
+
+/**
+ * One Lighter liquidation trade, from `client.lighter.liquidations.history()`
+ * or `client.rhLighter.liquidations.history()`.
+ *
+ * Lighter reports both accounts of the trade rather than a single liquidated
+ * user: `askAccount` and `bidAccount` are Lighter account indices, and the
+ * `taker*` / `maker*` fields describe each side's state before the trade.
+ * Prices and sizes are numbers; `timestamp` is Unix milliseconds.
+ *
+ * Rows backfilled from the venue's trade export have `source: 'bucket'` and
+ * an empty `rawJson`; rows captured live keep the full venue payload in
+ * `rawJson`.
+ */
+export interface LighterLiquidation {
+  /** Market symbol (perps uppercase, e.g. `BTC`). */
+  symbol: string;
+  /** Trade time (Unix ms). */
+  timestamp: number;
+  /** Intra-block ordering (microseconds). */
+  transactionTimeUs: number;
+  /** Lighter trade id. */
+  tradeId: number;
+  /** Venue liquidation type. */
+  liquidationType: string;
+  /** Execution price. */
+  price: number;
+  /** Size in base units. */
+  size: number;
+  /** Notional in the deployment's quote asset (USDC on mainnet, USDG on Robinhood Chain). */
+  usdAmount: number;
+  /** Account index on the ask side. */
+  askAccount: string;
+  /** Account index on the bid side. */
+  bidAccount: string;
+  askOrderId: number;
+  bidOrderId: number;
+  /** Whether the maker was on the ask side. */
+  isMakerAsk: boolean;
+  /** Taker's signed position before the trade (long positive, short negative). */
+  takerPositionSizeBefore: number;
+  /** Maker's signed position before the trade. */
+  makerPositionSizeBefore: number;
+  takerEntryQuoteBefore: number;
+  makerEntryQuoteBefore: number;
+  takerInitialMarginFractionBefore: number;
+  makerInitialMarginFractionBefore: number;
+  takerAllocatedMarginUsdcBefore: number;
+  takerAllocatedMarginUsdcAfter: number;
+  makerAllocatedMarginUsdcBefore: number;
+  makerAllocatedMarginUsdcAfter: number;
+  takerFee: number;
+  makerFee: number;
+  takerPositionSignChanged: boolean;
+  makerPositionSignChanged: boolean;
+  /** Lighter block height. */
+  blockHeight: number;
+  /** Lighter transaction hash. */
+  txHash: string;
+  /** The venue's trade payload as captured, or `''` for rows backfilled from the venue export. */
+  rawJson: string;
+  /** Where the row came from, e.g. `'bucket'` for the venue-export backfill. */
+  source: string;
+}
+
+/**
+ * Aggregated Lighter liquidation volume bucket. Lighter does not report a
+ * reliable long/short direction on liquidations, so buckets carry the total
+ * and the count only.
+ */
+export interface LighterLiquidationVolume {
+  /** Market symbol. */
+  symbol: string;
+  /** Bucket start (Unix ms). */
+  timestamp: number;
+  /** Total liquidated notional in the deployment's quote asset. */
+  totalUsd: number;
+  /** Number of liquidation trades in the bucket. */
+  count: number;
+}
+
+// =============================================================================
+// Account Positions Types
+// =============================================================================
+
+/** Direction of an open position. A flat position has size `"0"`. */
+export type PositionSide = 'long' | 'short';
+
+/**
+ * How positions rows were produced: `snapshot` (a committed live or hourly
+ * snapshot), `reconstructed` (an as-of state between snapshots, rebuilt from
+ * the change log) or `changes` (change-log rows).
+ */
+export type PositionsSource = 'snapshot' | 'reconstructed' | 'changes' | (string & {});
+
+/**
+ * Row or snapshot quality. `complete`, `partial` (for example a missing mark,
+ * so value and PnL are null) and `degraded` apply everywhere; Lighter rows can
+ * also read `preliminary` (built from not yet reconciled trades),
+ * `unreconciled` (a market with real-time trades only) or `incomplete`.
+ */
+export type PositionQuality =
+  | 'complete'
+  | 'partial'
+  | 'degraded'
+  | 'preliminary'
+  | 'unreconciled'
+  | 'incomplete'
+  | (string & {});
+
+/**
+ * Why a wallet or account returned no positions: `flat` (it traded but holds
+ * nothing at that instant), `never_seen` (no recorded activity in the covered
+ * history, with `meta.notice` and `meta.coverageFrom`) or `outside_coverage`
+ * (the requested instant is before coverage begins).
+ */
+export type AccountSeen = 'flat' | 'never_seen' | 'outside_coverage' | (string & {});
+
+/** Leverage of a position. On Lighter `type` is the margin mode and `value` is null. */
+export interface PositionLeverage {
+  /** `cross`, `isolated` or `unknown`. */
+  type: 'cross' | 'isolated' | 'unknown' | (string & {});
+  /** Leverage multiple as a decimal string, or null when unknown. */
+  value: string | null;
+}
+
+/** Cumulative funding of a position, in USD, as of `snapshotAsOf`. */
+export interface PositionCumFunding {
+  allTime: string | null;
+  sinceOpen: string | null;
+  sinceChange: string | null;
+}
+
+/**
+ * One position. Numbers are decimal strings (a flat position is `"0"`);
+ * timestamps are RFC 3339 UTC strings.
+ *
+ * Hyperliquid rows carry `leverage`, margin, liquidation price and funding
+ * fields; on Lighter those are null and the Lighter extras
+ * (`accountIndex`, `accountKind`, `initialMarginFraction`, `allocatedMargin`,
+ * `marginMode`, `markSource`, `finalized`) are set. Reconstructed rows
+ * (`meta.source === 'reconstructed'`) carry exact size, entry and `openedAt`,
+ * mark fields at the requested time, and null snapshot-only fields.
+ */
+export interface Position {
+  /** Hour the row describes (history rows only). */
+  snapshotTs?: string;
+  /** Lighter account index, as a string. */
+  accountIndex?: string;
+  /** Lighter account kind: `user`, `settlement`, `insurance` or `system`. */
+  accountKind?: string;
+  symbol: string;
+  /** Same value as `symbol`. */
+  coin: string;
+  /** HIP-3 dex. */
+  dex?: string;
+  /** Signed size (negative for shorts). */
+  size: string;
+  side: PositionSide;
+  entryPrice: string | null;
+  markPrice: string | null;
+  markTime: string | null;
+  positionValue: string | null;
+  unrealizedPnl: string | null;
+  returnOnEquity: string | null;
+  leverage: PositionLeverage;
+  maxLeverage: number | null;
+  marginUsed: string | null;
+  liquidationPrice: string | null;
+  /**
+   * `exact`, `not_published_cross` (cross liquidation prices are not
+   * published), `changed_since_snapshot` or `unavailable`.
+   */
+  liquidationPriceStatus: string;
+  cumFunding: PositionCumFunding;
+  /** When the current position lifecycle opened. */
+  openedAt: string | null;
+  /** The instant leverage, funding and margin fields describe. */
+  snapshotAsOf: string | null;
+  quality: PositionQuality;
+  /** Lighter: initial margin fraction at the last trade (e.g. `"0.05"`). */
+  initialMarginFraction?: string | null;
+  /** Lighter: isolated margin allocated to the position. */
+  allocatedMargin?: string | null;
+  /** Lighter: `cross`, `isolated` or `unknown`. */
+  marginMode?: string;
+  /** Lighter: where the mark came from (`mark`, `last_trade`, `stale_mark` or `none`). */
+  markSource?: string;
+  /** Lighter: true when every trade behind the row is reconciled. */
+  finalized?: boolean;
+}
+
+/** Lean position record returned by market listings and the bulk route. */
+export interface MarketPosition {
+  /** Hour the row describes (bulk rows). */
+  snapshotTs?: string;
+  /** Hyperliquid wallet address. */
+  userAddress?: string;
+  /** Lighter account index, as a string. */
+  accountIndex?: string;
+  /** Lighter account kind. */
+  accountKind?: string;
+  symbol: string;
+  coin: string;
+  dex?: string;
+  size: string;
+  side: PositionSide;
+  entryPrice: string | null;
+  markPrice: string | null;
+  positionValue: string | null;
+  unrealizedPnl: string | null;
+  /** `cross`, `isolated` or `unknown` (Lighter: the margin mode). */
+  leverageType: string;
+  liquidationPrice: string | null;
+  quality: PositionQuality;
+}
+
+/**
+ * One change-log leg: a trade (or settlement) that moved a position.
+ * `side` is `B` / `A`, exactly as on trades.
+ */
+export interface PositionChange {
+  timestamp: string;
+  /** Lighter account index, as a string. */
+  accountIndex?: string;
+  /** Lighter account kind. */
+  accountKind?: string;
+  symbol: string;
+  coin: string;
+  dex?: string;
+  side: TradeSide;
+  price: string | null;
+  size: string | null;
+  startPosition: string | null;
+  endPosition: string | null;
+  /** Entry price after the leg; null when the leg leaves the position flat. */
+  entryPriceAfter: string | null;
+  /**
+   * `open`, `increase`, `reduce`, `close` or `flip`; on Lighter a leg that
+   * leaves the position unchanged is `settlement` (or `unchanged`).
+   */
+  eventType: string;
+  /** `trade`, `liquidation`, `liquidation_counterparty`, `adl`, `settlement` or `unknown`. */
+  cause: string;
+  /** Hyperliquid direction (e.g. `Open Long`). */
+  direction?: string;
+  /** Hyperliquid closed PnL. */
+  closedPnl?: string | null;
+  /** Lighter realized PnL. */
+  realizedPnl?: string;
+  fee: string | null;
+  feeToken: string;
+  /** Hyperliquid: true for the taker leg. */
+  crossed?: boolean;
+  /** Lighter: true for the maker leg. */
+  isMaker?: boolean;
+  tradeId: number;
+  orderId: number | null;
+  openedAt: string | null;
+  /** Hyperliquid in-block sequence. */
+  seq?: number;
+  /** Hyperliquid block context (present from 2026-09-17). */
+  blockNumber?: number;
+  eventIndex?: number;
+  /** `ok`, `inferred`, `first_seen` or `quarantined`. */
+  continuity: 'ok' | 'inferred' | 'first_seen' | 'quarantined' | (string & {});
+  /** Lighter aliases of `startPosition` / `endPosition`. */
+  positionSizeBefore?: string;
+  positionSizeAfter?: string;
+  feeRate?: string | null;
+  feeUsdc?: string | null;
+  usdcAmount?: string;
+  /** True when the leg is final and will not be re-derived. */
+  finalized?: boolean;
+}
+
+/**
+ * Account summary. Hyperliquid returns the clearinghouse figures (one account
+ * per address on core, one per dex on HIP-3); `accountValue`,
+ * `crossAccountValue`, `collateral`, margin and `withdrawable` are
+ * Hyperliquid only. A total with any unpriced position is null, never a
+ * partial sum.
+ */
+export interface AccountSummary {
+  /** Hour the row describes (history rows only). */
+  snapshotTs?: string;
+  /** Lighter account index. */
+  accountIndex?: string;
+  /** HIP-3 dex. */
+  dex?: string;
+  accountValue?: string | null;
+  crossAccountValue?: string | null;
+  collateral?: string | null;
+  totalMarginUsed?: string | null;
+  crossMaintenanceMarginUsed?: string | null;
+  /** Present on some historical hourly rows only; null elsewhere. */
+  withdrawable?: string | null;
+  totalPositionValue: string | null;
+  totalUnrealizedPnl: string | null;
+  longValue: string | null;
+  shortValue: string | null;
+  nPositions: number;
+  /** `standard`, `unified`, `portfolio`, `dex_abstraction` or `unknown`. */
+  accountMode?: string;
+  snapshotAsOf?: string | null;
+  quality: PositionQuality;
+}
+
+/** Long/short aggregates of one market at one snapshot. */
+export interface MarketPositionsSummary {
+  snapshotTs: string | null;
+  symbol: string;
+  coin: string;
+  dex?: string;
+  longCount: number;
+  shortCount: number;
+  longSize: string;
+  shortSize: string;
+  longValue: string | null;
+  shortValue: string | null;
+  /** Average entry over the long positions whose entry is known. */
+  longAvgEntryPrice: string | null;
+  shortAvgEntryPrice: string | null;
+  /** Positions the average entries cover. */
+  longPositionsWithEntry: number;
+  shortPositionsWithEntry: number;
+  /** Share of long value held by the ten largest long positions (0 to 1). */
+  longTop10ValueShare: string | null;
+  shortTop10ValueShare: string | null;
+  top10ValueShare: string | null;
+  quality: PositionQuality;
+}
+
+/** `data` of a wallet or account positions request. */
+export interface WalletPositions {
+  positions: Position[];
+  /**
+   * Account summary on the first page of a snapshot read (Hyperliquid core,
+   * HIP-3 with a `dex`, and Lighter without a `symbol` filter); null otherwise.
+   */
+  account: AccountSummary | null;
+  /** Set only when `positions` is empty. */
+  accountSeen?: AccountSeen;
+}
+
+/** One Lighter account owned by an L1 address. */
+export interface LighterL1Account {
+  accountIndex: string;
+  accountType: number;
+  firstSeen: string | null;
+}
+
+/** Lighter accounts owned by an L1 address (mainnet only). */
+export interface LighterL1Accounts {
+  l1Address: string;
+  totalAccounts: number;
+  accounts: LighterL1Account[];
+}
+
+/**
+ * A positions response page: the data, the cursor for the next page, and the
+ * response metadata (`asOf`, `snapshotTs`, `source`, `quality`, `stale`,
+ * `builtThrough`, `finalizedThrough`, `totals` and the clamp fields).
+ */
+export interface PositionsResponse<T> extends CursorResponse<T> {
+  meta: ApiMeta;
+}
+
+/**
+ * A positions time value: Unix milliseconds, an ISO 8601 string, or a Date.
+ * The SDK sends it as Unix milliseconds.
+ */
+export type PositionsTime = number | string | Date;
+
+/** Parameters for a wallet or account positions read. */
+export interface PositionsGetParams {
+  /**
+   * As-of instant. Omit for the latest live snapshot. An exact hour with a
+   * committed snapshot serves that snapshot; any other instant is
+   * reconstructed from the change log (state after every event before it).
+   */
+  timestamp?: PositionsTime;
+  /** Restrict to one market. */
+  symbol?: string;
+  /** Opaque cursor from the previous page's `nextCursor`. */
+  cursor?: string;
+  /** Rows per page (default 500, max 5,000). */
+  limit?: number;
+}
+
+/** Parameters for HIP-3 wallet reads (adds the dex filter). */
+export interface Hip3PositionsGetParams extends PositionsGetParams {
+  /** Restrict to one HIP-3 dex. */
+  dex?: string;
+}
+
+/** Parameters for position history and change-log reads over `[start, end)`. */
+export interface PositionsRangeParams {
+  /** Inclusive start. */
+  start: PositionsTime;
+  /** Exclusive end. */
+  end: PositionsTime;
+  /** Restrict to one market. */
+  symbol?: string;
+  /** Opaque cursor from the previous page's `nextCursor`. */
+  cursor?: string;
+  /** Rows per page (default 500, max 5,000). */
+  limit?: number;
+}
+
+/** HIP-3 history and change-log parameters (adds the dex filter). */
+export interface Hip3PositionsRangeParams extends PositionsRangeParams {
+  dex?: string;
+}
+
+/** Parameters for the Hyperliquid account summary. */
+export interface PositionsAccountParams {
+  /** HIP-3 only: restrict to one dex. */
+  dex?: string;
+}
+
+/** Parameters for Hyperliquid hourly account history over `[start, end)`. */
+export interface PositionsAccountHistoryParams {
+  start: PositionsTime;
+  end: PositionsTime;
+  /** HIP-3 only: restrict to one dex. */
+  dex?: string;
+  cursor?: string;
+  /** Rows per page (default 500, max 5,000). */
+  limit?: number;
+}
+
+/** Parameters for every open position in one market. */
+export interface PositionsMarketParams {
+  /** A committed hourly snapshot (an exact UTC hour). Omit for the latest live snapshot. */
+  hour?: PositionsTime;
+  /** Only long or only short positions. */
+  side?: PositionSide;
+  /** Minimum position value in USD. */
+  minValue?: number;
+  cursor?: string;
+  /** Rows per page (default 100, max 2,000). */
+  limit?: number;
+}
+
+/** Lighter market listing parameters (adds system accounts). */
+export interface LighterPositionsMarketParams extends PositionsMarketParams {
+  /** Include settlement, insurance and other system accounts (default false). */
+  includeSystem?: boolean;
+}
+
+/**
+ * Parameters for a market's long/short summary. Omit `start` and `end` for
+ * the latest live snapshot (one point); pass them for an hourly series over
+ * `[start, end)` (at most 168 hours per page).
+ */
+export interface PositionsMarketSummaryParams {
+  start?: PositionsTime;
+  end?: PositionsTime;
+  cursor?: string;
+  /** Points per page (default 100). */
+  limit?: number;
+}
+
+/** Lighter market summary parameters (adds system accounts). */
+export interface LighterPositionsMarketSummaryParams extends PositionsMarketSummaryParams {
+  includeSystem?: boolean;
+}
+
+/** Parameters for every open position across markets at one hour (bulk). */
+export interface PositionsBulkParams {
+  /** A committed hourly snapshot (an exact UTC hour). */
+  hour: PositionsTime;
+  cursor?: string;
+  /** Rows per page (default 1,000, max 2,000). */
+  limit?: number;
+}
+
+/** Lighter bulk parameters (adds system accounts). */
+export interface LighterPositionsBulkParams extends PositionsBulkParams {
+  includeSystem?: boolean;
+}
+
+/** Parameters for resolving Lighter accounts by L1 address. */
+export interface LighterAccountsByL1Params {
+  cursor?: string;
+  /** Accounts per page (default 500, max 5,000). */
+  limit?: number;
+}
+
+// =============================================================================
 // Per-Coin Freshness Types
 // =============================================================================
 
@@ -1116,6 +1658,13 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  *   shapes.
  * - lighter_candles, lighter_l3_orderbook: historical replay only; use Lighter
  *   REST for current data
+ * - rh_lighter_orderbook, rh_lighter_trades, rh_lighter_open_interest,
+ *   rh_lighter_funding: Lighter on Robinhood Chain (the second Lighter
+ *   deployment), live subscriptions + historical replay. Live payloads have
+ *   the same shapes as the mainnet `lighter_*` live payloads. Live data is
+ *   served on `wss://api.0xarchive.io/ws` only.
+ * - rh_lighter_candles: Lighter on Robinhood Chain candles, historical replay
+ *   only (once candles are enabled for that deployment)
  * - open_interest, funding: Hyperliquid core live subscriptions + historical
  *   replay
  * - hip3_open_interest, hip3_funding: historical only (replay)
@@ -1136,6 +1685,8 @@ export type WsChannel =
   | 'open_interest' | 'funding'
   | 'lighter_orderbook' | 'lighter_trades' | 'lighter_candles'
   | 'lighter_open_interest' | 'lighter_funding' | 'lighter_l3_orderbook'
+  | 'rh_lighter_orderbook' | 'rh_lighter_trades' | 'rh_lighter_candles'
+  | 'rh_lighter_open_interest' | 'rh_lighter_funding'
   | 'hip3_orderbook' | 'hip3_trades' | 'hip3_candles'
   | 'hip3_open_interest' | 'hip3_funding' | 'hip3_liquidations'
   | 'hip4_orderbook' | 'hip4_trades' | 'hip4_open_interest'
@@ -1169,6 +1720,20 @@ export type LighterLiveChannel =
 /** Lighter channels that support historical replay only. */
 export type LighterReplayOnlyChannel = 'lighter_candles' | 'lighter_l3_orderbook';
 
+/**
+ * Lighter on Robinhood Chain channels that accept live subscriptions as well
+ * as replay. Live payloads use the same shapes as the mainnet channels
+ * (`LighterLiveOrderbook`, `LighterLiveTrade`, `LighterLiveStats`).
+ */
+export type RhLighterLiveChannel =
+  | 'rh_lighter_orderbook'
+  | 'rh_lighter_trades'
+  | 'rh_lighter_open_interest'
+  | 'rh_lighter_funding';
+
+/** Lighter on Robinhood Chain channels that support historical replay only. */
+export type RhLighterReplayOnlyChannel = 'rh_lighter_candles';
+
 /** Replay-capable channels, including the existing Lighter replay channels. */
 export type WsReplayableChannel = Exclude<WsChannel, HyperliquidL4LiveOnlyChannel>;
 
@@ -1185,9 +1750,10 @@ export interface WsSubscribe {
   /** @deprecated Use `symbol`. The server still accepts `coin` for now. */
   coin?: string;
   /**
-   * `lighter_orderbook` only: the newest book is sent at most once per this
-   * many milliseconds (integer, 100 to 5000 inclusive). Omitted means one book
-   * a second. The server rejects it on every other channel.
+   * `lighter_orderbook` and `rh_lighter_orderbook` only: the newest book is
+   * sent at most once per this many milliseconds (integer, 100 to 5000
+   * inclusive). Omitted means one book a second. The server rejects it on
+   * every other channel.
    */
   interval_ms?: number;
 }
@@ -1195,10 +1761,10 @@ export interface WsSubscribe {
 /** Options for a live subscription. */
 export interface WsSubscribeOptions {
   /**
-   * `lighter_orderbook` only: send the newest book at most once per this many
-   * milliseconds. Must be an integer from 100 to 5000 inclusive; leave it out
-   * for one book a second. Each book sent is one metered message. Sent on the
-   * wire as `interval_ms`.
+   * `lighter_orderbook` and `rh_lighter_orderbook` only: send the newest book
+   * at most once per this many milliseconds. Must be an integer from 100 to
+   * 5000 inclusive; leave it out for one book a second. Each book sent is one
+   * metered message. Sent on the wire as `interval_ms`.
    */
   intervalMs?: number;
 }
@@ -1334,7 +1900,7 @@ export interface WsSubscribed {
   type: 'subscribed';
   channel: WsChannel;
   coin?: string;
-  /** Canonical symbol echoed by the server (Lighter symbols are echoed uppercase). */
+  /** Canonical symbol echoed by the server (Lighter symbols, on both deployments, are echoed uppercase). */
   symbol?: string;
 }
 
@@ -1632,8 +2198,9 @@ export interface WsL4Batch<T extends WsL4BatchEvent = WsL4BatchEvent> {
 // Live Lighter payloads
 //
 // Live `lighter_*` data messages use the same shapes as Hyperliquid live data.
-// Replay of the same channels is unchanged and keeps its own `historical_data`
-// row shapes, which differ from these.
+// Live `rh_lighter_*` messages (Lighter on Robinhood Chain) use these same
+// shapes. Replay of the same channels is unchanged and keeps its own
+// `historical_data` row shapes, which differ from these.
 // -----------------------------------------------------------------------------
 
 /** One price level in a live `lighter_orderbook` message. */
@@ -1666,7 +2233,8 @@ export interface LighterLiveOrderbook {
  *
  * Live trades are preliminary. The finalized record, including fees, is served
  * by `client.lighter.trades.list()` (`GET /v1/lighter/trades/{symbol}`), which
- * returns reconciled trades only.
+ * returns reconciled trades only. On Robinhood Chain (`rh_lighter_trades`) the
+ * finalized record is `client.rhLighter.trades.list()`.
  */
 export interface LighterLiveTrade {
   coin: string;
@@ -1909,6 +2477,12 @@ export interface Web3SubscribeResult {
 export interface ApiError {
   code: number;
   error: string;
+  /**
+   * Stable application error code when the API sends one, for example
+   * `snapshot_advanced` (409: restart pagination without a cursor),
+   * `invalid_cursor` or `positions_unavailable`.
+   */
+  errorCode?: string;
 }
 
 /**
@@ -1917,12 +2491,21 @@ export interface ApiError {
 export class OxArchiveError extends Error {
   code: number;
   requestId?: string;
+  /**
+   * Stable application error code from the API envelope (`error_code`), when
+   * sent. For example `snapshot_advanced` on a 409 from a positions cursor
+   * whose snapshot was replaced: restart pagination without a cursor.
+   */
+  errorCode?: string;
 
-  constructor(message: string, code: number, requestId?: string) {
+  constructor(message: string, code: number, requestId?: string, errorCode?: string) {
     super(message);
     this.name = 'OxArchiveError';
     this.code = code;
     this.requestId = requestId;
+    if (errorCode !== undefined) {
+      this.errorCode = errorCode;
+    }
   }
 }
 
