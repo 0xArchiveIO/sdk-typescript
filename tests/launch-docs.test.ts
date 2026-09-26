@@ -39,6 +39,18 @@ describe('1.12.0 release surface', () => {
     expect(rest).toContain('USDG');
     expect(rest).toContain('`AAPL-USDG`');
     expect(rest).toContain('L3 order book | Not available');
+    // Liquidations share the trades floor (venue launch), not live capture.
+    expect(rest).toContain('| Trades, liquidations | 2026-06-26 20:10:26 UTC (venue launch) |');
+    expect(rest).toContain('| Order book, open interest, funding | 2026-08-22 18:43 UTC |');
+    const liquidations = section(readme, '### Lighter Liquidations', '### Orders');
+    expect(liquidations).toContain('Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC');
+    expect(liquidations).toContain("`source: 'bucket'` and an empty `rawJson`");
+    expect(liquidations).toContain("`source: 'ws'`");
+    const flat = [readme, changelog, readRepoFile('src/client.ts'), readRepoFile('src/exchanges.ts')]
+      .join('\n')
+      .replace(/\s+/g, ' ');
+    expect(flat).not.toMatch(/liquidations (start|from|are served from) 2026-08-22/i);
+    expect(flat).not.toMatch(/funding,? and liquidations (from|start) 2026-08-22/i);
     const ws = section(readme, '#### Lighter on Robinhood Chain Channels', '#### Candle Replay');
     for (const channel of [
       'rh_lighter_orderbook',

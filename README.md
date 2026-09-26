@@ -663,7 +663,7 @@ const lighterVolume = await client.lighter.liquidations.volume('ETH', {
 });
 ```
 
-Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC. Rows backfilled from the venue's trade export have `source: 'bucket'` and an empty `rawJson`; rows captured live keep the venue payload in `rawJson`.
+Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC, the same floor as its trades. Rows from before live capture were backfilled from the venue's finalized export and have `source: 'bucket'` and an empty `rawJson`; rows captured live have `source: 'ws'` and keep the venue payload in `rawJson`.
 
 ### Orders
 

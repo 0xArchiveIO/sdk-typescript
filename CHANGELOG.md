@@ -20,9 +20,10 @@ semver in spirit.
   enabled for this deployment.
 - `liquidations` on both Lighter clients (`client.lighter.liquidations` and
   `client.rhLighter.liquidations`): `history()` returns `LighterLiquidation`
-  rows and `volume()` returns `LighterLiquidationVolume` buckets. Rows
-  backfilled from the venue's trade export have `source: 'bucket'` and an
-  empty `rawJson`.
+  rows and `volume()` returns `LighterLiquidationVolume` buckets. On
+  Robinhood Chain, rows from before live capture were backfilled from the
+  venue's finalized export and have `source: 'bucket'` and an empty
+  `rawJson`; rows captured live have `source: 'ws'` and the venue's raw JSON.
 - WebSocket channels `rh_lighter_orderbook`, `rh_lighter_trades`,
   `rh_lighter_open_interest` and `rh_lighter_funding` (live and replay, with
   the same live payload shapes as the mainnet Lighter channels) and

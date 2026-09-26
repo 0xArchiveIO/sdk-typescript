@@ -29,8 +29,9 @@ function requestUrl(fetchMock: ReturnType<typeof vi.fn>, call = 0): URL {
 
 const range = { start: 1_782_504_626_605, end: 1_782_591_026_605 };
 
-// A liquidation row as the API serializes it (snake_case). Backfilled rows
-// from the venue export carry source 'bucket' and an empty raw_json.
+// A liquidation row as the API serializes it (snake_case). Rows from before
+// live capture, backfilled from the venue's finalized export, carry source
+// 'bucket' and an empty raw_json.
 const LIQUIDATION_ROW = {
   symbol: 'BTC',
   timestamp: 1_782_600_000_000,

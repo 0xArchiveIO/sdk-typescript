@@ -22,8 +22,10 @@ import {
  * and the count (`LighterLiquidationVolume`).
  *
  * Robinhood Chain liquidations start at the venue launch (2026-06-26 20:10:26
- * UTC). Rows backfilled from the venue's trade export have
- * `source: 'bucket'` and an empty `rawJson`.
+ * UTC), the same floor as its trades. Rows from before live capture were
+ * backfilled from the venue's finalized export and have `source: 'bucket'`
+ * and an empty `rawJson`; rows captured live have `source: 'ws'` and the
+ * venue's raw JSON in `rawJson`.
  *
  * @example
  * ```typescript

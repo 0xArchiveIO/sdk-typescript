@@ -1075,8 +1075,9 @@ export interface LiquidationVolumeParams extends CursorPaginationParams {
  * `taker*` / `maker*` fields describe each side's state before the trade.
  * Prices and sizes are numbers; `timestamp` is Unix milliseconds.
  *
- * Rows backfilled from the venue's trade export have `source: 'bucket'` and
- * an empty `rawJson`; rows captured live keep the full venue payload in
+ * Rows backfilled from the venue's finalized export have `source: 'bucket'`
+ * and an empty `rawJson` (on Robinhood Chain, the span before live capture);
+ * rows captured live have `source: 'ws'` and keep the full venue payload in
  * `rawJson`.
  */
 export interface LighterLiquidation {
@@ -1124,9 +1125,9 @@ export interface LighterLiquidation {
   blockHeight: number;
   /** Lighter transaction hash. */
   txHash: string;
-  /** The venue's trade payload as captured, or `''` for rows backfilled from the venue export. */
+  /** The venue's trade payload as captured, or `''` for rows backfilled from the venue's finalized export. */
   rawJson: string;
-  /** Where the row came from, e.g. `'bucket'` for the venue-export backfill. */
+  /** Where the row came from: `'ws'` for live capture, `'bucket'` for rows backfilled from the venue's finalized export. */
   source: string;
 }
 
