@@ -1,6 +1,6 @@
 import type { ClientOptions } from './types';
 import { HttpClient } from './http';
-import { HyperliquidClient, LighterClient, SpotClient } from './exchanges';
+import { HyperliquidClient, LighterClient, RhLighterClient, SpotClient } from './exchanges';
 import {
   OrderBookResource,
   TradesResource,
@@ -17,13 +17,19 @@ const DEFAULT_TIMEOUT = 30000;
 /**
  * 0xarchive API client
  *
- * Supports these top-level venue APIs:
+ * Two venues: Hyperliquid and Lighter. Lighter has two deployments: mainnet
+ * and Robinhood Chain.
  * - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
  *   - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
  *   - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets
  * - `client.spot` - Hyperliquid Spot (candles from 2025-03-22T10:50:22Z;
  *   trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
- * - `client.lighter` - Lighter.xyz perpetuals
+ * - `client.lighter` - Lighter.xyz, mainnet deployment
+ * - `client.rhLighter` - Lighter.xyz, Robinhood Chain deployment (USDG-quoted)
+ *
+ * Account positions are on `client.hyperliquid.positions`,
+ * `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
+ * `client.rhLighter.positions`.
  *
  * @example
  * ```typescript
@@ -35,8 +41,12 @@ const DEFAULT_TIMEOUT = 30000;
  * const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
  * console.log(`BTC mid price: ${hlOrderbook.mid_price}`);
  *
- * // Lighter.xyz data
+ * // Lighter.xyz data (mainnet, and the Robinhood Chain deployment)
  * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
+ * const rhOrderbook = await client.rhLighter.orderbook.get('BTC');
+ *
+ * // Account positions
+ * const { data: wallet } = await client.hyperliquid.positions.get('0xabc...');
  *
  * // Hyperliquid HIP-3 data
  * const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('km:US500');
@@ -67,9 +77,18 @@ export class OxArchive {
   public readonly hyperliquid: HyperliquidClient;
 
   /**
-   * Lighter.xyz exchange data. Trade history begins January 17, 2025; exact starts vary by market and data type.
+   * Lighter.xyz exchange data, mainnet deployment. Trade history begins January 17, 2025; exact starts vary by market and data type.
    */
   public readonly lighter: LighterClient;
+
+  /**
+   * Lighter on Robinhood Chain: the second Lighter deployment (USDG-quoted;
+   * perpetuals like `BTC`, spot like `AAPL-USDG`). The same resources as
+   * `client.lighter` except the L3 order book. Trades and liquidations from
+   * 2026-06-26 20:10:26 UTC; order book, open interest and funding from
+   * 2026-08-22 18:43 UTC.
+   */
+  public readonly rhLighter: RhLighterClient;
 
   /**
    * Hyperliquid Spot exchange data. Candle history is served from
@@ -134,6 +153,7 @@ export class OxArchive {
     // Exchange-specific clients (recommended)
     this.hyperliquid = new HyperliquidClient(this.http);
     this.lighter = new LighterClient(this.http);
+    this.rhLighter = new RhLighterClient(this.http);
     this.spot = new SpotClient(this.http);
 
     // Data quality monitoring (cross-exchange)
