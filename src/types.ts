@@ -1480,21 +1480,28 @@ export interface Hip3PositionsRangeParams extends PositionsRangeParams {
   dex?: string;
 }
 
-/** Parameters for the Hyperliquid account summary. */
-export interface PositionsAccountParams {
-  /** HIP-3 only: restrict to one dex. */
+/** Parameters for the HIP-3 account summary. Hyperliquid core takes none. */
+export interface Hip3PositionsAccountParams {
+  /** Restrict to one HIP-3 dex. Omit for one row per dex. */
   dex?: string;
 }
 
 /** Parameters for Hyperliquid hourly account history over `[start, end)`. */
 export interface PositionsAccountHistoryParams {
+  /** Inclusive start. */
   start: PositionsTime;
+  /** Exclusive end. */
   end: PositionsTime;
-  /** HIP-3 only: restrict to one dex. */
-  dex?: string;
+  /** Opaque cursor from the previous page's `nextCursor`. */
   cursor?: string;
   /** Rows per page (default 500, max 5,000). */
   limit?: number;
+}
+
+/** HIP-3 account history parameters (adds the dex filter). */
+export interface Hip3PositionsAccountHistoryParams extends PositionsAccountHistoryParams {
+  /** Restrict to one HIP-3 dex. */
+  dex?: string;
 }
 
 /** Parameters for every open position in one market. */
@@ -1520,18 +1527,47 @@ export interface LighterPositionsMarketParams extends PositionsMarketParams {
  * Parameters for a market's long/short summary. Omit `start` and `end` for
  * the latest live snapshot (one point); pass them for an hourly series over
  * `[start, end)` (at most 168 hours per page).
+ *
+ * An omitted `end` means "now", and a series cursor is bound to the window it
+ * was issued for, so a later request without `end` cannot use it. To page
+ * with `cursor`, send the same explicit `start` and `end` on every page; the
+ * SDK refuses a `cursor` without an `end` before sending.
  */
 export interface PositionsMarketSummaryParams {
+  /** Inclusive start of the hourly series (default: 24 hours before `end`). */
   start?: PositionsTime;
+  /** Exclusive end of the hourly series (default: now). Required when paging. */
   end?: PositionsTime;
+  /** Opaque cursor from the previous page's `nextCursor`. */
   cursor?: string;
-  /** Points per page (default 100). */
+  /** Points per page (default 100, at most 168). */
   limit?: number;
 }
 
 /** Lighter market summary parameters (adds system accounts). */
 export interface LighterPositionsMarketSummaryParams extends PositionsMarketSummaryParams {
+  /** Include settlement, insurance and other system accounts (default false). */
   includeSystem?: boolean;
+}
+
+/**
+ * Parameters for iterating a market's hourly summary series over
+ * `[start, end)`. Both bounds are required so that every page asks for the
+ * same window.
+ */
+export interface PositionsMarketSummaryRangeParams extends PositionsMarketSummaryParams {
+  /** Inclusive start. */
+  start: PositionsTime;
+  /** Exclusive end. */
+  end: PositionsTime;
+}
+
+/** Lighter market summary iteration parameters (adds system accounts). */
+export interface LighterPositionsMarketSummaryRangeParams extends LighterPositionsMarketSummaryParams {
+  /** Inclusive start. */
+  start: PositionsTime;
+  /** Exclusive end. */
+  end: PositionsTime;
 }
 
 /** Parameters for every open position across markets at one hour (bulk). */
@@ -2810,7 +2846,10 @@ export interface SlaResponse {
 export interface ListIncidentsParams {
   /** Filter by incident status */
   status?: IncidentStatusValue;
-  /** Filter by exchange */
+  /**
+   * Filter by venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot', 'lighter'
+   * or 'rh-lighter' (Lighter on Robinhood Chain)
+   */
   exchange?: string;
   /** Only show incidents starting after this timestamp (Unix ms) */
   since?: number | string;

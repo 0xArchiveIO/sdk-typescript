@@ -3,6 +3,8 @@ import type { HttpClient } from '../http';
 import type {
   AccountSummary,
   ApiResponse,
+  Hip3PositionsAccountHistoryParams,
+  Hip3PositionsAccountParams,
   Hip3PositionsGetParams,
   Hip3PositionsRangeParams,
   LighterAccountsByL1Params,
@@ -11,16 +13,17 @@ import type {
   LighterPositionsBulkParams,
   LighterPositionsMarketParams,
   LighterPositionsMarketSummaryParams,
+  LighterPositionsMarketSummaryRangeParams,
   MarketPosition,
   MarketPositionsSummary,
   Position,
   PositionChange,
   PositionsAccountHistoryParams,
-  PositionsAccountParams,
   PositionsBulkParams,
   PositionsGetParams,
   PositionsMarketParams,
   PositionsMarketSummaryParams,
+  PositionsMarketSummaryRangeParams,
   PositionsRangeParams,
   PositionsResponse,
   PositionsTime,
@@ -166,11 +169,51 @@ abstract class PositionsRoutes {
     return symbol === undefined || symbol === '' ? undefined : this.symbolTransform(symbol);
   }
 
+  /** True only on HIP-3, the one venue that serves the `dex` filter. */
+  protected get acceptsDex(): boolean {
+    return false;
+  }
+
+  /** True only on the Lighter deployments, which list system accounts. */
+  protected get acceptsIncludeSystem(): boolean {
+    return false;
+  }
+
+  /**
+   * The `dex` filter, refused before sending on every venue but HIP-3 (the
+   * server rejects it there too, rather than ignoring it).
+   */
+  protected dexParam(dex: unknown): string | undefined {
+    if (dex === undefined || dex === null) {
+      return undefined;
+    }
+    if (!this.acceptsDex) {
+      throw new TypeError('dex applies to HIP-3 positions only (client.hyperliquid.hip3.positions)');
+    }
+    if (typeof dex !== 'string') {
+      throw new TypeError('dex must be a string');
+    }
+    return dex === '' ? undefined : dex;
+  }
+
+  /** The `includeSystem` flag, refused before sending outside the Lighter deployments. */
+  protected includeSystemParam(includeSystem: unknown): boolean | undefined {
+    if (includeSystem === undefined || includeSystem === null) {
+      return undefined;
+    }
+    if (!this.acceptsIncludeSystem) {
+      throw new TypeError(
+        'includeSystem applies to Lighter positions only (client.lighter.positions, client.rhLighter.positions)',
+      );
+    }
+    return Boolean(includeSystem);
+  }
+
   protected getQuery(params: Hip3PositionsGetParams | undefined): Query {
     return {
       timestamp: optionalMs(params?.timestamp, 'timestamp'),
       symbol: this.symbolFilter(params?.symbol),
-      dex: params?.dex,
+      dex: this.dexParam(params?.dex),
       cursor: params?.cursor,
       limit: params?.limit,
     };
@@ -181,7 +224,7 @@ abstract class PositionsRoutes {
       start: requiredMs(params?.start, 'start'),
       end: requiredMs(params?.end, 'end'),
       symbol: this.symbolFilter(params.symbol),
-      dex: params.dex,
+      dex: this.dexParam(params.dex),
       cursor: params.cursor,
       limit: params.limit,
     };
@@ -192,17 +235,26 @@ abstract class PositionsRoutes {
       hour: params?.hour === undefined ? undefined : hourMs(params.hour),
       side: params?.side,
       min_value: params?.minValue,
-      include_system: params?.includeSystem,
+      include_system: this.includeSystemParam(params?.includeSystem),
       cursor: params?.cursor,
       limit: params?.limit,
     };
   }
 
   protected summaryQuery(params: LighterPositionsMarketSummaryParams | undefined): Query {
+    // A series cursor is bound to the resolved window, and an omitted `end`
+    // resolves to a new "now" on every request, so the server would refuse
+    // the cursor. Say so before sending.
+    if (params?.cursor && (params.end === undefined || params.end === null)) {
+      throw new TypeError(
+        'end is required with a cursor: a summary cursor is bound to its window, ' +
+          'so send the same start and end on every page (or use iterateMarketSummary)',
+      );
+    }
     return {
       start: optionalMs(params?.start, 'start'),
       end: optionalMs(params?.end, 'end'),
-      include_system: params?.includeSystem,
+      include_system: this.includeSystemParam(params?.includeSystem),
       cursor: params?.cursor,
       limit: params?.limit,
     };
@@ -214,7 +266,7 @@ abstract class PositionsRoutes {
     }
     return {
       hour: hourMs(params.hour),
-      include_system: params.includeSystem,
+      include_system: this.includeSystemParam(params.includeSystem),
       cursor: params.cursor,
       limit: params.limit,
     };
@@ -241,6 +293,24 @@ abstract class PositionsRoutes {
 
   protected bulkPage(params: LighterPositionsBulkParams): Promise<PositionsResponse<MarketPosition[]>> {
     return this.page<MarketPosition[]>('/positions', this.bulkQuery(params), MarketPositionArrayResponseSchema);
+  }
+
+  /**
+   * Walk an hourly summary series. The window is resolved once and the same
+   * explicit `start` and `end` go out on every page, because the server binds
+   * each cursor to the window it was issued for.
+   */
+  protected async *summarySeries(
+    symbol: string,
+    params: LighterPositionsMarketSummaryParams,
+  ): AsyncGenerator<MarketPositionsSummary, void, undefined> {
+    const start = requiredMs(params?.start, 'start');
+    const end = requiredMs(params?.end, 'end');
+    yield* followCursor(
+      (cursor) => this.summaryPage(symbol, { ...params, start, end, cursor }),
+      asRows,
+      params?.cursor,
+    );
   }
 }
 
@@ -319,16 +389,24 @@ export class HyperliquidPositionsResource extends PositionsRoutes {
     );
   }
 
-  /**
-   * Account summary at the latest live snapshot: one row on core; on HIP-3
-   * one row per dex (or the one `dex` asked for).
-   */
-  async account(address: string, params?: PositionsAccountParams): Promise<PositionsResponse<AccountSummary[]>> {
+  protected accountPage(
+    address: string,
+    params: Hip3PositionsAccountParams | undefined,
+  ): Promise<PositionsResponse<AccountSummary[]>> {
     return this.page<AccountSummary[]>(
       this.walletPath(address, '/account'),
-      { dex: params?.dex },
+      { dex: this.dexParam(params?.dex) },
       AccountSummaryArrayResponseSchema,
     );
+  }
+
+  /**
+   * Account summary at the latest live snapshot (one row). The `dex` filter
+   * is HIP-3 only: see `client.hyperliquid.hip3.positions.account()`.
+   */
+  account(address: string): Promise<PositionsResponse<AccountSummary[]>>;
+  async account(address: string, params?: Hip3PositionsAccountParams): Promise<PositionsResponse<AccountSummary[]>> {
+    return this.accountPage(address, params);
   }
 
   /** Hourly account summaries over `[start, end)`. */
@@ -341,7 +419,7 @@ export class HyperliquidPositionsResource extends PositionsRoutes {
       {
         start: requiredMs(params?.start, 'start'),
         end: requiredMs(params?.end, 'end'),
-        dex: params.dex,
+        dex: this.dexParam((params as Hip3PositionsAccountHistoryParams | undefined)?.dex),
         cursor: params.cursor,
         limit: params.limit,
       },
@@ -361,6 +439,8 @@ export class HyperliquidPositionsResource extends PositionsRoutes {
   /**
    * Long/short counts, sizes, values, average entries and top-10 shares of one
    * market: the latest live snapshot (no `start`/`end`), or an hourly series.
+   * To page a series with `cursor`, send the same explicit `start` and `end`
+   * on every page, or use {@link iterateMarketSummary}.
    */
   async marketSummary(
     symbol: string,
@@ -397,12 +477,15 @@ export class HyperliquidPositionsResource extends PositionsRoutes {
     return followCursor((cursor) => this.market(symbol, { ...params, cursor }), asRows, params?.cursor);
   }
 
-  /** Iterate an hourly market summary series, following cursors. */
+  /**
+   * Iterate an hourly market summary series over `[start, end)`, following
+   * cursors. Both bounds are required and sent unchanged on every page.
+   */
   iterateMarketSummary(
     symbol: string,
-    params: PositionsMarketSummaryParams,
+    params: PositionsMarketSummaryRangeParams,
   ): AsyncGenerator<MarketPositionsSummary, void, undefined> {
-    return followCursor((cursor) => this.marketSummary(symbol, { ...params, cursor }), asRows, params.cursor);
+    return this.summarySeries(symbol, params);
   }
 
   /** Iterate every open position at one hour across markets, following cursors. */
@@ -421,6 +504,33 @@ export class HyperliquidPositionsResource extends PositionsRoutes {
 export class Hip3PositionsResource extends HyperliquidPositionsResource {
   constructor(http: HttpClient, basePath: string = '/v1/hyperliquid/hip3') {
     super(http, basePath, (s) => s);
+  }
+
+  protected override get acceptsDex(): boolean {
+    return true;
+  }
+
+  /**
+   * Account summary at the latest live snapshot: one row per dex, or the one
+   * `dex` asked for.
+   */
+  override account(address: string, params?: Hip3PositionsAccountParams): Promise<PositionsResponse<AccountSummary[]>> {
+    return this.accountPage(address, params);
+  }
+
+  /** Hourly account summaries over `[start, end)`, optionally for one `dex`. */
+  override accountHistory(
+    address: string,
+    params: Hip3PositionsAccountHistoryParams,
+  ): Promise<PositionsResponse<AccountSummary[]>> {
+    return super.accountHistory(address, params);
+  }
+
+  override iterateAccountHistory(
+    address: string,
+    params: Hip3PositionsAccountHistoryParams,
+  ): AsyncGenerator<AccountSummary, void, undefined> {
+    return super.iterateAccountHistory(address, params);
   }
 
   override get(address: string, params?: Hip3PositionsGetParams): Promise<PositionsResponse<WalletPositions>> {
@@ -474,6 +584,10 @@ export class LighterPositionsResource extends PositionsRoutes {
     super(http, basePath, symbolTransform);
   }
 
+  protected override get acceptsIncludeSystem(): boolean {
+    return true;
+  }
+
   private accountPath(accountIndex: LighterAccountIndex, suffix: string): string {
     return `/accounts/${accountIndexPath(accountIndex)}${suffix}`;
   }
@@ -521,7 +635,11 @@ export class LighterPositionsResource extends PositionsRoutes {
     return this.marketPage(symbol, params);
   }
 
-  /** Long/short summary of one market: the latest live snapshot, or an hourly series. */
+  /**
+   * Long/short summary of one market: the latest live snapshot, or an hourly
+   * series. To page a series with `cursor`, send the same explicit `start`
+   * and `end` on every page, or use {@link iterateMarketSummary}.
+   */
   async marketSummary(
     symbol: string,
     params?: LighterPositionsMarketSummaryParams,
@@ -552,12 +670,15 @@ export class LighterPositionsResource extends PositionsRoutes {
     return followCursor((cursor) => this.market(symbol, { ...params, cursor }), asRows, params?.cursor);
   }
 
-  /** Iterate an hourly market summary series, following cursors. */
+  /**
+   * Iterate an hourly market summary series over `[start, end)`, following
+   * cursors. Both bounds are required and sent unchanged on every page.
+   */
   iterateMarketSummary(
     symbol: string,
-    params: LighterPositionsMarketSummaryParams,
+    params: LighterPositionsMarketSummaryRangeParams,
   ): AsyncGenerator<MarketPositionsSummary, void, undefined> {
-    return followCursor((cursor) => this.marketSummary(symbol, { ...params, cursor }), asRows, params.cursor);
+    return this.summarySeries(symbol, params);
   }
 
   /** Iterate every open position at one hour across markets, following cursors. */

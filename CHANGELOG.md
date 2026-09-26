@@ -40,7 +40,11 @@ semver in spirit.
   iterators: `iterateHistory()`, `iterateChanges()`,
   `iterateAccountHistory()`, `iterateMarket()`, `iterateMarketSummary()` and
   `iterateAll()`. Wallet routes take a `0x` address on Hyperliquid and HIP-3
-  (optional `dex` on HIP-3) and an integer account index on Lighter.
+  (optional `dex` on HIP-3) and an integer account index on Lighter. `dex`
+  (HIP-3 only) and `includeSystem` (Lighter only) are refused before sending
+  on other clients. `iterateMarketSummary()` takes both `start` and `end` and
+  sends the same window on every page; `marketSummary()` refuses a `cursor`
+  without an explicit `end`, because a summary cursor is bound to its window.
 - `client.lighter.accounts.byL1()` and `iterateByL1()`: Lighter account
   indices owned by an L1 address (mainnet).
 - Types `Position`, `PositionChange`, `MarketPosition`, `AccountSummary`,

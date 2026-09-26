@@ -421,6 +421,79 @@ describe('Hyperliquid account positions', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('sends the same explicit window on every page of iterateMarketSummary', async () => {
+    const fetchMock = stubFetch(
+      ok([SUMMARY], { next_cursor: 's1' }),
+      ok([], { next_cursor: 's2' }),
+      ok([{ ...SUMMARY, snapshot_ts: '2026-09-25T13:00:00Z' }], {}),
+    );
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE });
+
+    const points: Array<string | null> = [];
+    for await (const point of client.hyperliquid.positions.iterateMarketSummary('btc', {
+      start: new Date(Date.UTC(2026, 8, 18)),
+      end: '2026-09-26T00:00:00Z',
+      limit: 168,
+    })) {
+      points.push(point.snapshotTs);
+    }
+
+    expect(points).toEqual(['2026-09-25T12:00:00Z', '2026-09-25T13:00:00Z']);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const window = { start: String(Date.UTC(2026, 8, 18)), end: String(Date.UTC(2026, 8, 26)), limit: '168' };
+    expect(urlOf(fetchMock, 0).pathname).toBe('/v1/hyperliquid/positions/BTC/summary');
+    expect(query(urlOf(fetchMock, 0))).toEqual(window);
+    expect(query(urlOf(fetchMock, 1))).toEqual({ ...window, cursor: 's1' });
+    expect(query(urlOf(fetchMock, 2))).toEqual({ ...window, cursor: 's2' });
+  });
+
+  it('refuses a summary series or cursor without an explicit end before sending', async () => {
+    const fetchMock = stubFetch(ok([SUMMARY], {}));
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE });
+    const start = Date.UTC(2026, 8, 18);
+
+    // @ts-expect-error iterateMarketSummary needs both start and end
+    const series = client.hyperliquid.positions.iterateMarketSummary('BTC', { start });
+    await expect(series.next()).rejects.toThrow('end is required');
+    // @ts-expect-error iterateMarketSummary needs both start and end
+    const lighterSeries = client.rhLighter.positions.iterateMarketSummary('BTC', { end: start });
+    await expect(lighterSeries.next()).rejects.toThrow('start is required');
+    await expect(client.hyperliquid.positions.marketSummary('BTC', { start, cursor: 's1' })).rejects.toThrow(
+      'end is required with a cursor',
+    );
+    await expect(client.lighter.positions.marketSummary('BTC', { cursor: 's1' })).rejects.toThrow(TypeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await client.hyperliquid.positions.marketSummary('BTC', { start, end: start + 3_600_000 * 200, cursor: 's1' });
+    expect(query(urlOf(fetchMock, 0))).toEqual({ start: String(start), end: String(start + 3_600_000 * 200), cursor: 's1' });
+  });
+
+  it('refuses dex and includeSystem on Hyperliquid core before sending, as the API does', async () => {
+    const fetchMock = stubFetch();
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE });
+    const core = client.hyperliquid.positions;
+
+    // @ts-expect-error dex is HIP-3 only
+    await expect(core.account(WALLET, { dex: 'xyz' })).rejects.toThrow('dex applies to HIP-3 positions only');
+    // @ts-expect-error dex is HIP-3 only
+    await expect(core.accountHistory(WALLET, { start: 1, end: 2, dex: 'xyz' })).rejects.toThrow(TypeError);
+    // @ts-expect-error dex is HIP-3 only
+    await expect(core.iterateAccountHistory(WALLET, { start: 1, end: 2, dex: 'xyz' }).next()).rejects.toThrow(TypeError);
+    // @ts-expect-error dex is HIP-3 only
+    await expect(core.get(WALLET, { dex: 'xyz' })).rejects.toThrow(TypeError);
+    // @ts-expect-error dex is HIP-3 only
+    await expect(core.history(WALLET, { start: 1, end: 2, dex: 'xyz' })).rejects.toThrow(TypeError);
+    // @ts-expect-error dex is HIP-3 only
+    await expect(core.changes(WALLET, { start: 1, end: 2, dex: 'xyz' })).rejects.toThrow(TypeError);
+    // @ts-expect-error includeSystem is Lighter only
+    await expect(core.market('BTC', { includeSystem: true })).rejects.toThrow('includeSystem applies to Lighter positions only');
+    // @ts-expect-error includeSystem is Lighter only
+    await expect(core.marketSummary('BTC', { includeSystem: false })).rejects.toThrow(TypeError);
+    // @ts-expect-error includeSystem is Lighter only
+    await expect(client.hyperliquid.hip3.positions.all({ hour: 0, includeSystem: true })).rejects.toThrow(TypeError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('reports snapshot_advanced as an OxArchiveError with its error code', async () => {
     stubFetch(
       reply(
@@ -467,6 +540,29 @@ describe('HIP-3 account positions', () => {
     expect(query(urlOf(fetchMock, 1))).toEqual({ dex: 'xyz' });
     expect(urlOf(fetchMock, 2).pathname).toBe('/v1/hyperliquid/hip3/positions/xyz:TSLA');
     expect(query(urlOf(fetchMock, 3))).toEqual({ start: '1', end: '2', dex: 'xyz' });
+  });
+
+  it('sends dex on HIP-3 account history and on every page of its iterator', async () => {
+    const fetchMock = stubFetch(
+      ok([{ ...HL_ACCOUNT, dex: 'xyz' }], {}),
+      ok([{ ...HL_ACCOUNT, dex: 'xyz' }], { next_cursor: 'a1' }),
+      ok([{ ...HL_ACCOUNT, dex: 'xyz' }], {}),
+    );
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE });
+    const hip3 = client.hyperliquid.hip3.positions;
+
+    await hip3.accountHistory(WALLET, { start: 1, end: 2, dex: 'xyz', limit: 24 });
+    let rows = 0;
+    for await (const row of hip3.iterateAccountHistory(WALLET, { start: 1, end: 2, dex: 'xyz' })) {
+      expect(row.dex).toBe('xyz');
+      rows += 1;
+    }
+
+    expect(rows).toBe(2);
+    expect(urlOf(fetchMock, 0).pathname).toBe(`/v1/hyperliquid/hip3/wallets/${WALLET}/account/history`);
+    expect(query(urlOf(fetchMock, 0))).toEqual({ start: '1', end: '2', dex: 'xyz', limit: '24' });
+    expect(query(urlOf(fetchMock, 1))).toEqual({ start: '1', end: '2', dex: 'xyz' });
+    expect(query(urlOf(fetchMock, 2))).toEqual({ start: '1', end: '2', dex: 'xyz', cursor: 'a1' });
   });
 });
 
@@ -542,6 +638,30 @@ describe('Lighter account positions (mainnet and Robinhood Chain)', () => {
     expect(query(urlOf(fetchMock, 1))).toEqual({ start: '1790208000000', end: '1790294400000', include_system: 'false' });
     expect(urlOf(fetchMock, 2).pathname).toBe(`${base}/positions`);
     expect(query(urlOf(fetchMock, 2))).toEqual({ hour: '1790208000000', include_system: 'true', cursor: 'b1' });
+  });
+
+  it.each([
+    ['lighter', '/v1/lighter'],
+    ['rhLighter', '/v1/rh-lighter'],
+  ] as const)('%s summary iterator sends the same window on every page and refuses dex', async (venue, base) => {
+    const fetchMock = stubFetch(ok([SUMMARY], { next_cursor: 's1' }), ok([SUMMARY], {}));
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE });
+    const positions = client[venue].positions;
+
+    let points = 0;
+    for await (const point of positions.iterateMarketSummary('eth', { start: 1_790_208_000_000, end: 1_790_294_400_000, includeSystem: true })) {
+      expect(point.longCount).toBe(1200);
+      points += 1;
+    }
+    // @ts-expect-error dex is HIP-3 only
+    await expect(positions.get(713845, { dex: 'xyz' })).rejects.toThrow('dex applies to HIP-3 positions only');
+
+    expect(points).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const window = { start: '1790208000000', end: '1790294400000', include_system: 'true' };
+    expect(urlOf(fetchMock, 0).pathname).toBe(`${base}/positions/ETH/summary`);
+    expect(query(urlOf(fetchMock, 0))).toEqual(window);
+    expect(query(urlOf(fetchMock, 1))).toEqual({ ...window, cursor: 's1' });
   });
 
   it('refuses an account index that is not a non-negative integer before sending', async () => {

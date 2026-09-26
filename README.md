@@ -1065,14 +1065,16 @@ Positions, account summaries, and the position change log for Hyperliquid core (
 | `get(key, { timestamp?, symbol?, dex?, cursor?, limit? })` | `/wallets/{address}/positions` or `/accounts/{account_index}/positions` | `WalletPositions`: `positions`, `account`, and `accountSeen` when empty |
 | `history(key, { start, end, symbol?, dex?, cursor?, limit? })` | `.../positions/history` | hourly `Position` rows over `[start, end)` |
 | `changes(key, { start, end, symbol?, dex?, cursor?, limit? })` | `.../positions/changes` | `PositionChange` legs over `[start, end)` |
-| `account(address, { dex? })` | `/wallets/{address}/account` | `AccountSummary[]` (Hyperliquid and HIP-3 only) |
+| `account(address)`, or `account(address, { dex? })` on HIP-3 | `/wallets/{address}/account` | `AccountSummary[]` (Hyperliquid and HIP-3 only) |
 | `accountHistory(address, { start, end, dex?, cursor?, limit? })` | `/wallets/{address}/account/history` | hourly `AccountSummary` rows (Hyperliquid and HIP-3 only) |
 | `market(symbol, { hour?, side?, minValue?, includeSystem?, cursor?, limit? })` | `/positions/{symbol}` | every open position in one market, largest value first; `meta.totals` on the first page |
 | `marketSummary(symbol, { start?, end?, cursor?, limit? })` | `/positions/{symbol}/summary` | `MarketPositionsSummary`: now, or an hourly series |
 | `all({ hour, cursor?, limit? })` | `/positions` | every open position across markets at one hour |
 | `client.lighter.accounts.byL1(l1Address, { cursor?, limit? })` | `/v1/lighter/accounts?l1_address=` | account indices owned by an L1 address (mainnet only) |
 
-`dex` applies to HIP-3 only and `includeSystem` to the two Lighter deployments only. Every method returns `{ data, nextCursor, meta }`, and cursor-following iterators walk every page: `iterateHistory()`, `iterateChanges()`, `iterateAccountHistory()`, `iterateMarket()`, `iterateMarketSummary()`, `iterateAll()`, and `client.lighter.accounts.iterateByL1()`.
+`dex` applies to HIP-3 only and `includeSystem` to the two Lighter deployments only; the SDK refuses either one on any other client before sending, as the API would. Every method returns `{ data, nextCursor, meta }`, and cursor-following iterators walk every page: `iterateHistory()`, `iterateChanges()`, `iterateAccountHistory()`, `iterateMarket()`, `iterateMarketSummary()`, `iterateAll()`, and `client.lighter.accounts.iterateByL1()`.
+
+A summary series cursor is bound to the window it was issued for, and an omitted `end` means now, so `iterateMarketSummary()` takes both `start` and `end` and sends the same window on every page. To page `marketSummary()` by hand, pass the same explicit `start` and `end` with each `cursor`; the SDK refuses a `cursor` without an `end`.
 
 ```typescript
 // Live positions of a wallet (or the state at any instant with `timestamp`)
@@ -1196,6 +1198,8 @@ console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatu
 | `getIncident(incidentId)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
 | `sla(params)` | SLA compliance metrics for a specific month |
+
+Venue scopes for `exchangeCoverage()`, `symbolCoverage()`, and the `exchange` filter of `listIncidents()`: `hyperliquid`, `hip3`, `hip4`, `spot` (Hyperliquid Spot), `lighter` (Lighter mainnet), and `rh-lighter` (Lighter on Robinhood Chain).
 
 **Note:** Data Quality endpoints (`coverage()`, `exchangeCoverage()`, `symbolCoverage()`) perform complex aggregation queries and may take 30-60 seconds on first request (results are cached server-side for 5 minutes). If you encounter timeout errors, create a client with a longer timeout:
 
