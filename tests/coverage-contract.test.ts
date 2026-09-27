@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { OxArchive } from '../src';
+import type { OiFundingInterval } from '../src';
 
 const readRepoFile = (path: string): string =>
   readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -449,5 +450,41 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(`${readme}\n${changelog}\n${types}`).toMatch(/fractional[\s\S]{0,80}non-annualized/i);
     expect(changelog).toMatch(/breaking unit correction/i);
     expect(`${readme}\n${changelog}\n${types}`).not.toMatch(/45 minutes/i);
+  });
+});
+
+describe('aggregation interval contract', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends 1-minute buckets on every OiFundingInterval route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: [],
+        meta: { count: 0, request_id: 'request-one-minute' },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new OxArchive({ apiKey: 'fake-key', baseUrl: 'https://api.example.test' });
+    const oneMinute: OiFundingInterval = '1m';
+    const params = { start: 1790380800000, end: 1790384400000, interval: oneMinute };
+
+    await client.hyperliquid.funding.history('BTC', params);
+    await client.hyperliquid.openInterest.history('BTC', params);
+    await client.hyperliquid.liquidations.volume('BTC', params);
+    await client.hyperliquid.hip3.breadth.history(params);
+
+    const sent = fetchMock.mock.calls.map((call) => new URL(String(call[0])));
+    expect(sent.map((url) => url.pathname)).toEqual([
+      '/v1/hyperliquid/funding/BTC',
+      '/v1/hyperliquid/openinterest/BTC',
+      '/v1/hyperliquid/liquidations/BTC/volume',
+      '/v1/hyperliquid/hip3/breadth/above-vwap',
+    ]);
+    for (const url of sent) expect(url.searchParams.get('interval')).toBe('1m');
   });
 });
