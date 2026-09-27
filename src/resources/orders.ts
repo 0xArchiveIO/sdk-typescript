@@ -19,6 +19,7 @@ export interface OrderHistoryParams extends CursorPaginationParams {
 export interface OrderFlowParams {
   start: number | string;
   end: number | string;
+  /** Bucket width: '1m' (default), '5m', '15m' or '1h'. */
   interval?: string;
   limit?: number;
 }

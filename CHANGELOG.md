@@ -5,6 +5,17 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## Unreleased
+
+### Changed
+
+- `OiFundingInterval` includes `'1m'`. The API now serves 1-minute buckets
+  on funding, open interest, price, liquidation-volume and breadth history
+  for every venue, and every params type that uses `OiFundingInterval`
+  accepts it.
+- `OrderFlowParams.interval` documents the buckets the API serves: `'1m'`
+  (the default), `'5m'`, `'15m'` and `'1h'`.
+
 ## 1.11.0 (2026-09-25)
 
 Versions 1.9.0, 1.9.1 and 1.10.0 were not published to npm, so upgrading
