@@ -9,13 +9,12 @@ semver in spirit.
 
 ### Added
 
-- `OrderFlowParams.cursor` (Hyperliquid, HIP-3 and HIP-4): a resume point
-  in Unix milliseconds; the API starts the response at the first bucket that
-  opens after it. `orders.flow()` and `hyperliquid.hip4.getOrderFlow()`
-  already sent any params they were given, so this adds the type and the
-  docs. The API does not return `nextCursor` on order flow yet: it arrives
-  with an API switch, and until then `nextCursor` on an order-flow response
-  is undefined.
+- `OrderFlowParams.cursor`. The API now pages order flow on Hyperliquid,
+  HIP-3 and HIP-4: a page holds the oldest `limit` buckets of the window,
+  and `nextCursor` is set while more may follow. Pass it back as `cursor`
+  with the same `start`, `end` and `interval` until it is undefined.
+  `orders.flow()` and `hyperliquid.hip4.getOrderFlow()` already sent any
+  params they were given, so this adds the type and the docs.
 
 ### Changed
 
