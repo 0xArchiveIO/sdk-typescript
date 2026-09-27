@@ -5,6 +5,27 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
+## Unreleased
+
+### Added
+
+- `OrderFlowParams.cursor` (Hyperliquid, HIP-3 and HIP-4): a resume point
+  in Unix milliseconds; the API starts the response at the first bucket that
+  opens after it. `orders.flow()` and `hyperliquid.hip4.getOrderFlow()`
+  already sent any params they were given, so this adds the type and the
+  docs. The API does not return `nextCursor` on order flow yet: it arrives
+  with an API switch, and until then `nextCursor` on an order-flow response
+  is undefined.
+
+### Changed
+
+- `OiFundingInterval` includes `'1m'`. The API now serves 1-minute buckets
+  on funding, open interest, price, liquidation-volume and breadth history
+  for every venue, and every params type that uses `OiFundingInterval`
+  accepts it.
+- `OrderFlowParams.interval` documents the buckets the API serves: `'1m'`
+  (the default), `'5m'`, `'15m'` and `'1h'`.
+
 ## 1.11.0 (2026-09-25)
 
 Versions 1.9.0, 1.9.1 and 1.10.0 were not published to npm, so upgrading

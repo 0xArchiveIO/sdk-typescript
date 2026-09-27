@@ -19,7 +19,14 @@ export interface OrderHistoryParams extends CursorPaginationParams {
 export interface OrderFlowParams {
   start: number | string;
   end: number | string;
+  /** Bucket width: '1m' (default), '5m', '15m' or '1h'. */
   interval?: string;
+  /**
+   * Optional resume point, a Unix millisecond timestamp. The response
+   * starts at the first bucket that opens after it.
+   */
+  cursor?: number | string;
+  /** Maximum number of buckets, oldest first (default 1000, max 10000). */
   limit?: number;
 }
 
@@ -77,11 +84,15 @@ export class OrdersResource {
   }
 
   /**
-   * Get order flow for a symbol
+   * Get order flow for a symbol, in time buckets
+   *
+   * Buckets are labelled by their open time in UTC, and buckets with no
+   * events are omitted. A response holds the oldest `limit` buckets of the
+   * window.
    *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
-   * @param params - Time range and interval parameters
-   * @returns CursorResponse with order flow records
+   * @param params - Time range, interval, cursor, and limit parameters
+   * @returns CursorResponse with order flow buckets
    */
   async flow(symbol: string, params: OrderFlowParams): Promise<CursorResponse<any[]>> {
     const response = await this.http.get<ApiResponse<any[]>>(

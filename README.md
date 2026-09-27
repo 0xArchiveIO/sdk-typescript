@@ -515,7 +515,7 @@ const hourly = await client.hyperliquid.funding.history('BTC', {
 | `end` | `number \| string` | Yes | End timestamp (Unix ms or ISO string) |
 | `cursor` | `number \| string` | No | Cursor from previous response for pagination |
 | `limit` | `number` | No | Max results (default: 100, max: 1000) |
-| `interval` | `OiFundingInterval` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, the route's native/default cadence is returned. |
+| `interval` | `OiFundingInterval` | No | Aggregation interval: `'1m'`, `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, the route's native/default cadence is returned. |
 
 Funding cadence is family-specific: Hyperliquid core is approximately 1 minute,
 HIP-3 is approximately 10 seconds, and Lighter is approximately 10 seconds.
@@ -550,7 +550,7 @@ const hourly = await client.hyperliquid.openInterest.history('BTC', {
 | `end` | `number \| string` | Yes | End timestamp (Unix ms or ISO string) |
 | `cursor` | `number \| string` | No | Cursor from previous response for pagination |
 | `limit` | `number` | No | Max results (default: 100, max: 1000) |
-| `interval` | `OiFundingInterval` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, the route's native/default cadence is returned. |
+| `interval` | `OiFundingInterval` | No | Aggregation interval: `'1m'`, `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, the route's native/default cadence is returned. |
 
 Open-interest cadence is family-specific. HIP-4 outcome-side OI is served from
 2026-05-02 at ~10s, and Lighter OI updates at approximately
@@ -604,7 +604,7 @@ Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total,
 const volume = await client.hyperliquid.liquidations.volume('BTC', {
   start: Date.now() - 86400000 * 7,
   end: Date.now(),
-  interval: '1h'  // 5m, 15m, 30m, 1h, 4h, 1d
+  interval: '1h'  // 1m, 5m, 15m, 30m, 1h, 4h, 1d
 });
 
 for (const bucket of volume.data) {
@@ -646,12 +646,12 @@ while (orders.nextCursor) {
   allOrders.push(...next.data);
 }
 
-// Get order flow (aggregated order activity over time)
+// Get order flow (aggregated order activity over time), in time buckets, oldest first
 const flow = await client.hyperliquid.orders.flow('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
-  interval: '1h',  // optional aggregation interval
-  limit: 100
+  interval: '15m',  // optional: 1m (default), 5m, 15m, 1h
+  limit: 100  // buckets (default 1000, max 10000)
 });
 
 // Get TP/SL orders
@@ -855,7 +855,7 @@ Get mark, oracle, and mid price history over time. Supports aggregation interval
 const prices = await client.hyperliquid.priceHistory('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
-  interval: '1h'  // 5m, 15m, 30m, 1h, 4h, 1d
+  interval: '1h'  // 1m, 5m, 15m, 30m, 1h, 4h, 1d
 });
 
 for (const snapshot of prices.data) {
