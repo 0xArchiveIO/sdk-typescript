@@ -7,6 +7,15 @@ semver in spirit.
 
 ## Unreleased
 
+### Added
+
+- `OrderFlowParams.cursor`. The API now pages order flow on Hyperliquid,
+  HIP-3 and HIP-4: a page holds the oldest `limit` buckets of the window,
+  and `nextCursor` is set while more may follow. Pass it back as `cursor`
+  with the same `start`, `end` and `interval` until it is undefined.
+  `orders.flow()` and `hyperliquid.hip4.getOrderFlow()` already sent any
+  params they were given, so this adds the type and the docs.
+
 ### Changed
 
 - `OiFundingInterval` includes `'1m'`. The API now serves 1-minute buckets
