@@ -646,16 +646,13 @@ while (orders.nextCursor) {
   allOrders.push(...next.data);
 }
 
-// Get order flow (aggregated order activity over time), one page of time buckets
-const flowWindow = { start: Date.now() - 86400000, end: Date.now(), interval: '1m' };  // interval: 1m (default), 5m, 15m, 1h
-let flow = await client.hyperliquid.orders.flow('BTC', flowWindow);
-const flowBuckets = [...flow.data];
-// A page holds up to `limit` buckets (default 1000, max 10000); follow the
-// cursor with the same start, end, and interval until it is undefined
-while (flow.nextCursor) {
-  flow = await client.hyperliquid.orders.flow('BTC', { ...flowWindow, cursor: flow.nextCursor });
-  flowBuckets.push(...flow.data);
-}
+// Get order flow (aggregated order activity over time), in time buckets, oldest first
+const flow = await client.hyperliquid.orders.flow('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '15m',  // optional: 1m (default), 5m, 15m, 1h
+  limit: 100  // buckets (default 1000, max 10000)
+});
 
 // Get TP/SL orders
 const tpsl = await client.hyperliquid.orders.tpsl('BTC', {
