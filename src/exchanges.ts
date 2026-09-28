@@ -28,6 +28,11 @@ import {
   SpotPairsResource,
   SpotTwapResource,
   Hip3BreadthResource,
+  LighterLiquidationsResource,
+  HyperliquidPositionsResource,
+  Hip3PositionsResource,
+  LighterPositionsResource,
+  LighterAccountsResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -99,6 +104,14 @@ export class HyperliquidClient {
   public readonly l2Orderbook: L2OrderBookResource;
 
   /**
+   * Account positions: wallet positions (live or as of any instant), hourly
+   * history, the position change log, account summaries, and market-wide
+   * listings. Change log from 2025-05-25; hourly snapshots from 2026-06-07;
+   * live about every 5 minutes.
+   */
+  public readonly positions: HyperliquidPositionsResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (February 2026+)
    */
   public readonly hip3: Hip3Client;
@@ -123,6 +136,7 @@ export class HyperliquidClient {
     this.orders = new OrdersResource(http, basePath);
     this.l4Orderbook = new L4OrderBookResource(http, basePath);
     this.l2Orderbook = new L2OrderBookResource(http, basePath);
+    this.positions = new HyperliquidPositionsResource(http, basePath);
     this.hip3 = new Hip3Client(http);
     this.hip4 = new Hip4Client(http);
   }
@@ -245,6 +259,12 @@ export class Hip3Client {
   /** Aggregate market breadth above the current UTC-session VWAP. */
   public readonly breadth: Hip3BreadthResource;
 
+  /**
+   * Account positions, with an optional `dex` filter. Change log from
+   * 2025-10-13; hourly snapshots from 2026-06-07; live about every 5 minutes.
+   */
+  public readonly positions: Hip3PositionsResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -263,6 +283,7 @@ export class Hip3Client {
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
     this.breadth = new Hip3BreadthResource(http, basePath);
+    this.positions = new Hip3PositionsResource(http, basePath);
   }
 
   /**
@@ -688,27 +709,21 @@ export class SpotClient {
 }
 
 /**
- * Lighter.xyz exchange client
- *
- * Access Lighter.xyz market data through the 0xarchive API.
- *
- * @example
- * ```typescript
- * const client = new OxArchive({ apiKey: '...' });
- * const orderbook = await client.lighter.orderbook.get('BTC');
- * const trades = await client.lighter.trades.list('ETH', { start, end });
- * const instruments = await client.lighter.instruments.list();
- * console.log(`ETH taker fee: ${instruments[0].takerFee}`);
- * ```
+ * Resources shared by both Lighter deployments: mainnet
+ * (`client.lighter`, `/v1/lighter`) and Robinhood Chain
+ * (`client.rhLighter`, `/v1/rh-lighter`). Lighter symbols are
+ * case-insensitive; the SDK sends them uppercase.
  */
-export class LighterClient {
+export class LighterDeploymentClient {
   /**
    * Order book data (L2 snapshots)
    */
   public readonly orderbook: OrderBookResource;
 
   /**
-   * Trade/fill history (one row per fill; maker/taker context where returned)
+   * Trade/fill history (one row per fill; maker/taker context where returned).
+   * `list()` serves reconciled trades up to `meta.finalizedThrough`;
+   * `recent()` serves the preliminary tier.
    */
   public readonly trades: TradesResource;
 
@@ -728,27 +743,38 @@ export class LighterClient {
   public readonly openInterest: OpenInterestResource;
 
   /**
-   * OHLCV candle data (served from 2025-08-01)
+   * OHLCV candle data
    */
   public readonly candles: CandlesResource;
 
   /**
-   * L3 order book (Lighter only; capped at 250 orders per side)
+   * Liquidation trades and liquidation volume (`LighterLiquidation`,
+   * `LighterLiquidationVolume`)
    */
-  public readonly l3Orderbook: L3OrderBookResource;
+  public readonly liquidations: LighterLiquidationsResource;
 
-  private http: HttpClient;
+  /**
+   * Account positions by Lighter account index: live about every 2 minutes,
+   * hourly snapshots, the position change log, and market-wide listings.
+   */
+  public readonly positions: LighterPositionsResource;
 
-  constructor(http: HttpClient) {
+  protected readonly http: HttpClient;
+
+  /** API path prefix of this deployment. */
+  protected readonly basePath: string;
+
+  constructor(http: HttpClient, basePath: string) {
     this.http = http;
-    const basePath = '/v1/lighter';
+    this.basePath = basePath;
     this.orderbook = new OrderBookResource(http, basePath);
     this.trades = new TradesResource(http, basePath);
     this.instruments = new LighterInstrumentsResource(http, basePath);
     this.funding = new FundingResource(http, basePath);
     this.openInterest = new OpenInterestResource(http, basePath);
     this.candles = new CandlesResource(http, basePath);
-    this.l3Orderbook = new L3OrderBookResource(http, basePath);
+    this.liquidations = new LighterLiquidationsResource(http, basePath);
+    this.positions = new LighterPositionsResource(http, basePath);
   }
 
   /**
@@ -759,7 +785,7 @@ export class LighterClient {
    */
   async freshness(symbol: string): Promise<CoinFreshness> {
     const response = await this.http.get<ApiResponse<CoinFreshness>>(
-      `/v1/lighter/freshness/${symbol.toUpperCase()}`,
+      `${this.basePath}/freshness/${symbol.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined
     );
@@ -774,7 +800,7 @@ export class LighterClient {
    */
   async summary(symbol: string): Promise<CoinSummary> {
     const response = await this.http.get<ApiResponse<CoinSummary>>(
-      `/v1/lighter/summary/${symbol.toUpperCase()}`,
+      `${this.basePath}/summary/${symbol.toUpperCase()}`,
       undefined,
       this.http.validationEnabled ? CoinSummaryResponseSchema as any : undefined
     );
@@ -790,7 +816,7 @@ export class LighterClient {
    */
   async priceHistory(symbol: string, params: PriceHistoryParams): Promise<CursorResponse<PriceSnapshot[]>> {
     const response = await this.http.get<ApiResponse<PriceSnapshot[]>>(
-      `/v1/lighter/prices/${symbol.toUpperCase()}`,
+      `${this.basePath}/prices/${symbol.toUpperCase()}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
@@ -798,5 +824,71 @@ export class LighterClient {
       data: response.data,
       nextCursor: response.meta.nextCursor,
     };
+  }
+}
+
+/**
+ * Lighter.xyz exchange client (mainnet deployment)
+ *
+ * Access Lighter.xyz market data through the 0xarchive API. The Robinhood
+ * Chain deployment of Lighter is `client.rhLighter`. Candles are served from
+ * 2025-08-01.
+ *
+ * @example
+ * ```typescript
+ * const client = new OxArchive({ apiKey: '...' });
+ * const orderbook = await client.lighter.orderbook.get('BTC');
+ * const trades = await client.lighter.trades.list('ETH', { start, end });
+ * const instruments = await client.lighter.instruments.list();
+ * console.log(`ETH taker fee: ${instruments[0].takerFee}`);
+ * ```
+ */
+export class LighterClient extends LighterDeploymentClient {
+  /**
+   * L3 order book (Lighter only; capped at 250 orders per side)
+   */
+  public readonly l3Orderbook: L3OrderBookResource;
+
+  /**
+   * Account lookup by L1 address (`accounts.byL1()`), mainnet only
+   */
+  public readonly accounts: LighterAccountsResource;
+
+  constructor(http: HttpClient) {
+    const basePath = '/v1/lighter';
+    super(http, basePath);
+    this.l3Orderbook = new L3OrderBookResource(http, basePath);
+    this.accounts = new LighterAccountsResource(http, basePath);
+  }
+}
+
+/**
+ * Lighter on Robinhood Chain client: the second deployment of Lighter
+ * (`/v1/rh-lighter`).
+ *
+ * The same resources as `client.lighter`, except the L3 order book (not
+ * captured on this deployment) and the L1 account lookup. Markets are quoted
+ * in USDG: perpetuals use uppercase symbols (`BTC`) and spot markets use
+ * dashed symbols (`AAPL-USDG`). Funding and open interest are perpetuals only.
+ *
+ * Coverage: trades and liquidations from 2026-06-26 20:10:26 UTC (venue
+ * launch); order book, open interest and funding from 2026-08-22 18:43 UTC;
+ * candles from 2026-06-26 once candles are enabled for this deployment (until
+ * then the candles route returns an error). Trades are reconciled up to
+ * `meta.finalizedThrough`, about a day behind; `trades.recent()` serves the
+ * preliminary tier, exactly as on mainnet.
+ *
+ * @example
+ * ```typescript
+ * const client = new OxArchive({ apiKey: '...' });
+ * const instruments = await client.rhLighter.instruments.list();
+ * const book = await client.rhLighter.orderbook.get('BTC');
+ * const trades = await client.rhLighter.trades.list('AAPL-USDG', { start, end });
+ * console.log(trades.meta?.finalizedThrough);
+ * ```
+ */
+export class RhLighterClient extends LighterDeploymentClient {
+  constructor(http: HttpClient) {
+    super(http, '/v1/rh-lighter');
   }
 }

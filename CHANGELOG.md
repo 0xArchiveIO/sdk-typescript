@@ -5,21 +5,75 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
-## Unreleased
+## 1.12.0 (2026-09-28)
 
 ### Added
-
+- Lighter on Robinhood Chain, the second deployment of Lighter, as
+  `client.rhLighter` (`/v1/rh-lighter`). It has the same resources as
+  `client.lighter` except the L3 order book: `instruments`, `orderbook`,
+  `trades` (`list()` and `recent()`), `candles`, `openInterest`, `funding`,
+  `liquidations`, `positions`, `freshness()`, `summary()` and
+  `priceHistory()`. Markets are quoted in USDG: perpetuals use uppercase
+  symbols (`BTC`) and spot markets dashed symbols (`AAPL-USDG`). Trades and
+  liquidations are served from 2026-06-26 20:10:26 UTC; order book, open
+  interest and funding from 2026-08-22 18:43 UTC; candles once they are
+  enabled for this deployment.
+- `liquidations` on both Lighter clients (`client.lighter.liquidations` and
+  `client.rhLighter.liquidations`): `history()` returns `LighterLiquidation`
+  rows and `volume()` returns `LighterLiquidationVolume` buckets. On
+  Robinhood Chain, rows from before live capture were backfilled from the
+  venue's finalized export and have `source: 'bucket'` and an empty
+  `rawJson`; rows captured live have `source: 'ws'` and the venue's raw JSON.
+- WebSocket channels `rh_lighter_orderbook`, `rh_lighter_trades`,
+  `rh_lighter_open_interest` and `rh_lighter_funding` (live and replay, with
+  the same live payload shapes as the mainnet Lighter channels) and
+  `rh_lighter_candles` (replay only). `ws.subscribeRhLighter()` and
+  `ws.unsubscribeRhLighter()` accept short or full channel names;
+  `onRhLighterOrderbook()`, `onRhLighterTrades()` and `onRhLighterStats()`
+  keep Robinhood Chain data apart from mainnet Lighter and Hyperliquid data.
+  `intervalMs` (100 to 5000) is accepted on `rh_lighter_orderbook`. Live
+  Robinhood Chain data is served on `wss://api.0xarchive.io/ws`.
+- Account positions on `client.hyperliquid.positions`,
+  `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
+  `client.rhLighter.positions`: `get()` (live, or as of any instant),
+  `history()`, `changes()`, `market()`, `marketSummary()` and `all()`, plus
+  `account()` and `accountHistory()` on Hyperliquid and HIP-3. Cursor
+  iterators: `iterateHistory()`, `iterateChanges()`,
+  `iterateAccountHistory()`, `iterateMarket()`, `iterateMarketSummary()` and
+  `iterateAll()`. Wallet routes take a `0x` address on Hyperliquid and HIP-3
+  (optional `dex` on HIP-3) and an integer account index on Lighter. `dex`
+  (HIP-3 only) and `includeSystem` (Lighter only) are refused before sending
+  on other clients. `iterateMarketSummary()` takes both `start` and `end` and
+  sends the same window on every page; `marketSummary()` refuses a `cursor`
+  without an explicit `end`, because a summary cursor is bound to its window.
+- `client.lighter.accounts.byL1()` and `iterateByL1()`: Lighter account
+  indices owned by an L1 address (mainnet).
+- Types `Position`, `PositionChange`, `MarketPosition`, `AccountSummary`,
+  `MarketPositionsSummary`, `WalletPositions`, `LighterL1Accounts`,
+  `PositionsResponse` and the positions parameter types, with Zod schemas.
+- Response meta fields on `ApiMeta` (and in `ApiMetaSchema`, so validation
+  keeps them): `finalizedThrough`, `requestedEnd`, `clampedTo`,
+  `preliminaryRowCount`, `asOf`, `snapshotTs`, `source`, `quality`, `stale`,
+  `totals` and `builtThrough`.
+- `OxArchiveError.errorCode`: the API's stable error code when it sends one,
+  for example `snapshot_advanced` on a 409 from a positions cursor whose
+  snapshot was replaced.
 - `OrderFlowParams.cursor` (Hyperliquid, HIP-3 and HIP-4): a resume point
   in Unix milliseconds; the API starts the response at the first bucket that
   opens after it. `orders.flow()` and `hyperliquid.hip4.getOrderFlow()`
   already sent any params they were given, so this adds the type and the
-  docs. The API does not return `nextCursor` on order flow yet: it arrives
-  with an API switch, and until then `nextCursor` on an order-flow response
-  is undefined.
+  docs. The API does not return `nextCursor` on order flow yet, so
+  `nextCursor` on an order-flow response is undefined.
 
 ### Changed
-
-- `OiFundingInterval` includes `'1m'`. The API now serves 1-minute buckets
+- `trades.list()` now also returns `meta`, so Lighter callers (both
+  deployments) can read the finalization boundary (`meta.finalizedThrough`)
+  and see when the requested window was clamped (`meta.clampedTo`,
+  `meta.requestedEnd`). `CursorResponse` gains an optional `meta` field.
+- `LighterClient` now extends `LighterDeploymentClient`, the resources shared
+  by both Lighter deployments. Its public API is unchanged apart from the new
+  `liquidations`, `positions` and `accounts` resources.
+- `OiFundingInterval` includes `'1m'`. The API serves 1-minute buckets
   on funding, open interest, price, liquidation-volume and breadth history
   for every venue, and every params type that uses `OiFundingInterval`
   accepts it.

@@ -131,7 +131,8 @@ export class HttpClient {
         throw new OxArchiveError(
           error.error || `Request failed with status ${response.status}`,
           response.status,
-          apiResponse.meta?.requestId
+          apiResponse.meta?.requestId,
+          typeof error.errorCode === 'string' ? error.errorCode : undefined
         );
       }
 
@@ -207,7 +208,8 @@ export class HttpClient {
         throw new OxArchiveError(
           error.error || `Request failed with status ${response.status}`,
           response.status,
-          apiResponse.meta?.requestId
+          apiResponse.meta?.requestId,
+          typeof error.errorCode === 'string' ? error.errorCode : undefined
         );
       }
 
