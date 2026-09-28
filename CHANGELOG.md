@@ -58,6 +58,12 @@ semver in spirit.
 - `OxArchiveError.errorCode`: the API's stable error code when it sends one,
   for example `snapshot_advanced` on a 409 from a positions cursor whose
   snapshot was replaced.
+- `OrderFlowParams.cursor` (Hyperliquid, HIP-3 and HIP-4): a resume point
+  in Unix milliseconds; the API starts the response at the first bucket that
+  opens after it. `orders.flow()` and `hyperliquid.hip4.getOrderFlow()`
+  already sent any params they were given, so this adds the type and the
+  docs. The API does not return `nextCursor` on order flow yet, so
+  `nextCursor` on an order-flow response is undefined.
 
 ### Changed
 - `trades.list()` now also returns `meta`, so Lighter callers (both
@@ -67,6 +73,12 @@ semver in spirit.
 - `LighterClient` now extends `LighterDeploymentClient`, the resources shared
   by both Lighter deployments. Its public API is unchanged apart from the new
   `liquidations`, `positions` and `accounts` resources.
+- `OiFundingInterval` includes `'1m'`. The API serves 1-minute buckets
+  on funding, open interest, price, liquidation-volume and breadth history
+  for every venue, and every params type that uses `OiFundingInterval`
+  accepts it.
+- `OrderFlowParams.interval` documents the buckets the API serves: `'1m'`
+  (the default), `'5m'`, `'15m'` and `'1h'`.
 
 ## 1.11.0 (2026-09-25)
 

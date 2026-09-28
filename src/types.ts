@@ -697,7 +697,7 @@ export interface FundingRate {
  * venue- and family-specific; callers should not infer a universal raw
  * one-minute interval from this shared type.
  */
-export type OiFundingInterval = '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
+export type OiFundingInterval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
 
 /**
  * Parameters for getting funding rate history
@@ -1058,7 +1058,7 @@ export interface LiquidationVolume {
 
 /** Parameters for getting aggregated liquidation volume */
 export interface LiquidationVolumeParams extends CursorPaginationParams {
-  /** Aggregation interval (default: 1h). Valid: 5m, 15m, 30m, 1h, 4h, 1d */
+  /** Aggregation interval (default: 1h). Valid: 1m, 5m, 15m, 30m, 1h, 4h, 1d */
   interval?: OiFundingInterval;
 }
 
