@@ -825,6 +825,20 @@ export const AccountSummaryArrayResponseSchema = ApiResponseSchema(z.array(Accou
 export const MarketPositionsSummaryArrayResponseSchema = ApiResponseSchema(z.array(MarketPositionsSummarySchema));
 export const LighterL1AccountsResponseSchema = ApiResponseSchema(LighterL1AccountsSchema);
 
+export const PositionsFreshnessSchema = z.object({
+  venue: z.string(),
+  product: z.string(),
+  liveSnapshotTs: z.string().nullable(),
+  liveAgeSeconds: z.number().nullable(),
+  stale: z.boolean(),
+  liveQuality: z.string().nullable(),
+  hourlySnapshotTs: z.string().nullable(),
+  builtThrough: z.string().nullable(),
+  finalizedThrough: z.string().nullable(),
+});
+
+export const PositionsFreshnessArrayResponseSchema = ApiResponseSchema(z.array(PositionsFreshnessSchema));
+
 // =============================================================================
 // Liquidation Levels Schemas (projected forced-liquidation levels)
 // =============================================================================

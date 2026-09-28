@@ -1346,7 +1346,10 @@ export interface PositionChange {
  * Account summary. Hyperliquid returns the clearinghouse figures (one account
  * per address on core, one per dex on HIP-3); `accountValue`,
  * `crossAccountValue`, `collateral`, margin and `withdrawable` are
- * Hyperliquid only. A total with any unpriced position is null, never a
+ * Hyperliquid only. Lighter and Robinhood Chain return position aggregates
+ * (`accountIndex`, the totals, long/short value, `nPositions`, `quality`), from
+ * `positions.account()`, `positions.accountHistory()` and `data.account` of
+ * `positions.get()`. A total with any unpriced position is null, never a
  * partial sum.
  */
 export interface AccountSummary {
@@ -1426,6 +1429,34 @@ export interface LighterL1Accounts {
 }
 
 /**
+ * Freshness of the account positions data of one venue, from
+ * `client.dataQuality.positionsFreshness()`. One row per venue: Hyperliquid
+ * core (`venue: 'hyperliquid'`, `product: 'core'`), HIP-3 (`'hyperliquid'`,
+ * `'hip3'`), Lighter (`'lighter'`, `'lighter'`) and Lighter on Robinhood Chain
+ * (`'rh_lighter'`, `'rh_lighter'`). Instants are RFC 3339 UTC strings.
+ */
+export interface PositionsFreshness {
+  /** `hyperliquid`, `lighter` or `rh_lighter`. */
+  venue: string;
+  /** `core`, `hip3`, `lighter` or `rh_lighter`. */
+  product: string;
+  /** Time of the latest live snapshot. */
+  liveSnapshotTs: string | null;
+  /** Age of the latest live snapshot, in seconds. */
+  liveAgeSeconds: number | null;
+  /** True when the latest live snapshot is older than 12 minutes (or there is none). */
+  stale: boolean;
+  /** Quality of the latest live snapshot: `complete`, `partial` or `degraded`. */
+  liveQuality: string | null;
+  /** Hour of the latest hourly snapshot. */
+  hourlySnapshotTs: string | null;
+  /** Every event before this instant is built into the change log and the as-of state. */
+  builtThrough: string | null;
+  /** Every event before this instant is final and will not be re-derived. */
+  finalizedThrough: string | null;
+}
+
+/**
  * A positions response page: the data, the cursor for the next page, and the
  * response metadata (`asOf`, `snapshotTs`, `source`, `quality`, `stale`,
  * `builtThrough`, `finalizedThrough`, `totals` and the clamp fields).
@@ -1436,7 +1467,7 @@ export interface PositionsResponse<T> extends CursorResponse<T> {
 
 /**
  * A positions time value: Unix milliseconds, an ISO 8601 string, or a Date.
- * The SDK sends it as Unix milliseconds.
+ * The SDK sends it as Unix milliseconds. A time without a time zone is UTC.
  */
 export type PositionsTime = number | string | Date;
 
@@ -2546,7 +2577,11 @@ export class OxArchiveError extends Error {
   }
 }
 
-/** Timestamp can be Unix ms (number), ISO string, or Date object */
+/**
+ * Timestamp can be Unix ms (number), an ISO 8601 string, or a Date. A time
+ * without a time zone is UTC: `'2026-09-01'` is midnight UTC and
+ * `'2026-09-01T12:00:00'` is noon UTC on every machine.
+ */
 export type Timestamp = number | string | Date;
 
 // =============================================================================

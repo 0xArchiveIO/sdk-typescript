@@ -161,6 +161,8 @@ export {
   AccountSummaryArrayResponseSchema,
   MarketPositionsSummaryArrayResponseSchema,
   LighterL1AccountsResponseSchema,
+  PositionsFreshnessSchema,
+  PositionsFreshnessArrayResponseSchema,
   // Liquidation Levels schemas
   LiquidationLevelBucketSchema,
   LiquidationLevelsSchema,
@@ -311,6 +313,7 @@ export type {
   WalletPositions,
   LighterL1Account,
   LighterL1Accounts,
+  PositionsFreshness,
   PositionsResponse,
   PositionsTime,
   PositionsGetParams,

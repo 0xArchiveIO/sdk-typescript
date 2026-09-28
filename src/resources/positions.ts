@@ -38,6 +38,7 @@ import {
   PositionChangeArrayResponseSchema,
   WalletPositionsResponseSchema,
 } from '../schemas';
+import { toUnixMs } from '../time';
 
 const HOUR_MS = 3_600_000;
 
@@ -51,27 +52,13 @@ type Query = Record<string, unknown>;
 
 /**
  * Convert a positions time value (Unix ms, an ISO 8601 string, or a Date) to
- * integer Unix milliseconds, the only form the positions routes accept.
+ * integer Unix milliseconds, the only form the positions routes accept. A time
+ * without a time zone is UTC.
  *
  * @internal Exported for testing
  */
 export function toEpochMs(value: PositionsTime, field: string): number {
-  let ms: number;
-  if (value instanceof Date) {
-    ms = value.getTime();
-  } else if (typeof value === 'number') {
-    ms = value;
-  } else if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
-    ms = Number(value.trim());
-  } else if (typeof value === 'string') {
-    ms = Date.parse(value);
-  } else {
-    ms = Number.NaN;
-  }
-  if (!Number.isFinite(ms)) {
-    throw new TypeError(`${field} must be Unix milliseconds, an ISO 8601 string, or a Date`);
-  }
-  return Math.trunc(ms);
+  return toUnixMs(value, field);
 }
 
 function optionalMs(value: PositionsTime | undefined, field: string): number | undefined {
@@ -567,6 +554,8 @@ export class Hip3PositionsResource extends HyperliquidPositionsResource {
  * from 2025-01-17, Robinhood Chain from 2026-06-26. Perpetual markets only.
  * Settlement, insurance and other system accounts are left out of market
  * routes unless `includeSystem: true`, and every row names its `accountKind`.
+ * `account()` and `accountHistory()` return the account's position
+ * aggregates (totals, long/short value, position count).
  *
  * @example
  * ```typescript
@@ -624,6 +613,51 @@ export class LighterPositionsResource extends PositionsRoutes {
       this.rangeQuery(params),
       PositionChangeArrayResponseSchema,
     );
+  }
+
+  /**
+   * Position aggregates of one account at the latest live snapshot (one row):
+   * `totalPositionValue`, `totalUnrealizedPnl`, `longValue`, `shortValue`,
+   * `nPositions` and `quality`. Lighter does not report margin or account
+   * value here, so those fields are absent. An account with no open position
+   * has zero totals.
+   */
+  async account(accountIndex: LighterAccountIndex): Promise<PositionsResponse<AccountSummary[]>> {
+    return this.page<AccountSummary[]>(
+      this.accountPath(accountIndex, '/account'),
+      undefined,
+      AccountSummaryArrayResponseSchema,
+    );
+  }
+
+  /**
+   * Hourly position aggregates of one account over `[start, end)`: one row
+   * per hourly snapshot, stamped with `snapshotTs` (an hour with no open
+   * position has zero totals). `limit` is hours per page (default 500, at
+   * most 744).
+   */
+  async accountHistory(
+    accountIndex: LighterAccountIndex,
+    params: PositionsAccountHistoryParams,
+  ): Promise<PositionsResponse<AccountSummary[]>> {
+    return this.page<AccountSummary[]>(
+      this.accountPath(accountIndex, '/account/history'),
+      {
+        start: requiredMs(params?.start, 'start'),
+        end: requiredMs(params?.end, 'end'),
+        cursor: params.cursor,
+        limit: params.limit,
+      },
+      AccountSummaryArrayResponseSchema,
+    );
+  }
+
+  /** Iterate every hourly account summary of an account, following cursors. */
+  iterateAccountHistory(
+    accountIndex: LighterAccountIndex,
+    params: PositionsAccountHistoryParams,
+  ): AsyncGenerator<AccountSummary, void, undefined> {
+    return followCursor((cursor) => this.accountHistory(accountIndex, { ...params, cursor }), asRows, params.cursor);
   }
 
   /**
