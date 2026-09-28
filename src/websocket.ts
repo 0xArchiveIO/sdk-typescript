@@ -19,6 +19,14 @@
  * ws.subscribeLighter('orderbook', 'BTC', { intervalMs: 250 });
  * ```
  *
+ * @example Live Lighter on Robinhood Chain data
+ * ```typescript
+ * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
+ * ws.onRhLighterTrades((coin, legs) => console.log(coin, legs.length));
+ * await ws.connect();
+ * ws.subscribeRhLighter('trades', 'AAPL-USDG');
+ * ```
+ *
  * @example Historical replay (like Tardis.dev)
  * ```typescript
  * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
@@ -47,6 +55,8 @@ import type {
   HyperliquidL4LiveOnlyChannel,
   LighterLiveChannel,
   LighterReplayOnlyChannel,
+  RhLighterLiveChannel,
+  RhLighterReplayOnlyChannel,
   LighterLiveOrderbook,
   LighterLiveTrade,
   LighterLiveStats,
@@ -106,12 +116,56 @@ export const LIGHTER_SUBSCRIPTION_ERROR =
   'subscriptions are available on lighter_orderbook, lighter_trades, ' +
   'lighter_open_interest and lighter_funding.';
 
-/** Smallest `intervalMs` accepted for a `lighter_orderbook` subscription. */
+/**
+ * Every Lighter on Robinhood Chain channel. All five support historical
+ * replay. Robinhood Chain is the second Lighter deployment; its channels are
+ * a separate family from the mainnet `lighter_*` channels (one replay cannot
+ * mix the two).
+ */
+export const RH_LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = new Set([
+  'rh_lighter_orderbook',
+  'rh_lighter_trades',
+  'rh_lighter_candles',
+  'rh_lighter_open_interest',
+  'rh_lighter_funding',
+]);
+
+/** Lighter on Robinhood Chain channels that also accept live subscriptions. */
+export const RH_LIGHTER_LIVE_CHANNELS: ReadonlySet<RhLighterLiveChannel> = new Set([
+  'rh_lighter_orderbook',
+  'rh_lighter_trades',
+  'rh_lighter_open_interest',
+  'rh_lighter_funding',
+]);
+
+/** Lighter on Robinhood Chain channels that support historical replay only. */
+export const RH_LIGHTER_REPLAY_ONLY_CHANNELS: ReadonlySet<RhLighterReplayOnlyChannel> = new Set([
+  'rh_lighter_candles',
+]);
+
+export const RH_LIGHTER_SUBSCRIPTION_ERROR =
+  'rh_lighter_candles supports replay, not live subscriptions. Use REST for current data ' +
+  'or a replay request for stored history. Live Lighter on Robinhood Chain subscriptions ' +
+  'are available on rh_lighter_orderbook, rh_lighter_trades, rh_lighter_open_interest ' +
+  'and rh_lighter_funding.';
+
+/** Smallest `intervalMs` accepted for a Lighter book subscription. */
 export const LIGHTER_BOOK_INTERVAL_MIN_MS = 100;
-/** Largest `intervalMs` accepted for a `lighter_orderbook` subscription. */
+/** Largest `intervalMs` accepted for a Lighter book subscription. */
 export const LIGHTER_BOOK_INTERVAL_MAX_MS = 5000;
 
 export const LIGHTER_INTERVAL_CHANNEL_ERROR = 'intervalMs is only supported on lighter_orderbook.';
+
+/** The `intervalMs` refusal on a Robinhood Chain channel other than its book. */
+export const RH_LIGHTER_INTERVAL_CHANNEL_ERROR = 'intervalMs is only supported on rh_lighter_orderbook.';
+
+/** Channels that take `intervalMs`: the live book of each Lighter deployment. */
+const LIGHTER_BOOK_CHANNELS: ReadonlySet<WsChannel> = new Set(['lighter_orderbook', 'rh_lighter_orderbook']);
+
+/** Lighter symbols (either deployment) are case-insensitive on the server. */
+function isLighterFamilyChannel(channel: WsChannel): boolean {
+  return LIGHTER_REPLAY_CHANNELS.has(channel) || RH_LIGHTER_REPLAY_CHANNELS.has(channel);
+}
 
 export const HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR =
   'Hyperliquid HIP-3, HIP-4, and Spot L4 channels support live subscriptions only; replay is unavailable.';
@@ -134,13 +188,20 @@ function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptio
   if (LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as LighterReplayOnlyChannel)) {
     throw new Error(LIGHTER_SUBSCRIPTION_ERROR);
   }
+  if (RH_LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as RhLighterReplayOnlyChannel)) {
+    throw new Error(RH_LIGHTER_SUBSCRIPTION_ERROR);
+  }
   const intervalMs = options?.intervalMs;
   // `== null` also treats an explicit null from JavaScript callers as omitted.
   if (intervalMs == null) {
     return;
   }
-  if (channel !== 'lighter_orderbook') {
-    throw new Error(LIGHTER_INTERVAL_CHANNEL_ERROR);
+  if (!LIGHTER_BOOK_CHANNELS.has(channel)) {
+    // Name the book channel of the deployment the caller is using, as the
+    // server does.
+    throw new Error(
+      RH_LIGHTER_REPLAY_CHANNELS.has(channel) ? RH_LIGHTER_INTERVAL_CHANNEL_ERROR : LIGHTER_INTERVAL_CHANNEL_ERROR,
+    );
   }
   if (
     !Number.isInteger(intervalMs) ||
@@ -149,7 +210,7 @@ function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptio
   ) {
     throw new Error(
       `intervalMs must be an integer between ${LIGHTER_BOOK_INTERVAL_MIN_MS} and ` +
-        `${LIGHTER_BOOK_INTERVAL_MAX_MS} for lighter_orderbook (got ${intervalMs}). ` +
+        `${LIGHTER_BOOK_INTERVAL_MAX_MS} for ${channel} (got ${intervalMs}). ` +
         'Leave it out for one book a second.',
     );
   }
@@ -169,6 +230,15 @@ type LighterLiveChannelInput =
 
 function lighterLiveChannel(channel: LighterLiveChannelInput): LighterLiveChannel {
   return (channel.startsWith('lighter_') ? channel : `lighter_${channel}`) as LighterLiveChannel;
+}
+
+/** Short and full channel names accepted by `subscribeRhLighter`. */
+type RhLighterLiveChannelInput =
+  | 'orderbook' | 'trades' | 'open_interest' | 'funding'
+  | RhLighterLiveChannel;
+
+function rhLighterLiveChannel(channel: RhLighterLiveChannelInput): RhLighterLiveChannel {
+  return (channel.startsWith('rh_lighter_') ? channel : `rh_lighter_${channel}`) as RhLighterLiveChannel;
 }
 
 function validateReplayChannel(channel: WsChannel, end?: number): void {
@@ -324,10 +394,13 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
 /**
  * WebSocket client for supported live data and historical replay.
  *
- * Live subscriptions cover Hyperliquid channels and four Lighter.xyz channels
- * (`lighter_orderbook`, `lighter_trades`, `lighter_open_interest`,
- * `lighter_funding`). `lighter_candles` and `lighter_l3_orderbook` are
- * replay-only.
+ * Live subscriptions cover Hyperliquid channels and four channels on each
+ * Lighter.xyz deployment: mainnet (`lighter_orderbook`, `lighter_trades`,
+ * `lighter_open_interest`, `lighter_funding`) and Robinhood Chain
+ * (`rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`,
+ * `rh_lighter_funding`). `lighter_candles`, `lighter_l3_orderbook` and
+ * `rh_lighter_candles` are replay-only. Live Lighter data, on either
+ * deployment, is served on `wss://api.0xarchive.io/ws` (the default URL).
  *
  * **Keep-Alive:** The server sends WebSocket ping frames every 30 seconds
  * and will disconnect idle connections after 60 seconds. This SDK automatically
@@ -363,6 +436,9 @@ export class OxArchiveWs {
   private lighterOrderbookHandlers: Array<(coin: string, data: LighterLiveOrderbook) => void> = [];
   private lighterTradesHandlers: Array<(coin: string, data: LighterLiveTrade[]) => void> = [];
   private lighterStatsHandlers: Array<(channel: 'lighter_open_interest' | 'lighter_funding', coin: string, data: LighterLiveStats) => void> = [];
+  private rhLighterOrderbookHandlers: Array<(coin: string, data: LighterLiveOrderbook) => void> = [];
+  private rhLighterTradesHandlers: Array<(coin: string, data: LighterLiveTrade[]) => void> = [];
+  private rhLighterStatsHandlers: Array<(channel: 'rh_lighter_open_interest' | 'rh_lighter_funding', coin: string, data: LighterLiveStats) => void> = [];
 
   constructor(options: WsOptions) {
     this.options = {
@@ -460,14 +536,17 @@ export class OxArchiveWs {
    * Subscribe to a supported live channel.
    *
    * Live Lighter subscriptions are available on `lighter_orderbook`,
-   * `lighter_trades`, `lighter_open_interest` and `lighter_funding`.
-   * `lighter_candles` and `lighter_l3_orderbook` are replay-only and throw
-   * here; use REST for current data or a bounded replay for stored history.
+   * `lighter_trades`, `lighter_open_interest` and `lighter_funding`, and on
+   * the Robinhood Chain deployment's `rh_lighter_orderbook`,
+   * `rh_lighter_trades`, `rh_lighter_open_interest` and `rh_lighter_funding`.
+   * `lighter_candles`, `lighter_l3_orderbook` and `rh_lighter_candles` are
+   * replay-only and throw here; use REST for current data or a bounded replay
+   * for stored history.
    *
    * @param channel - Channel to subscribe to
    * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive
    * @param options - `intervalMs` sets the book rate for `lighter_orderbook`
-   *   only (100 to 5000 ms, default one book a second)
+   *   and `rh_lighter_orderbook` only (100 to 5000 ms, default one book a second)
    * @throws Error for a replay-only Lighter channel, or an `intervalMs` on
    *   another channel or outside 100 to 5000
    */
@@ -645,6 +724,42 @@ export class OxArchiveWs {
   }
 
   /**
+   * Subscribe to a live Lighter on Robinhood Chain channel (the second
+   * Lighter deployment). Live payloads have the same shapes as mainnet
+   * Lighter; register `onRhLighterOrderbook()`, `onRhLighterTrades()` and
+   * `onRhLighterStats()` to keep them apart from mainnet and Hyperliquid data.
+   * Served on `wss://api.0xarchive.io/ws` only.
+   *
+   * @param channel One of `orderbook`, `trades`, `open_interest`, `funding`
+   *   (or the full `rh_lighter_*` form). Candles are replay-only.
+   * @param symbol Symbol as listed by `client.rhLighter.instruments.list()`:
+   *   perpetuals like `BTC`, spot like `AAPL-USDG` (case-insensitive; the
+   *   server echoes it uppercase).
+   * @param options `intervalMs` for `orderbook` only: send the newest book at
+   *   most once per 100 to 5000 ms (default 1000).
+   *
+   * @example
+   * ```typescript
+   * ws.onRhLighterOrderbook((coin, book) => console.log(coin, book.levels[0][0]?.px));
+   * ws.subscribeRhLighter('orderbook', 'BTC', { intervalMs: 500 });
+   * ws.subscribeRhLighter('trades', 'AAPL-USDG');
+   * ```
+   */
+  subscribeRhLighter(
+    channel: RhLighterLiveChannelInput,
+    symbol: string,
+    options?: WsSubscribeOptions,
+  ): void {
+    this.subscribe(rhLighterLiveChannel(channel), symbol, options);
+  }
+
+  /** Unsubscribe from a live Lighter on Robinhood Chain channel. Accepts the
+   * short form (`'orderbook'`) or the full form (`'rh_lighter_orderbook'`). */
+  unsubscribeRhLighter(channel: RhLighterLiveChannelInput, symbol: string): void {
+    this.unsubscribe(rhLighterLiveChannel(channel), symbol);
+  }
+
+  /**
    * Subscribe to a HIP-4 channel for a given outcome coin.
    *
    * @param channel One of `hip4_orderbook`, `hip4_trades`, `hip4_open_interest`,
@@ -680,7 +795,8 @@ export class OxArchiveWs {
 
   /**
    * Start historical replay with timing preserved.
-   * All six Lighter channels support replay. Replay rows keep their existing
+   * All six Lighter channels and all five Lighter on Robinhood Chain
+   * (`rh_lighter_*`) channels support replay. Replay rows keep their existing
    * shapes, which differ from the live Lighter payloads.
    *
    * @param channel - Data channel to replay
@@ -1139,6 +1255,40 @@ export class OxArchiveWs {
   }
 
   /**
+   * Handle live `rh_lighter_orderbook` messages (Lighter on Robinhood Chain)
+   * as published: the same full top-20 book as `lighter_orderbook`. While any
+   * `onRhLighterOrderbook` handler is registered, Robinhood Chain books are
+   * not passed to `onOrderbook`; without one, `onOrderbook` receives them
+   * converted to `OrderBook`.
+   */
+  onRhLighterOrderbook(handler: (coin: string, data: LighterLiveOrderbook) => void): void {
+    this.rhLighterOrderbookHandlers.push(handler);
+  }
+
+  /**
+   * Handle live `rh_lighter_trades` messages as published: two legs per trade
+   * sharing `tid`, exactly like `lighter_trades`. While any
+   * `onRhLighterTrades` handler is registered, Robinhood Chain trades are not
+   * passed to `onTrades`; without one, `onTrades` receives them converted to
+   * `Trade` (one entry per leg, with the account index in `accountIndex`).
+   * The reconciled record is `client.rhLighter.trades.list()`.
+   */
+  onRhLighterTrades(handler: (coin: string, data: LighterLiveTrade[]) => void): void {
+    this.rhLighterTradesHandlers.push(handler);
+  }
+
+  /**
+   * Handle live `rh_lighter_open_interest` and `rh_lighter_funding` messages.
+   * Both carry the same `{coin, ctx}` message as the mainnet stats channels;
+   * `channel` says which subscription delivered it.
+   */
+  onRhLighterStats(
+    handler: (channel: 'rh_lighter_open_interest' | 'rh_lighter_funding', coin: string, data: LighterLiveStats) => void
+  ): void {
+    this.rhLighterStatsHandlers.push(handler);
+  }
+
+  /**
    * Handle HIP-4 outcome settlement events. Pushed once per `(outcome_id, side)`
    * when the outcome flips to settled. After this event the server proactively
    * unsubscribes the client from every hip4_* subscription on the settled coin —
@@ -1186,9 +1336,9 @@ export class OxArchiveWs {
 
   private subscriptionKey(channel: WsChannel, coin?: string): string {
     if (!coin) return channel;
-    // Lighter symbols are case-insensitive on the server, so 'btc' and 'BTC'
-    // are one subscription.
-    const symbol = LIGHTER_REPLAY_CHANNELS.has(channel) ? coin.toUpperCase() : coin;
+    // Lighter symbols (mainnet and Robinhood Chain) are case-insensitive on
+    // the server, so 'btc' and 'BTC' are one subscription.
+    const symbol = isLighterFamilyChannel(channel) ? coin.toUpperCase() : coin;
     return `${channel}:${symbol}`;
   }
 
@@ -1317,7 +1467,9 @@ export class OxArchiveWs {
         break;
       }
       case 'data': {
-        if (message.channel === 'lighter_orderbook' && this.lighterOrderbookHandlers.length > 0) {
+        if (RH_LIGHTER_REPLAY_CHANNELS.has(message.channel)) {
+          this.dispatchRhLighter(message.channel, message.coin, message.data);
+        } else if (message.channel === 'lighter_orderbook' && this.lighterOrderbookHandlers.length > 0) {
           // A Lighter-specific handler takes the book, so Lighter 'BTC' does
           // not reach onOrderbook alongside Hyperliquid 'BTC'.
           for (const handler of this.lighterOrderbookHandlers) {
@@ -1387,6 +1539,42 @@ export class OxArchiveWs {
           handler(msg.coin, msg.outcome_id, msg.side, msg.settlement_value, msg.settlement_at);
         }
         break;
+      }
+    }
+  }
+
+  /**
+   * Live Lighter on Robinhood Chain data. The payloads have the mainnet Lighter
+   * live shapes; they go to the `onRhLighter*` handlers when registered, so
+   * they never mix with mainnet Lighter or Hyperliquid data of the same symbol.
+   */
+  private dispatchRhLighter(channel: WsChannel, coin: string, data: unknown): void {
+    if (channel === 'rh_lighter_orderbook') {
+      if (this.rhLighterOrderbookHandlers.length > 0) {
+        for (const handler of this.rhLighterOrderbookHandlers) {
+          handler(coin, data as LighterLiveOrderbook);
+        }
+      } else {
+        const orderbook = transformOrderbook(coin, data as Record<string, unknown>);
+        for (const handler of this.orderbookHandlers) {
+          handler(coin, orderbook);
+        }
+      }
+    } else if (channel === 'rh_lighter_trades') {
+      const legs = lighterLiveTrades(data);
+      if (this.rhLighterTradesHandlers.length > 0) {
+        for (const handler of this.rhLighterTradesHandlers) {
+          handler(coin, legs);
+        }
+      } else {
+        const trades = legs.map((leg) => transformLighterLiveTrade(coin, leg));
+        for (const handler of this.tradesHandlers) {
+          handler(coin, trades);
+        }
+      }
+    } else if (channel === 'rh_lighter_open_interest' || channel === 'rh_lighter_funding') {
+      for (const handler of this.rhLighterStatsHandlers) {
+        handler(channel, coin, data as LighterLiveStats);
       }
     }
   }

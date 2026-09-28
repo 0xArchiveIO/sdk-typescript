@@ -20,3 +20,11 @@ export { L2OrderBookResource } from './l2-orderbook';
 export { L3OrderBookResource } from './l3-orderbook';
 export { SpotPairsResource, SpotTwapResource } from './spot';
 export { Hip3BreadthResource } from './hip3-breadth';
+export { LighterLiquidationsResource } from './lighter-liquidations';
+export {
+  HyperliquidPositionsResource,
+  Hip3PositionsResource,
+  LighterPositionsResource,
+  LighterAccountsResource,
+  type LighterAccountIndex,
+} from './positions';

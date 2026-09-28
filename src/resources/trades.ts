@@ -48,9 +48,15 @@ export class TradesResource {
    * Uses cursor-based pagination by default, which is more efficient for large datasets.
    * Use the `nextCursor` from the response as the `cursor` parameter to get the next page.
    *
+   * On Lighter (mainnet and Robinhood Chain) this route serves reconciled
+   * trades only: the window is clamped to the finalization boundary, which is
+   * returned as `meta.finalizedThrough` (with `meta.clampedTo` and
+   * `meta.requestedEnd` when the requested `end` was past it). Use `recent()`
+   * for the preliminary tier.
+   *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range and cursor pagination parameters (start and end are required)
-   * @returns Object with trades array and nextCursor for pagination
+   * @returns Object with trades array, nextCursor for pagination, and response meta
    *
    * @example
    * ```typescript
@@ -81,13 +87,16 @@ export class TradesResource {
     return {
       data: response.data,
       nextCursor: response.meta.nextCursor,
+      meta: response.meta,
     };
   }
 
   /**
    * Get most recent trades for a symbol.
    *
-   * Note: This method is available on Lighter (`client.lighter.trades.recent()`),
+   * Note: This method is available on Lighter (`client.lighter.trades.recent()`
+   * and `client.rhLighter.trades.recent()`, the preliminary tier: rows past the
+   * finalization boundary are not yet reconciled),
    * HIP-3 (`client.hyperliquid.hip3.trades.recent()`), and HIP-4
    * (`client.hyperliquid.hip4.trades.recent()`) which have real-time ingestion.
    * Hyperliquid uses hourly S3 backfill and does NOT expose a recent endpoint —
@@ -103,7 +112,7 @@ export class TradesResource {
   async recent(symbol: string, limit?: number): Promise<Trade[]> {
     // Guard: Hyperliquid (bare namespace) does not expose `/trades/{symbol}/recent`.
     // Only HIP-3 (`/v1/hyperliquid/hip3`), HIP-4 (`/v1/hyperliquid/hip4`), and
-    // Lighter (`/v1/lighter`) have real-time recent endpoints. Without this
+    // Lighter (`/v1/lighter`, `/v1/rh-lighter`) have real-time recent endpoints. Without this
     // check, callers get a 404-with-empty-body that surfaces as
     // "Unexpected end of JSON input" — confusing and unhelpful.
     if (this.basePath === '/v1/hyperliquid' || this.basePath === '/v1') {
