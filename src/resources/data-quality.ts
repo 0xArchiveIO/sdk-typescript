@@ -1,17 +1,20 @@
 import type { HttpClient } from '../http';
 import type {
+  ApiResponse,
   CoverageResponse,
   ExchangeCoverage,
   Incident,
   IncidentsResponse,
   LatencyResponse,
   ListIncidentsParams,
+  PositionsFreshness,
   SlaParams,
   SlaResponse,
   StatusResponse,
   SymbolCoverageOptions,
   SymbolCoverageResponse,
 } from '../types';
+import { PositionsFreshnessArrayResponseSchema } from '../schemas';
 
 /**
  * Data quality API resource
@@ -245,5 +248,31 @@ export class DataQualityResource {
       `${this.basePath}/sla`,
       params as unknown as Record<string, unknown>
     );
+  }
+
+  // ===========================================================================
+  // Account Positions Freshness
+  // ===========================================================================
+
+  /**
+   * Freshness of the account positions data, one row per venue (Hyperliquid
+   * core, HIP-3, Lighter and Lighter on Robinhood Chain): the latest live
+   * snapshot and its age, whether it is stale, the latest hourly snapshot, and
+   * the `builtThrough` and `finalizedThrough` boundaries.
+   *
+   * @example
+   * ```typescript
+   * for (const venue of await client.dataQuality.positionsFreshness()) {
+   *   console.log(venue.venue, venue.product, venue.liveAgeSeconds, venue.stale);
+   * }
+   * ```
+   */
+  async positionsFreshness(): Promise<PositionsFreshness[]> {
+    const response = await this.http.get<ApiResponse<PositionsFreshness[]>>(
+      `${this.basePath}/positions`,
+      undefined,
+      this.http.validationEnabled ? PositionsFreshnessArrayResponseSchema : undefined,
+    );
+    return response.data;
   }
 }

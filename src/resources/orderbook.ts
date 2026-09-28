@@ -8,6 +8,7 @@ import type {
   OrderbookDelta,
 } from '../types';
 import { OrderBookResponseSchema, OrderBookArrayResponseSchema } from '../schemas';
+import { toUnixMs } from '../time';
 import {
   OrderBookReconstructor,
   type TickData,
@@ -299,8 +300,8 @@ export class OrderBookResource {
     params: TickHistoryParams,
     depth?: number
   ): AsyncGenerator<ReconstructedOrderBook, void, undefined> {
-    const startTs = typeof params.start === 'string' ? new Date(params.start).getTime() : params.start;
-    const endTs = typeof params.end === 'string' ? new Date(params.end).getTime() : params.end;
+    const startTs = toUnixMs(params.start, 'start');
+    const endTs = toUnixMs(params.end, 'end');
 
     let cursor = startTs;
     const reconstructor = new OrderBookReconstructor();

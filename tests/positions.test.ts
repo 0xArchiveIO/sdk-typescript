@@ -675,13 +675,82 @@ describe('Lighter account positions (mainnet and Robinhood Chain)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('exposes the Hyperliquid-only account methods on Hyperliquid clients only', () => {
+  it.each([
+    ['lighter', '/v1/lighter'],
+    ['rhLighter', '/v1/rh-lighter'],
+  ] as const)('%s reads the account summary and its hourly history', async (venue, base) => {
+    const summary = { account_index: '7', total_position_value: '21090.875', total_unrealized_pnl: '90.75', long_value: '21090.875', short_value: '0', n_positions: 1, quality: 'complete' };
+    const flat = { ...summary, snapshot_ts: '2026-09-25T11:00:00Z', total_position_value: '0', total_unrealized_pnl: '0', long_value: '0', short_value: '0', n_positions: 0 };
+    const fetchMock = stubFetch(
+      ok([summary], { ...SNAPSHOT_META, stale: false }),
+      ok([{ ...summary, snapshot_ts: '2026-09-25T10:00:00Z' }], { next_cursor: 'h2', source: 'snapshot', finalized_through: '2026-09-24T21:00:00.000Z' }),
+      ok([flat], { source: 'snapshot' }),
+    );
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE, validate: true });
+    const positions = client[venue].positions;
+
+    const now = await positions.account(7);
+    const hours = [];
+    for await (const row of positions.iterateAccountHistory('7', { start: '2026-09-25T10:00:00', end: 1_790_337_600_000, limit: 1 })) {
+      hours.push(row);
+    }
+
+    expect(now.data).toEqual([{ accountIndex: '7', totalPositionValue: '21090.875', totalUnrealizedPnl: '90.75', longValue: '21090.875', shortValue: '0', nPositions: 1, quality: 'complete' }]);
+    expect(now.meta).toMatchObject({ source: 'snapshot', stale: false });
+    expect(hours.map((h) => [h.snapshotTs, h.nPositions])).toEqual([
+      ['2026-09-25T10:00:00Z', 1],
+      ['2026-09-25T11:00:00Z', 0],
+    ]);
+    expect(urlOf(fetchMock, 0).pathname).toBe(`${base}/accounts/7/account`);
+    expect(query(urlOf(fetchMock, 0))).toEqual({});
+    const window = { start: '1790330400000', end: '1790337600000', limit: '1' };
+    expect(urlOf(fetchMock, 1).pathname).toBe(`${base}/accounts/7/account/history`);
+    expect(query(urlOf(fetchMock, 1))).toEqual(window);
+    expect(query(urlOf(fetchMock, 2))).toEqual({ ...window, cursor: 'h2' });
+    await expect(positions.account('0xabc')).rejects.toThrow('accountIndex must be a non-negative integer');
+  });
+
+  it('exposes the account methods on every positions client', () => {
     const client = new OxArchive({ apiKey: 'test-key' });
 
-    expect(typeof client.hyperliquid.positions.account).toBe('function');
-    expect(typeof client.hyperliquid.hip3.positions.accountHistory).toBe('function');
-    expect('account' in client.lighter.positions).toBe(false);
-    expect('accountHistory' in client.rhLighter.positions).toBe(false);
+    for (const positions of [client.hyperliquid.positions, client.hyperliquid.hip3.positions, client.lighter.positions, client.rhLighter.positions]) {
+      expect(typeof positions.account).toBe('function');
+      expect(typeof positions.accountHistory).toBe('function');
+      expect(typeof positions.iterateAccountHistory).toBe('function');
+    }
+  });
+
+  it('reads the positions freshness of every venue from data quality', async () => {
+    const row = {
+      venue: 'hyperliquid',
+      product: 'core',
+      live_snapshot_ts: '2026-09-28T22:54:27.000Z',
+      live_age_seconds: 119,
+      stale: false,
+      live_quality: 'complete',
+      hourly_snapshot_ts: '2026-09-28T22:00:00.000Z',
+      built_through: '2026-09-28T22:00:00.000Z',
+      finalized_through: '2026-09-28T19:00:00.000Z',
+    };
+    const empty = { venue: 'rh_lighter', product: 'rh_lighter', live_snapshot_ts: null, live_age_seconds: null, stale: true, live_quality: null, hourly_snapshot_ts: null, built_through: null, finalized_through: null };
+    const fetchMock = stubFetch(ok([row, empty]));
+    const client = new OxArchive({ apiKey: 'test-key', baseUrl: BASE, validate: true });
+
+    const venues = await client.dataQuality.positionsFreshness();
+
+    expect(urlOf(fetchMock).pathname).toBe('/v1/data-quality/positions');
+    expect(venues[0]).toEqual({
+      venue: 'hyperliquid',
+      product: 'core',
+      liveSnapshotTs: '2026-09-28T22:54:27.000Z',
+      liveAgeSeconds: 119,
+      stale: false,
+      liveQuality: 'complete',
+      hourlySnapshotTs: '2026-09-28T22:00:00.000Z',
+      builtThrough: '2026-09-28T22:00:00.000Z',
+      finalizedThrough: '2026-09-28T19:00:00.000Z',
+    });
+    expect(venues[1]).toMatchObject({ venue: 'rh_lighter', stale: true, liveSnapshotTs: null });
   });
 
   it('resolves mainnet accounts by L1 address and iterates them', async () => {

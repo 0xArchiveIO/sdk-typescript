@@ -1,6 +1,7 @@
 import type { HttpClient } from '../http';
 import type { ApiResponse, Candle, CandleHistoryParams, CursorResponse } from '../types';
 import { CandleArrayResponseSchema } from '../schemas';
+import { toUnixMs } from '../time';
 
 /**
  * Candles (OHLCV) API resource.
@@ -61,21 +62,10 @@ export class CandlesResource {
     if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > this.maxLimit)) {
       throw new RangeError(`limit must be between 1 and ${this.maxLimit} for this candle route`);
     }
-    const normalizeTimestamp = (value: number | string, field: 'start' | 'end') => {
-      const timestamp = typeof value === 'number'
-        ? value
-        : /^\d+$/.test(value)
-          ? Number(value)
-          : Date.parse(value);
-      if (!Number.isFinite(timestamp)) {
-        throw new TypeError(`${field} must be an integer millisecond timestamp or valid ISO date string`);
-      }
-      return Math.trunc(timestamp);
-    };
     const query = {
       ...params,
-      start: normalizeTimestamp(params.start, 'start'),
-      end: normalizeTimestamp(params.end, 'end'),
+      start: toUnixMs(params.start, 'start'),
+      end: toUnixMs(params.end, 'end'),
     };
     const response = await this.http.get<ApiResponse<Candle[]>>(
       `${this.basePath}/candles/${this.coinTransform(symbol)}`,

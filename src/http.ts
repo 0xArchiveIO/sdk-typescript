@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { ApiResponse, ApiError } from './types';
 import { OxArchiveError } from './types';
+import { TIME_PARAMS, toUnixMs } from './time';
 
 /**
  * Convert a snake_case string to camelCase.
@@ -96,9 +97,12 @@ export class HttpClient {
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         if (value !== undefined && value !== null) {
-          // Convert Date objects to Unix milliseconds
+          // Times go out as Unix milliseconds: a Date is its instant, and a
+          // time string is ISO 8601, read as UTC when it has no offset.
           if (value instanceof Date) {
             url.searchParams.set(key, String(value.getTime()));
+          } else if (typeof value === 'string' && TIME_PARAMS.has(key)) {
+            url.searchParams.set(key, String(toUnixMs(value, key)));
           } else {
             url.searchParams.set(key, String(value));
           }

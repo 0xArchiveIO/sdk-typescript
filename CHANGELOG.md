@@ -36,8 +36,11 @@ semver in spirit.
 - Account positions on `client.hyperliquid.positions`,
   `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
   `client.rhLighter.positions`: `get()` (live, or as of any instant),
-  `history()`, `changes()`, `market()`, `marketSummary()` and `all()`, plus
-  `account()` and `accountHistory()` on Hyperliquid and HIP-3. Cursor
+  `history()`, `changes()`, `market()`, `marketSummary()`, `all()`,
+  `account()` and `accountHistory()`. `account()` is the clearinghouse
+  summary on Hyperliquid and HIP-3 and the account's position aggregates
+  (totals, long/short value, position count) on Lighter and Robinhood
+  Chain. Cursor
   iterators: `iterateHistory()`, `iterateChanges()`,
   `iterateAccountHistory()`, `iterateMarket()`, `iterateMarketSummary()` and
   `iterateAll()`. Wallet routes take a `0x` address on Hyperliquid and HIP-3
@@ -48,6 +51,9 @@ semver in spirit.
   without an explicit `end`, because a summary cursor is bound to its window.
 - `client.lighter.accounts.byL1()` and `iterateByL1()`: Lighter account
   indices owned by an L1 address (mainnet).
+- `client.dataQuality.positionsFreshness()`: one `PositionsFreshness` row per
+  venue with the latest live and hourly snapshots, the live snapshot's age
+  and quality, `stale`, `builtThrough` and `finalizedThrough`.
 - Types `Position`, `PositionChange`, `MarketPosition`, `AccountSummary`,
   `MarketPositionsSummary`, `WalletPositions`, `LighterL1Accounts`,
   `PositionsResponse` and the positions parameter types, with Zod schemas.
@@ -79,6 +85,18 @@ semver in spirit.
   accepts it.
 - `OrderFlowParams.interval` documents the buckets the API serves: `'1m'`
   (the default), `'5m'`, `'15m'` and `'1h'`.
+
+### Fixed
+- Times without a time zone are UTC on every method. Before, a date-time
+  string without an offset (`'2026-09-01T00:00:00'`) was read as the
+  machine's local time where the SDK parsed it (candles, tick-level order
+  book history, positions), so the same call asked for a different window
+  on machines in different time zones. Every other route sent time strings
+  to the API unchanged, and the API refuses anything but Unix milliseconds,
+  so an ISO string for `start`, `end` or `timestamp` failed there. Every
+  time parameter now goes through one helper: ISO 8601 strings are
+  converted to Unix milliseconds, a date alone is midnight UTC, an
+  offset-less date-time is UTC, and a `Z` or `+hh:mm` offset is honored.
 
 ## 1.11.0 (2026-09-25)
 

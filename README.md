@@ -1065,8 +1065,8 @@ Positions, account summaries, and the position change log for Hyperliquid core (
 | `get(key, { timestamp?, symbol?, dex?, cursor?, limit? })` | `/wallets/{address}/positions` or `/accounts/{account_index}/positions` | `WalletPositions`: `positions`, `account`, and `accountSeen` when empty |
 | `history(key, { start, end, symbol?, dex?, cursor?, limit? })` | `.../positions/history` | hourly `Position` rows over `[start, end)` |
 | `changes(key, { start, end, symbol?, dex?, cursor?, limit? })` | `.../positions/changes` | `PositionChange` legs over `[start, end)` |
-| `account(address)`, or `account(address, { dex? })` on HIP-3 | `/wallets/{address}/account` | `AccountSummary[]` (Hyperliquid and HIP-3 only) |
-| `accountHistory(address, { start, end, dex?, cursor?, limit? })` | `/wallets/{address}/account/history` | hourly `AccountSummary` rows (Hyperliquid and HIP-3 only) |
+| `account(key)`, or `account(address, { dex? })` on HIP-3 | `.../account` | `AccountSummary[]` at the latest live snapshot: the clearinghouse summary on Hyperliquid and HIP-3, position aggregates on Lighter |
+| `accountHistory(key, { start, end, dex?, cursor?, limit? })` | `.../account/history` | hourly `AccountSummary` rows (on Lighter one per hour, at most 744 per page) |
 | `market(symbol, { hour?, side?, minValue?, includeSystem?, cursor?, limit? })` | `/positions/{symbol}` | every open position in one market, largest value first; `meta.totals` on the first page |
 | `marketSummary(symbol, { start?, end?, cursor?, limit? })` | `/positions/{symbol}/summary` | `MarketPositionsSummary`: now, or an hourly series |
 | `all({ hour, cursor?, limit? })` | `/positions` | every open position across markets at one hour |
@@ -1101,6 +1101,10 @@ for await (const leg of client.hyperliquid.hip3.positions.iterateChanges('0x1234
 const owned = await client.lighter.accounts.byL1('0x1234...');
 const lighterPositions = await client.lighter.positions.get(owned.data.accounts[0].accountIndex);
 
+// Lighter account summary (position aggregates): now, and one row per hour
+const summary = await client.rhLighter.positions.account(4521);
+const hourly = await client.lighter.positions.accountHistory(4521, { start: '2026-09-01', end: '2026-09-02' });
+
 // Largest BTC longs on Robinhood Chain at one hour, with totals for the whole market
 const longs = await client.rhLighter.positions.market('BTC', {
   hour: Date.UTC(2026, 8, 25, 12),
@@ -1112,7 +1116,7 @@ console.log(longs.meta.totals?.longCount, longs.meta.totals?.longTop10ValueShare
 
 How to read a response:
 
-- Numbers are decimal strings (a flat position is `"0"`); timestamps are RFC 3339 UTC strings. Request times accept Unix milliseconds, ISO 8601 strings, or `Date` objects; the SDK sends Unix milliseconds. `hour` must be an exact UTC hour.
+- Numbers are decimal strings (a flat position is `"0"`); timestamps are RFC 3339 UTC strings. Request times accept Unix milliseconds, ISO 8601 strings, or `Date` objects; the SDK sends Unix milliseconds, and a time without a time zone is UTC. `hour` must be an exact UTC hour.
 - Without `timestamp`, `get()` serves the latest live snapshot. An exact hour with a committed snapshot serves that hour (`meta.source` is `snapshot`); any other instant is rebuilt from the change log (`meta.source` is `reconstructed`) with exact size, entry, and `openedAt`, marks at that instant, and null snapshot-only fields such as leverage, margin, and funding.
 - `meta.asOf` is the instant the data describes, `meta.snapshotTs` the snapshot it was read from, and `meta.quality` the snapshot's completeness. Each row also carries its own `quality`: `complete`, `partial` (for example no mark, so value and PnL are null), or `degraded`; Lighter rows can also read `preliminary`, `unreconciled`, or `incomplete`.
 - `meta.stale` is true, with a `meta.notice`, when the latest live snapshot is more than 12 minutes old.
@@ -1184,6 +1188,11 @@ const sla = await client.dataQuality.sla({ year: 2026, month: 1 });
 console.log(`Period: ${sla.period}`);
 console.log(`Uptime: ${sla.actual.uptime}% (${sla.actual.uptimeStatus})`);
 console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatus})`);
+
+// Account positions freshness, one row per venue
+for (const venue of await client.dataQuality.positionsFreshness()) {
+  console.log(venue.venue, venue.product, venue.liveAgeSeconds, venue.stale, venue.finalizedThrough);
+}
 ```
 
 #### Data Quality Endpoints
@@ -1198,6 +1207,7 @@ console.log(`API P99: ${sla.actual.apiLatencyP99Ms}ms (${sla.actual.latencyStatu
 | `getIncident(incidentId)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
 | `sla(params)` | SLA compliance metrics for a specific month |
+| `positionsFreshness()` | Account positions freshness per venue: latest live and hourly snapshots, staleness, `builtThrough`, `finalizedThrough` |
 
 Venue scopes for `exchangeCoverage()`, `symbolCoverage()`, and the `exchange` filter of `listIncidents()`: `hyperliquid`, `hip3`, `hip4`, `spot` (Hyperliquid Spot), `lighter` (Lighter mainnet), and `rh-lighter` (Lighter on Robinhood Chain).
 
@@ -1820,13 +1830,19 @@ ws.isConnected(); // boolean
 
 ## Timestamp Formats
 
-The SDK accepts timestamps as Unix milliseconds or Date objects:
+The SDK accepts timestamps as Unix milliseconds, ISO 8601 strings, or Date objects, and sends them as Unix milliseconds. A time without a time zone is UTC: `'2024-01-01'` is midnight UTC and `'2024-01-01T12:00:00'` is noon UTC on every machine, whatever its local time zone (`Date.parse` alone would read the second as local time). A `Z` or `+hh:mm` offset is honored.
 
 ```typescript
 // Unix milliseconds (recommended)
 client.hyperliquid.orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now()
+});
+
+// ISO 8601 strings (a time without an offset is UTC)
+client.hyperliquid.orderbook.history('BTC', {
+  start: '2024-01-01',
+  end: '2024-01-01T12:00:00'
 });
 
 // Date objects (converted automatically)
