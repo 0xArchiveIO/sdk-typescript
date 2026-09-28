@@ -456,7 +456,7 @@ export interface Hip4Outcome {
   recurringPeriod?: string;
   /** Builder/deployer wallet address. */
   builderAddress?: string;
-  /** True after settlement; ingester unsubscribes settled markets. */
+  /** True after settlement; collection stops for settled markets. */
   isSettled?: boolean;
   /** Settlement value (typically 1.0 = Yes won, 0.0 = No won). Set when isSettled=true. */
   settlementValue?: number;
