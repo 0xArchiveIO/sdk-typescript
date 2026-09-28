@@ -19,7 +19,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run build
       - name: Plant a stray directory that must not be packaged
-        run: mkdir -p .claude/worktrees/probe && echo stray > .claude/worktrees/probe/stray.rs
+        run: mkdir -p .scratch/probe && echo stray > .scratch/probe/stray.rs
       - name: The tarball contains only the allowed entries
         run: |
           set -euo pipefail

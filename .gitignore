@@ -41,6 +41,7 @@ Thumbs.db
 # Misc
 *.tgz
 
-# Agent working directories. Not source, never packaged.
-.claude/
-.codex/
+# Local tool directories: every hidden directory except .github. Not source,
+# never packaged.
+.*/
+!.github/
