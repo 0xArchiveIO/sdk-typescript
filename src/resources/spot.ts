@@ -49,7 +49,7 @@ export class SpotPairsResource {
 /**
  * Hyperliquid Spot TWAP statuses.
  *
- * TWAP statuses come from the L4 order stream (Singapore node). They can be
+ * TWAP statuses come from the L4 order stream. They can be
  * looked up by symbol (every TWAP touching this pair) or by user wallet
  * address (every TWAP this user has placed across all spot pairs).
  *
