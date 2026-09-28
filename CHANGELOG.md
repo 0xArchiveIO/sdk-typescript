@@ -5,7 +5,7 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog and the project follows
 semver in spirit.
 
-## 1.12.0 (2026-09-26)
+## 1.12.0 (2026-09-28)
 
 ### Added
 - Lighter on Robinhood Chain, the second deployment of Lighter, as
