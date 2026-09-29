@@ -682,7 +682,7 @@ Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC,
 
 ### Orders
 
-Access order history, order flow aggregations, and TP/SL (take-profit/stop-loss) orders. Available for Hyperliquid and HIP-3.
+Access order history, order flow aggregations, and TP/SL (take-profit/stop-loss) orders. Available for Hyperliquid, HIP-3, HIP-4 and Hyperliquid Spot.
 
 ```typescript
 // Get order history for a coin
