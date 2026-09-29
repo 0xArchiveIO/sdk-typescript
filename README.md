@@ -682,7 +682,7 @@ Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC,
 
 ### Orders
 
-Access order history, order flow aggregations, and TP/SL (take-profit/stop-loss) orders. Available for Hyperliquid, HIP-3, HIP-4 and Hyperliquid Spot.
+Access order history, order flow aggregations, and TP/SL (take-profit/stop-loss) orders. Available for Hyperliquid, HIP-3 and HIP-4; Hyperliquid Spot has order history only, without filters. Trigger levels (`orders.triggerLevels()`) are Hyperliquid and HIP-3 only.
 
 ```typescript
 // Get order history for a coin
@@ -815,7 +815,10 @@ const l3Historical = await client.lighter.l3Orderbook.get('BTC', {
   depth: 250
 });
 
-// Get L3 orderbook history
+// One account's resting orders
+const mine = await client.lighter.l3Orderbook.get('BTC', { account: 281474976710654 });
+
+// Get L3 orderbook history (checkpoint snapshots; `account` filters here too)
 const l3History = await client.lighter.l3Orderbook.history('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -876,7 +879,7 @@ Check when each data type was last updated for a specific coin. Useful for verif
 const freshness = await client.hyperliquid.freshness('BTC');
 console.log(`Orderbook last updated: ${freshness.orderbook.lastUpdated}, lag: ${freshness.orderbook.lagMs}ms`);
 console.log(`Trades last updated: ${freshness.trades.lastUpdated}, lag: ${freshness.trades.lagMs}ms`);
-console.log(`Funding last updated: ${freshness.funding.lastUpdated}`);
+console.log(`Funding last updated: ${freshness.funding?.lastUpdated}`);
 console.log(`OI last updated: ${freshness.openInterest.lastUpdated}`);
 
 // Lighter.xyz
@@ -884,6 +887,14 @@ const lighterFreshness = await client.lighter.freshness('BTC');
 
 // HIP-3 (case-sensitive coins)
 const hip3Freshness = await client.hyperliquid.hip3.freshness('km:US500');
+
+// HIP-4 has no funding or liquidations, so those buckets are absent
+const hip4Freshness = await client.hyperliquid.hip4.getFreshness('0');
+
+// Hyperliquid Spot reports its own buckets (SpotFreshness): order book, trades,
+// L4 checkpoints and diffs, order lifecycle and TWAP
+const spotFreshness = await client.spot.freshness('HYPE-USDC');
+console.log(spotFreshness.l4Diffs?.lagMs, spotFreshness.twap?.lastUpdated);
 ```
 
 ### Summary
@@ -1216,13 +1227,17 @@ for (const exchange of coverage.exchanges) {
 
 // Get symbol-specific coverage with gap detection
 const btc = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC');
-const oi = btc.dataTypes.open_interest;
+const oi = btc.dataTypes.openInterest;
 console.log(`BTC OI completeness: ${oi.completeness}%`);
 console.log(`Historical coverage: ${oi.historicalCoverage}%`);  // Hour-level granularity
 console.log(`Gaps found: ${oi.gaps.length}`);
 for (const gap of oi.gaps.slice(0, 5)) {
   console.log(`  ${gap.durationMinutes} min gap: ${gap.start} -> ${gap.end}`);
 }
+
+// Symbols are sent exactly as the venue names them (case-sensitive, URL-encoded)
+const us500 = await client.dataQuality.symbolCoverage('hip3', 'km:US500');
+const hip4Side = await client.dataQuality.symbolCoverage('hip4', '#0');
 
 // Check empirical data cadence (when available)
 const ob = btc.dataTypes.orderbook;

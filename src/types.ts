@@ -252,12 +252,11 @@ export interface CursorPaginationParams {
 }
 
 /**
- * Parameters for getting trades with cursor-based pagination (recommended)
+ * Parameters for getting trades with cursor-based pagination (recommended).
+ * The trade routes take the time range, cursor and limit only; there is no
+ * side filter.
  */
-export interface GetTradesCursorParams extends CursorPaginationParams {
-  /** Filter by side */
-  side?: TradeSide;
-}
+export type GetTradesCursorParams = CursorPaginationParams;
 
 /**
  * Response with cursor for pagination
@@ -1637,9 +1636,15 @@ export interface DataTypeFreshnessInfo {
   lagMs?: number;
 }
 
-/** Per-coin freshness across all data types */
+/**
+ * Per-coin freshness across the data types a venue family has. A family
+ * leaves out the buckets it has no dataset for: HIP-4 has no `funding` or
+ * `liquidations`.
+ */
 export interface CoinFreshness {
-  /** Coin symbol */
+  /** Trading pair symbol */
+  symbol?: string;
+  /** Coin symbol (deprecated alias of `symbol`) */
   coin: string;
   /** Exchange name */
   exchange: string;
@@ -1649,12 +1654,41 @@ export interface CoinFreshness {
   orderbook: DataTypeFreshnessInfo;
   /** Trades freshness */
   trades: DataTypeFreshnessInfo;
-  /** Funding freshness */
-  funding: DataTypeFreshnessInfo;
+  /** Funding freshness. Absent on HIP-4, which has no funding. */
+  funding?: DataTypeFreshnessInfo;
   /** Open interest freshness */
   openInterest: DataTypeFreshnessInfo;
-  /** Liquidations freshness (Hyperliquid only) */
+  /** Liquidations freshness (Hyperliquid core, HIP-3 and Lighter) */
   liquidations?: DataTypeFreshnessInfo;
+}
+
+/**
+ * Freshness for a Hyperliquid Spot pair. Spot has no funding, open interest
+ * or liquidations; it reports order book, trades, L4 checkpoints and diffs,
+ * order lifecycle and TWAP buckets instead.
+ */
+export interface SpotFreshness {
+  /** Dashed pair symbol, e.g. `HYPE-USDC` */
+  symbol: string;
+  /** Pair symbol (deprecated alias of `symbol`) */
+  coin: string;
+  /** Always `spot` */
+  exchange: string;
+  /** When this measurement was taken */
+  measuredAt: string;
+  /** Order book freshness */
+  orderbook?: DataTypeFreshnessInfo;
+  /** Trades freshness */
+  trades?: DataTypeFreshnessInfo;
+  /** L4 checkpoint freshness */
+  l4Checkpoints?: DataTypeFreshnessInfo;
+  /** L4 diff freshness */
+  l4Diffs?: DataTypeFreshnessInfo;
+  /** Order lifecycle freshness */
+  orders?: DataTypeFreshnessInfo;
+  /** TWAP status freshness */
+  twap?: DataTypeFreshnessInfo;
+  [key: string]: unknown;
 }
 
 // =============================================================================

@@ -5,6 +5,7 @@ import type {
   CoinFreshness,
   Hip4ListQuestionsParams,
   Hip4Question,
+  SpotFreshness,
   CoinSummary,
   Hip4OpenInterest,
   PriceSnapshot,
@@ -23,7 +24,10 @@ import {
   Hip4OpenInterestResource,
   CandlesResource,
   LiquidationsResource,
+  MarketLiquidationsResource,
   OrdersResource,
+  OrderFlowResource,
+  OrderHistoryResource,
   L4OrderBookResource,
   L2OrderBookResource,
   L3OrderBookResource,
@@ -44,6 +48,7 @@ import {
   CoinFreshnessResponseSchema,
   CoinSummaryResponseSchema,
   PriceSnapshotArrayResponseSchema,
+  SpotFreshnessResponseSchema,
 } from './schemas';
 
 /**
@@ -256,12 +261,12 @@ export class Hip3Client {
   public readonly candles: CandlesResource;
 
   /**
-   * Liquidation events
+   * Liquidation events, volume and levels (no lookup by user on HIP-3)
    */
-  public readonly liquidations: LiquidationsResource;
+  public readonly liquidations: MarketLiquidationsResource;
 
   /**
-   * Order history, flow, and TP/SL
+   * Order history, flow, TP/SL and trigger levels
    */
   public readonly orders: OrdersResource;
 
@@ -311,7 +316,7 @@ export class Hip3Client {
     this.funding = new FundingResource(http, basePath, coinTransform);
     this.openInterest = new OpenInterestResource(http, basePath, coinTransform);
     this.candles = new CandlesResource(http, basePath, coinTransform, 10_000);
-    this.liquidations = new LiquidationsResource(http, basePath, coinTransform);
+    this.liquidations = new MarketLiquidationsResource(http, basePath, coinTransform);
     this.orders = new OrdersResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
@@ -439,19 +444,15 @@ export class Hip4Client {
   public readonly candles: CandlesResource;
 
   /**
-   * Order history, flow, and TP/SL.
+   * Order history, flow, and TP/SL (trigger levels are Hyperliquid core and
+   * HIP-3 only).
    */
-  public readonly orders: OrdersResource;
+  public readonly orders: OrderFlowResource;
 
   /**
    * L4 orderbook (snapshots, diffs, history).
    */
   public readonly l4Orderbook: L4OrderBookResource;
-
-  /**
-   * L2 full-depth orderbook (derived from L4).
-   */
-  public readonly l2Orderbook: L2OrderBookResource;
 
   private http: HttpClient;
 
@@ -475,9 +476,8 @@ export class Hip4Client {
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.openInterest = new Hip4OpenInterestResource(http, basePath, coinTransform);
     this.candles = new CandlesResource(http, basePath, coinTransform, 1_000);
-    this.orders = new OrdersResource(http, basePath, coinTransform);
+    this.orders = new OrderFlowResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
-    this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
   }
 
   /** @internal Encode a HIP-4 coin for use in URL paths. */
@@ -723,8 +723,8 @@ export class SpotClient {
    */
   public readonly candles: CandlesResource;
 
-  /** Order lifecycle events (live from 2026-05-05). */
-  public readonly orders: OrdersResource;
+  /** Order lifecycle history (live from 2026-05-05). Spot serves order history only. */
+  public readonly orders: OrderHistoryResource;
 
   /** L4 order book: snapshots, diffs, and checkpoint history. */
   public readonly l4Orderbook: L4OrderBookResource;
@@ -744,21 +744,22 @@ export class SpotClient {
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.candles = new CandlesResource(http, basePath, coinTransform, 1_000);
-    this.orders = new OrdersResource(http, basePath, coinTransform);
+    this.orders = new OrderHistoryResource(http, basePath, coinTransform);
     this.l4Orderbook = new L4OrderBookResource(http, basePath, coinTransform);
     this.twap = new SpotTwapResource(http, basePath, coinTransform);
   }
 
   /**
-   * Get per-symbol data freshness across all spot data types.
+   * Get per-symbol data freshness across all spot data types: order book,
+   * trades, L4 checkpoints and diffs, order lifecycle and TWAP.
    *
    * @param symbol Dashed canonical (e.g. `HYPE-USDC`).
    */
-  async freshness(symbol: string): Promise<CoinFreshness> {
-    const response = await this.http.get<ApiResponse<CoinFreshness>>(
+  async freshness(symbol: string): Promise<SpotFreshness> {
+    const response = await this.http.get<ApiResponse<SpotFreshness>>(
       `/v1/hyperliquid/spot/freshness/${symbol.toUpperCase()}`,
       undefined,
-      this.http.validationEnabled ? CoinFreshnessResponseSchema as any : undefined,
+      this.http.validationEnabled ? SpotFreshnessResponseSchema as any : undefined,
     );
     return response.data;
   }
