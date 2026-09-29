@@ -166,6 +166,8 @@ semver in spirit.
   and liquidations by user on core.
 
 ### Fixed
+- `hip4.outcomes.getBySlug()` URL-encodes the slug. Slugs with spaces,
+  colons, `#` or `/` reached the wrong route before.
 - `spot.freshness()` returns `SpotFreshness`, the buckets Spot reports: order
   book, trades, L4 checkpoints and diffs, order lifecycle and TWAP. It was
   typed as `CoinFreshness`, whose funding and open interest Spot never
