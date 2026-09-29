@@ -256,7 +256,7 @@ export class Hip4OutcomesResource {
    */
   async getBySlug(slug: string): Promise<Hip4OutcomeAggregate> {
     const response = await this.http.get<ApiResponse<Hip4OutcomeAggregate>>(
-      `${this.basePath}/outcomes/by-slug/${slug}`
+      `${this.basePath}/outcomes/by-slug/${encodeURIComponent(slug)}`
     );
     return response.data;
   }
