@@ -18,7 +18,7 @@
 const OFFSETLESS_DATE_TIME = /^(\d{4}-\d{2}-\d{2})[Tt ](\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?)$/;
 
 /** Query parameters the SDK treats as times when they arrive as strings. */
-export const TIME_PARAMS: ReadonlySet<string> = new Set(['start', 'end', 'timestamp', 'hour']);
+export const TIME_PARAMS: ReadonlySet<string> = new Set(['start', 'end', 'timestamp', 'hour', 'at']);
 
 /**
  * Convert a time (Unix ms, an ISO 8601 string or a `Date`) to integer Unix

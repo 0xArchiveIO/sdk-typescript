@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -34,7 +34,7 @@ import {
  *   end: Date.now(),
  *   limit: 1000,
  * });
- * while (page.nextCursor) {
+ * while (page.hasMore) {
  *   page = await client.rhLighter.liquidations.history('BTC', {
  *     start: Date.now() - 86_400_000,
  *     end: Date.now(),
@@ -72,11 +72,7 @@ export class LighterLiquidationsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LighterLiquidationArrayResponseSchema : undefined,
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-      meta: response.meta,
-    };
+    return cursorPage(response);
   }
 
   /**
@@ -95,10 +91,6 @@ export class LighterLiquidationsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LighterLiquidationVolumeArrayResponseSchema : undefined,
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-      meta: response.meta,
-    };
+    return cursorPage(response);
   }
 }

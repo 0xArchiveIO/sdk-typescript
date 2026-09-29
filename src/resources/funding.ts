@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, FundingRate, FundingHistoryParams } from '../types';
 import { FundingRateResponseSchema, FundingRateArrayResponseSchema } from '../schemas';
 
@@ -19,7 +19,7 @@ import { FundingRateResponseSchema, FundingRateArrayResponseSchema } from '../sc
  *
  * // Get all pages
  * const allRates = [...result.data];
- * while (result.nextCursor) {
+ * while (result.hasMore) {
  *   result = await client.funding.history('ETH', {
  *     start: Date.now() - 86400000 * 7,
  *     end: Date.now(),
@@ -50,10 +50,7 @@ export class FundingResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? FundingRateArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**

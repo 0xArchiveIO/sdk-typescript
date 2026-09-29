@@ -1,4 +1,5 @@
-import { type HttpClient, transformKeys } from '../http';
+import { type HttpClient, errorFromResponse, transformKeys } from '../http';
+import { API_VERSION, API_VERSION_HEADER } from '../contract';
 import {
   type SiweChallenge,
   type Web3SignupResult,
@@ -96,7 +97,7 @@ export class Web3Resource {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', [API_VERSION_HEADER]: API_VERSION },
         body: JSON.stringify({ tier }),
         signal: controller.signal,
       });
@@ -107,6 +108,9 @@ export class Web3Resource {
       const data = transformKeys(rawData) as Record<string, unknown>;
       if (response.status === 402) {
         return (data as Record<string, unknown>).payment as unknown as Web3PaymentRequired;
+      }
+      if (!response.ok) {
+        throw errorFromResponse(response.status, data);
       }
       throw new OxArchiveError(
         (data as Record<string, unknown>).error as string || `Unexpected status ${response.status}`,
@@ -146,6 +150,7 @@ export class Web3Resource {
         headers: {
           'Content-Type': 'application/json',
           'payment-signature': paymentSignature,
+          [API_VERSION_HEADER]: API_VERSION,
         },
         body: JSON.stringify({ tier }),
         signal: controller.signal,
@@ -156,10 +161,7 @@ export class Web3Resource {
       const rawData = await response.json();
       const data = transformKeys(rawData) as Record<string, unknown>;
       if (!response.ok) {
-        throw new OxArchiveError(
-          (data as Record<string, unknown>).error as string || 'Subscribe failed',
-          response.status
-        );
+        throw errorFromResponse(response.status, data);
       }
       return data as unknown as Web3SubscribeResult;
     } catch (error) {

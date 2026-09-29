@@ -1,7 +1,8 @@
 import type { z } from 'zod';
-import type { ApiResponse, ApiError } from './types';
+import type { ApiResponse, ApiError, CursorResponse } from './types';
 import { OxArchiveError } from './types';
 import { TIME_PARAMS, toUnixMs } from './time';
+import { API_VERSION, API_VERSION_HEADER } from './contract';
 
 /**
  * Convert a snake_case string to camelCase.
@@ -74,6 +75,73 @@ export interface HttpClientOptions {
   timeout: number;
   /** Enable runtime validation of API responses using Zod schemas (default: false) */
   validate?: boolean;
+}
+
+/**
+ * One page of a cursor-paged route, from its response envelope: the rows,
+ * `nextCursor`, `hasMore` and the whole `meta`.
+ *
+ * `hasMore` is `meta.hasMore` when the API sends it. When it is missing (an
+ * older server), it is true exactly when a cursor was returned.
+ *
+ * @internal Exported for testing
+ */
+export function cursorPage<T>(response: ApiResponse<T>): CursorResponse<T> {
+  const meta = response.meta;
+  const nextCursor = meta?.nextCursor ?? undefined;
+  const hasMore = typeof meta?.hasMore === 'boolean' ? meta.hasMore : nextCursor !== undefined;
+  return { data: response.data, nextCursor, hasMore, meta };
+}
+
+/**
+ * The payload of a route whose body was not the standard envelope before
+ * the 2026-10-01 API version (data quality, `/v1/symbols`). With the version
+ * the SDK sends, the body is `{ success, data, meta }` and this returns
+ * `data`; any other body is returned as it is.
+ *
+ * @internal Exported for testing
+ */
+export function unwrapEnvelope<T>(body: unknown): T {
+  if (
+    body !== null &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    'data' in body &&
+    'meta' in body &&
+    (body as { success?: unknown }).success === true
+  ) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
+}
+
+/**
+ * Build the error for a non-2xx response from its (camelCased) body.
+ *
+ * @internal Exported for testing
+ */
+export function errorFromResponse(status: number, body: unknown): OxArchiveError {
+  const error = (body && typeof body === 'object' ? body : {}) as Partial<ApiError> & Record<string, unknown>;
+  const message =
+    typeof error.error === 'string' && error.error
+      ? error.error
+      : typeof error.message === 'string' && error.message
+        ? error.message
+        : `Request failed with status ${status}`;
+  const validValues = Array.isArray(error.validValues)
+    ? error.validValues.filter((v): v is string => typeof v === 'string')
+    : undefined;
+  return new OxArchiveError(
+    message,
+    status,
+    requestIdOf(body),
+    typeof error.errorCode === 'string' ? error.errorCode : undefined,
+    {
+      param: typeof error.param === 'string' ? error.param : undefined,
+      validValues,
+      body: body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined,
+    }
+  );
 }
 
 /**
@@ -235,6 +303,8 @@ export class HttpClient {
         headers: {
           'X-API-Key': this.apiKey,
           'Content-Type': 'application/json',
+          // Selects the response shapes this SDK parses (see ./contract).
+          [API_VERSION_HEADER]: API_VERSION,
         },
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
@@ -242,18 +312,22 @@ export class HttpClient {
 
       clearTimeout(timeoutId);
 
-      const rawData = await response.json();
+      let rawData: unknown;
+      try {
+        rawData = await response.json();
+      } catch (parseError) {
+        // A non-JSON body (for example a proxy error page). Keep the HTTP
+        // status rather than reporting a parse error as a 500.
+        if (!response.ok) {
+          throw new OxArchiveError(`Request failed with status ${response.status}`, response.status);
+        }
+        throw parseError;
+      }
       // Transform snake_case keys to camelCase for JavaScript conventions
       const data = transformKeys(rawData, preserve) as Record<string, unknown>;
 
       if (!response.ok) {
-        const error = data as unknown as ApiError;
-        throw new OxArchiveError(
-          error.error || `Request failed with status ${response.status}`,
-          response.status,
-          requestIdOf(data),
-          typeof error.errorCode === 'string' ? error.errorCode : undefined
-        );
+        throw errorFromResponse(response.status, data);
       }
 
       // Validate response if validation is enabled and schema is provided

@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, CursorPaginationParams } from '../types';
 
 export interface L4OrderBookParams {
@@ -41,6 +41,11 @@ export class L4OrderBookResource {
   /**
    * Get L4 order book snapshot for a symbol
    *
+   * The snapshot has the shape of `L4OrderBookSnapshot`: every resting
+   * order with its owner, and the time it took its place in the queue as
+   * `timestamp` (RFC 3339 UTC) and `timestampMs` (Unix ms); both are null
+   * when the queue time is unknown.
+   *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Optional parameters (timestamp, depth)
    * @returns L4 order book snapshot
@@ -65,7 +70,7 @@ export class L4OrderBookResource {
       `${this.basePath}/orderbook/${this.coinTransform(symbol)}/l4/diffs`,
       params as unknown as Record<string, unknown>
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 
   /**
@@ -80,6 +85,6 @@ export class L4OrderBookResource {
       `${this.basePath}/orderbook/${this.coinTransform(symbol)}/l4/history`,
       params as unknown as Record<string, unknown>
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 }
