@@ -258,6 +258,7 @@ export const WsChannelSchema = z.enum([
   'l4_diffs', 'l4_orders',
   'hip3_l4_diffs', 'hip3_l4_orders',
   'hip4_l4_diffs', 'hip4_l4_orders',
+  'orderbook_full', 'hip3_orderbook_full',
 ]);
 
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
@@ -402,17 +403,50 @@ const WsL4ChannelSchema = z.enum([
 
 const WsL4SnapshotEntrySchema = z.tuple([z.string(), z.record(z.unknown())]);
 
+/** Full-depth L2 channels share the `l4_snapshot` / `l4_batch` message types. */
+const WsFullDepthL2ChannelSchema = z.enum(['orderbook_full', 'hip3_orderbook_full']);
+
+export const WsL2FullDepthLevelSchema = z.object({
+  px: z.number(),
+  sz: z.number(),
+  n: z.number().int().nonnegative(),
+});
+
+export const WsL2FullDepthSnapshotDataSchema = z.object({
+  bids: z.array(WsL2FullDepthLevelSchema),
+  asks: z.array(WsL2FullDepthLevelSchema),
+  bid_count: z.number().int().nonnegative(),
+  ask_count: z.number().int().nonnegative(),
+  total_bid_size: z.number(),
+  total_ask_size: z.number(),
+  mid_price: z.number().nullable(),
+  spread: z.number().nullable(),
+  spread_bps: z.number().nullable(),
+  is_crossed: z.boolean(),
+});
+
+export const WsL2FullDepthDeltaSchema = z.object({
+  side: z.enum(['B', 'A']),
+  px: z.number(),
+  sz: z.number(),
+  n: z.number().int().nonnegative(),
+  bn: z.number().int().nonnegative(),
+});
+
 export const WsL4SnapshotSchema = z.object({
   type: z.literal('l4_snapshot'),
-  channel: WsL4ChannelSchema,
+  channel: z.union([WsL4ChannelSchema, WsFullDepthL2ChannelSchema]),
   coin: z.string(),
   symbol: z.string(),
   last_block_number: z.number().int().nonnegative(),
   timestamp: z.number().int(),
-  data: z.object({
-    bids: z.array(WsL4SnapshotEntrySchema),
-    asks: z.array(WsL4SnapshotEntrySchema),
-  }),
+  data: z.union([
+    z.object({
+      bids: z.array(WsL4SnapshotEntrySchema),
+      asks: z.array(WsL4SnapshotEntrySchema),
+    }),
+    WsL2FullDepthSnapshotDataSchema,
+  ]),
 });
 
 const WsL4DiffEventSchema = z.object({
@@ -451,10 +485,10 @@ const WsL4OrderEventSchema = z.object({
 
 export const WsL4BatchSchema = z.object({
   type: z.literal('l4_batch'),
-  channel: WsL4ChannelSchema,
+  channel: z.union([WsL4ChannelSchema, WsFullDepthL2ChannelSchema]),
   coin: z.string(),
   symbol: z.string(),
-  data: z.array(z.union([WsL4DiffEventSchema, WsL4OrderEventSchema])),
+  data: z.array(z.union([WsL4DiffEventSchema, WsL4OrderEventSchema, WsL2FullDepthDeltaSchema])),
 });
 
 // Stream messages (bulk streaming has been discontinued; kept for compatibility)
@@ -980,6 +1014,145 @@ export const PriceSnapshotArrayResponseSchema = z.object({
 });
 
 // =============================================================================
+// Cumulative Volume Delta Schemas
+// =============================================================================
+
+export const CvdBucketSchema = z.object({
+  timestamp: z.number(),
+  buyVolume: z.number(),
+  sellVolume: z.number(),
+  delta: z.number(),
+  cumulativeDelta: z.number(),
+});
+
+export const CvdBucketArrayResponseSchema = ApiResponseSchema(z.array(CvdBucketSchema));
+
+// =============================================================================
+// HIP-3 Oracle Schemas
+// =============================================================================
+
+export const Hip3OracleDiscoveryBoundsSchema = z.object({
+  symbol: z.string(),
+  referencePrice: z.number(),
+  referenceSource: z.enum(['external', 'mark']),
+  maxLeverage: z.number(),
+  boundFraction: z.number(),
+  lowerBound: z.number(),
+  upperBound: z.number(),
+  blockNumber: z.number(),
+  timestamp: z.number(),
+});
+
+export const Hip3OracleExternalPriceSchema = z.object({
+  symbol: z.string(),
+  externalPrice: z.number().nullable().optional(),
+  markPrice: z.number().nullable().optional(),
+  blockNumber: z.number(),
+  timestamp: z.number(),
+});
+
+export const Hip3OracleDiscoveryBoundsResponseSchema = ApiResponseSchema(Hip3OracleDiscoveryBoundsSchema);
+export const Hip3OracleExternalPriceResponseSchema = ApiResponseSchema(Hip3OracleExternalPriceSchema);
+
+// =============================================================================
+// HIP-4 Question Schemas
+// =============================================================================
+
+export const Hip4QuestionSchema = z
+  .object({
+    questionId: z.number(),
+    name: z.string(),
+    description: z.string(),
+    fallbackOutcomeId: z.number(),
+    namedOutcomeIds: z.array(z.number()),
+    settledNamedOutcomes: z.array(z.number()),
+    firstSeenAt: z.string(),
+    lastUpdatedAt: z.string(),
+  })
+  .passthrough();
+
+export const Hip4QuestionResponseSchema = ApiResponseSchema(Hip4QuestionSchema);
+export const Hip4QuestionArrayResponseSchema = ApiResponseSchema(z.array(Hip4QuestionSchema));
+
+// =============================================================================
+// Wallet Classification Schemas
+// =============================================================================
+
+export const WalletClassifyMetricsSchema = z.object({
+  totalOrders: z.number().optional(),
+  cancelRate: z.number().optional(),
+  fillRate: z.number().optional(),
+  orderToTradeRatio: z.number().optional(),
+  iocRatio: z.number().optional(),
+  postOnlyRatio: z.number().optional(),
+  tpslRatio: z.number().optional(),
+  triggerOrderRatio: z.number().optional(),
+  uniqueCoinsTraded: z.number().optional(),
+  usesTpsl: z.boolean().optional(),
+  usesBuilder: z.boolean().optional(),
+  topBuilder: z.string().nullable().optional(),
+  avgOrderSizeUsd: z.number().optional(),
+  maxOrderSizeUsd: z.number().optional(),
+  medianCancelSpeedMs: z.number().optional(),
+  activeHours: z.number().optional(),
+  totalFills: z.number().optional(),
+  totalVolumeUsd: z.number().optional(),
+  makerRatio: z.number().optional(),
+  longShortRatio: z.number().optional(),
+  buyVolumeUsd: z.number().optional(),
+  sellVolumeUsd: z.number().optional(),
+  totalFeesUsd: z.number().optional(),
+  realizedPnlUsd: z.number().optional(),
+  liquidationCount: z.number().optional(),
+  maxSingleFillUsd: z.number().optional(),
+  uniqueFillCoins: z.number().optional(),
+  usesTwap: z.boolean().optional(),
+  twapFillRatio: z.number().optional(),
+  usesCloid: z.boolean().optional(),
+  cloidRatio: z.number().optional(),
+  usesPriorityGas: z.boolean().optional(),
+  totalPriorityGasPaid: z.number().optional(),
+  totalBuilderFeesPaid: z.number().optional(),
+});
+
+export const ClassifiedWalletSchema = z.object({
+  address: z.string(),
+  metrics: WalletClassifyMetricsSchema,
+  period: z.string(),
+});
+
+export const WalletClassificationSchema = z.object({
+  wallets: z.array(ClassifiedWalletSchema),
+  total: z.number(),
+  date: z.string(),
+});
+
+export const WalletClassificationResponseSchema = ApiResponseSchema(WalletClassificationSchema);
+
+// =============================================================================
+// Symbol Universe Schemas
+// =============================================================================
+
+export const SymbolEntrySchema = z.object({
+  symbol: z.string(),
+  exchange: z.string(),
+  coverageFrom: z.string().nullable().optional(),
+  coverageTo: z.string().nullable().optional(),
+  dataTypes: z.array(z.string()),
+  coverageByType: z.record(z.string()).optional(),
+  sizePerDay: z.record(z.number()).optional(),
+  slug: z.string().nullable().optional(),
+  outcomePair: z.tuple([z.string(), z.string()]).nullable().optional(),
+  displayTitle: z.string().nullable().optional(),
+  isSettled: z.boolean().nullable().optional(),
+  isActive: z.boolean().nullable().optional(),
+});
+
+export const SymbolsResponseSchema = z.object({
+  symbols: z.array(SymbolEntrySchema),
+});
+
+// =============================================================================
 // Type exports (inferred from schemas)
 // =============================================================================
 
@@ -1005,3 +1178,9 @@ export type ValidatedPositionChange = z.infer<typeof PositionChangeSchema>;
 export type ValidatedAccountSummary = z.infer<typeof AccountSummarySchema>;
 export type ValidatedMarketPositionsSummary = z.infer<typeof MarketPositionsSummarySchema>;
 export type ValidatedWalletPositions = z.infer<typeof WalletPositionsSchema>;
+export type ValidatedCvdBucket = z.infer<typeof CvdBucketSchema>;
+export type ValidatedHip3OracleDiscoveryBounds = z.infer<typeof Hip3OracleDiscoveryBoundsSchema>;
+export type ValidatedHip3OracleExternalPrice = z.infer<typeof Hip3OracleExternalPriceSchema>;
+export type ValidatedHip4Question = z.infer<typeof Hip4QuestionSchema>;
+export type ValidatedWalletClassification = z.infer<typeof WalletClassificationSchema>;
+export type ValidatedSymbolEntry = z.infer<typeof SymbolEntrySchema>;

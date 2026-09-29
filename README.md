@@ -6,7 +6,7 @@ TypeScript client for 0xArchive market data in Node services, dashboards, coding
 
 0xArchive is granular market data infrastructure for two venues: Hyperliquid and Lighter. Hyperliquid includes core perps (`/v1/hyperliquid`), HIP-3 builder perps (`/v1/hyperliquid/hip3`), HIP-4 outcome markets (`/v1/hyperliquid/hip4`), and Hyperliquid Spot (`/v1/hyperliquid/spot`). Lighter has two deployments: mainnet (`/v1/lighter`) and Robinhood Chain (`/v1/rh-lighter`). In this SDK these map to `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter`, and `client.rhLighter`. [Account positions](#account-positions) are available on `client.hyperliquid`, `client.hyperliquid.hip3`, `client.lighter`, and `client.rhLighter`.
 
-Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, and order-book reconstruction utilities.
+Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, webhook management with signature verification, and order-book reconstruction utilities.
 
 ## Installation
 
@@ -357,6 +357,18 @@ const breadthHistory = await client.hyperliquid.hip3.breadth.history({
 console.log(breadthNow.valuePct, breadthHistory.nextCursor);
 ```
 
+#### HIP-3 Oracle
+
+`client.hyperliquid.hip3.oracle` reads a builder market's oracle state. `externalPrice()` returns the latest deployer-pushed external reference price with the mark price; either can be `null` when not available. `discoveryBounds()` returns the instantaneous discovery bounds: the reference price (the external price when available, otherwise the mark price, named in `referenceSource`), the market's max leverage, the fraction applied on each side, and the resulting lower and upper bounds. The full ratcheted range can be wider when deployer-specific reset configuration applies. Both carry the source `blockNumber` and `timestamp` (Unix milliseconds).
+
+```typescript
+const px = await client.hyperliquid.hip3.oracle.externalPrice('km:US500');
+console.log(px.externalPrice, px.markPrice, px.blockNumber);
+
+const bounds = await client.hyperliquid.hip3.oracle.discoveryBounds('km:US500');
+console.log(`${bounds.lowerBound} to ${bounds.upperBound} around ${bounds.referencePrice} (${bounds.referenceSource})`);
+```
+
 #### HIP-4 Outcome Markets
 
 HIP-4 is Hyperliquid's binary outcome-market namespace. Each outcome has 2 sides (`#0` = Yes / side 0, `#1` = No / side 1, etc.). Markets are fully collateralized so there are no funding rates or liquidations. Candle history and outcome-side open interest are served from **2026-05-02**; OI updates at **~10s**. `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
@@ -390,6 +402,13 @@ const bySlug = await client.hyperliquid.hip4.getOutcomeBySlug('btc-above-78213-m
 const filtered = await client.hyperliquid.hip4.listOutcomes({
   slug: 'btc-above-78213-may-04-0600',
 });
+
+// Questions: a question groups binary outcomes under one ballot, with one
+// named outcome per choice plus a fallback outcome that resolves Yes when no
+// named choice does. Page with nextCursor.
+const questions = await client.hyperliquid.hip4.questions.list({ limit: 100 });
+const question = await client.hyperliquid.hip4.questions.get(questions.data[0].questionId);
+console.log(question.namedOutcomeIds, question.fallbackOutcomeId, question.settledNamedOutcomes);
 
 // Orderbook. Bare numeric form is recommended.
 const ob = await client.hyperliquid.hip4.getOrderbook('0');
@@ -688,13 +707,16 @@ while (orders.nextCursor) {
   allOrders.push(...next.data);
 }
 
-// Get order flow (aggregated order activity over time), in time buckets, oldest first
-const flow = await client.hyperliquid.orders.flow('BTC', {
-  start: Date.now() - 86400000,
-  end: Date.now(),
-  interval: '15m',  // optional: 1m (default), 5m, 15m, 1h
-  limit: 100  // buckets (default 1000, max 10000)
-});
+// Get order flow (aggregated order activity over time), one page of time buckets
+const flowWindow = { start: Date.now() - 86400000, end: Date.now(), interval: '1m' };  // interval: 1m (default), 5m, 15m, 1h
+let flow = await client.hyperliquid.orders.flow('BTC', flowWindow);
+const flowBuckets = [...flow.data];
+// A page holds up to `limit` buckets (default 1000, max 10000); follow the
+// cursor with the same start, end, and interval until it is undefined
+while (flow.nextCursor) {
+  flow = await client.hyperliquid.orders.flow('BTC', { ...flowWindow, cursor: flow.nextCursor });
+  flowBuckets.push(...flow.data);
+}
 
 // Get TP/SL orders
 const tpsl = await client.hyperliquid.orders.tpsl('BTC', {
@@ -1008,6 +1030,32 @@ page. Core Hyperliquid, HIP-3, and Lighter candle routes accept up to 10,000
 rows per request; HIP-4 and Spot routes accept up to 1,000. Hyperliquid Spot
 candle history starts at **2025-03-22T10:50:22Z**.
 
+### Cumulative Volume Delta (CVD)
+
+`client.hyperliquid.cvd` and `client.hyperliquid.hip3.cvd` return taker buy and sell notional per time bucket (`buyVolume`, `sellVolume`), their difference (`delta`), and a running total (`cumulativeDelta`). Intervals are `1m`, `5m`, `15m`, `30m`, `1h` (the default), `4h`, `1d` and `1w`. Buckets are labelled by their open time in UTC (`timestamp`, Unix milliseconds) and are omitted when they hold no trades; `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so weekly buckets open on Thursdays.
+
+A page holds up to `limit` buckets (default 500, max 10,000). While `nextCursor` is set, pass it back unchanged as `cursor` with the same `start`, `end` and `interval`, and stop when it is undefined. Below `1h` a page can hold fewer than `limit` buckets and still carry a cursor, so stop on the cursor, not on a short page. Without `start` or `cursor`, the response is the newest `limit` buckets of the 24 hours before `end` (or before now), with no cursor.
+
+`cumulativeDelta` restarts on every page, so rebuild it from `delta` when joining pages. A response that is one page of several says so in `meta.notice`.
+
+```typescript
+const window = { start: Date.now() - 86400000, end: Date.now(), interval: '5m' as const };
+const buckets = [];
+let page = await client.hyperliquid.cvd.history('BTC', window);
+buckets.push(...page.data);
+while (page.nextCursor) {
+  page = await client.hyperliquid.cvd.history('BTC', { ...window, cursor: page.nextCursor });
+  buckets.push(...page.data);
+}
+
+// One running total across every page
+let running = 0;
+const cvd = buckets.map((b) => ({ timestamp: b.timestamp, cvd: (running += b.delta) }));
+
+// Latest hourly buckets for a HIP-3 market (symbols keep their prefix and case)
+const hip3Cvd = await client.hyperliquid.hip3.cvd.history('km:US500');
+```
+
 ### Lighter on Robinhood Chain
 
 Lighter has two deployments: mainnet (`client.lighter`, `/v1/lighter`) and Robinhood Chain (`client.rhLighter`, `/v1/rh-lighter`). The Robinhood Chain client has the same resources and methods as the mainnet client except the L3 order book, which is not captured on this deployment, and the L1 account lookup: `instruments`, `orderbook` (including `granularity` history), `trades`, `candles`, `openInterest`, `funding`, `liquidations`, `positions`, `freshness()`, `summary()`, and `priceHistory()`.
@@ -1123,6 +1171,28 @@ How to read a response:
 
 Limits and billing: wallet and account routes return up to 5,000 rows per page (default 500), market listings up to 2,000 (default 100), the bulk route up to 2,000 (default 1,000), and summary series up to 168 hours per page. Positions rows are billed like trades, 1,000 rows per credit; the account summary routes are billed the per-request minimum. A market cursor pins its snapshot: a 409 with `error.errorCode === 'snapshot_advanced'` means that snapshot was replaced, so restart without a cursor.
 
+### Wallet Classification
+
+`client.hyperliquid.wallets.classify()` and `client.hyperliquid.hip3.wallets.classify()` return precomputed daily behavioral metrics for active wallets: order and fill counts, cancel, fill and maker ratios, order sizes, volume, fees, realized PnL, liquidation count, TWAP, client order id, builder and priority-gas usage, and more. Each response covers one daily snapshot (`date`, yesterday by default) with the total number of matching wallets (`total`); page with `offset` (up to 100,000) and `limit` (1 to 1,000, default 100).
+
+Parameters use the API's names: `min_orders` (default 100), `min_volume_usd`, `sort` (default `total_orders`), `order` (`asc` or `desc`), `uses_twap`, `uses_priority_gas`, `min_cancel_rate`, `max_cancel_rate` (0 to 1), and `date` (`YYYY-MM-DD`).
+
+```typescript
+const page = await client.hyperliquid.wallets.classify({
+  sort: 'total_volume_usd',
+  min_orders: 1000,
+  max_cancel_rate: 0.5,
+  limit: 100,
+});
+console.log(`${page.total} wallets on ${page.date}`);
+for (const wallet of page.wallets) {
+  console.log(wallet.address, wallet.metrics.totalVolumeUsd, wallet.metrics.makerRatio);
+}
+
+// HIP-3 wallets that use TWAP orders
+const hip3Twap = await client.hyperliquid.hip3.wallets.classify({ uses_twap: true });
+```
+
 ### Data Quality Monitoring
 
 Monitor data coverage, incidents, latency, and SLA compliance across venue APIs.
@@ -1214,6 +1284,18 @@ const client = new OxArchive({
   apiKey: '0xa_your_api_key',
   timeout: 60000  // 60 seconds for data quality endpoints
 });
+```
+
+### Symbol Universe
+
+`client.symbols.list()` returns every public symbol across the venue families (`exchange` is `hyperliquid`, `hip3`, `hip4`, `spot`, `lighter` or `rh-lighter`), with its coverage start and end, the data types it has, the earliest coverage per data type (`coverageByType`), and an estimated size per day per data type (`sizePerDay`). HIP-4 entries also carry the slug, outcome pair, display title and settlement state. `coverageByType` and `sizePerDay` are keyed by data type exactly as the API names them (for example `l4_orderbook`). The list is large, since every HIP-4 outcome side is an entry, so fetch it once and filter locally.
+
+```typescript
+const symbols = await client.symbols.list();
+const btc = symbols.find((s) => s.exchange === 'hyperliquid' && s.symbol === 'BTC');
+console.log(btc?.coverageFrom, btc?.dataTypes, btc?.coverageByType?.['trades']);
+
+const liveHip4 = symbols.filter((s) => s.exchange === 'hip4' && s.isSettled === false);
 ```
 
 ### Web3 Authentication
@@ -1333,6 +1415,263 @@ const orderbook = await client.orderbook.get('BTC');
 // Deprecated - use client.hyperliquid.trades.list() instead
 const trades = await client.trades.list('BTC', { start, end });
 ```
+
+## Webhooks
+
+Events pushed to your server instead of polled: liquidations, fills on wallets you watch, oracle moves, settlements, export jobs finishing, and the rest of the catalog. Deliveries are signed, retried, and logged.
+
+Three objects make a working integration:
+
+- an **endpoint**, a URL of yours plus the signing secret its deliveries are signed with,
+- a **subscription**, one rule saying which occurrences of one event type go to that endpoint,
+- a **watched wallet**, which puts an address in scope for address-scoped events such as `account.fill`.
+
+```typescript
+const client = new OxArchive({ apiKey: '0xa_your_api_key' });
+
+// 1. Where deliveries go. The secret is returned exactly once: store it now.
+const endpoint = await client.webhooks.createEndpoint({
+  url: 'https://example.com/webhooks/0xarchive',
+  description: 'trading desk',
+});
+console.log(endpoint.secret); // whsec_..., put it in your secret manager
+
+// 2. What to send. Every key in `filters` is validated against the event
+//    type's catalog entry, so a typo is an error here, not silence later.
+await client.webhooks.createSubscription({
+  endpointId: endpoint.id,
+  eventType: 'market.liquidation',
+  filters: {
+    venue: 'hyperliquid',
+    conditions: [{ metric: 'notional_usd', op: '>=', value: 250_000 }],
+  },
+});
+
+// 3. Prove the receiver works: a real signed delivery.
+await client.webhooks.testEndpoint(endpoint.id);
+```
+
+### Try a rule before you create it
+
+`estimate` answers "how often would this have fired?" over 1 to 30 days (default 7), with a per-day series, the median and busiest day, the distribution of the primary metric, and a ladder of the daily rate at other thresholds. `dryRun` returns the occurrences a rule would have delivered over the last 60 seconds to 24 hours (default 1 hour), newest first. Both validate the configuration exactly as `createSubscription` does, so an error here is the error you would have hit later.
+
+```typescript
+const estimate = await client.webhooks.estimate({
+  eventType: 'market.liquidation',
+  config: { venue: 'hyperliquid', min_notional_usd: 250_000 },
+  lookbackDays: 7,
+});
+console.log(`${estimate.perDayP50} a day, busiest day ${estimate.perDayMax}`);
+for (const rung of estimate.ladder) {
+  console.log(`>= ${rung.value}: ${rung.perDay} a day`);
+}
+
+const preview = await client.webhooks.dryRun({
+  eventType: 'market.liquidation',
+  config: { venue: 'hyperliquid', min_notional_usd: 250_000 },
+  lookbackS: 86_400,
+});
+console.log(`${preview.matched} matched in the last 24 hours`);
+console.log(preview.occurrences[0]?.data);
+```
+
+The estimate covers `account.fill`, `account.transfer`, `account.liquidated`, `market.liquidation`, `market.pga_payment`, `hip4.settlement`, `market.liquidation_burst`, `market.oi_delta`, `oracle.jump` and `market.funding_flip`; the dry run covers `account.fill`, `account.transfer` and `market.liquidation`. An address-scoped type needs at least one watched wallet. The two share a budget of 6 calls a minute per account.
+
+### Configuration is wire-shaped
+
+Everywhere else in this SDK, response keys arrive camelCased. A subscription's `filters` is the exception, in both directions: the API stores it, normalises it, and hands it back, so the SDK sends and returns it exactly as written. Use `min_notional_usd`, `params.max_age_s`, and `conditions[].metric`, not camelCase spellings of them. The same applies to a delivery's `payload`, which is the exact JSON that was signed, to an occurrence's `data`, and to the catalog's `params`, `metrics` and `operators`, whose keys are the names conditions are written against.
+
+`client.webhooks.eventTypes()` is the authority on what a rule may say: which filters an event type accepts, which parameters it declares with their defaults and bounds, which metrics conditions can test, and which operators apply to each metric type. Operator symbols are accepted and stored canonically, so a condition sent as `>=` reads back as `greater_than_or_equal`.
+
+### Plans and pauses
+
+| Plan | Endpoints | Subscriptions | Watched wallets | Deliveries per day |
+| --- | --- | --- | --- | --- |
+| Free | Not available | Not available | Not available | Not available |
+| Build | 1 | 8 | 2 | 5,000 |
+| Pro | 4 | 40 | 15 | 50,000 |
+| Scale | 12 | 200 | 50 | 500,000 |
+| Enterprise | Custom | Custom | Custom | Custom |
+
+Free has no webhook delivery: no endpoints, subscriptions or watched wallets. `estimate` and `dryRun` answer on every plan, so a rule can be designed and sized against real history first. `client.webhooks.limits()` returns the same allowances with what is in use, today's delivery budget, and how many subscriptions are paused.
+
+When an account passes its deliveries per day, or its plan stops including webhook delivery, the subscription that matched is paused and says so: `status` is `auto_paused`, `pauseReason` is `deliveries_per_day_cap` or `plan_no_webhooks`, and `pauseMessage` explains it in plain words. Nothing is buffered while a rule is paused; `suppressedCount`, `suppressedFirstAt` and `suppressedLastAt` describe what was missed, and the same window can be re-read from the REST routes. A daily-cap pause does not lift itself:
+
+```typescript
+const paused = (await client.webhooks.listSubscriptions()).filter((s) => s.status === 'auto_paused');
+for (const s of paused) console.log(s.eventType, s.pauseReason, s.pauseMessage);
+
+// Resume every paused rule at once (the cap is counted per account), or one rule
+const { resumedCount, gap } = await client.webhooks.resumeAllSubscriptions();
+console.log(`${resumedCount} resumed; re-read ${gap?.replayWindow.start} to ${gap?.replayWindow.end}`);
+const one = await client.webhooks.resumeSubscription(paused[0].id);
+```
+
+Resuming never changes your own `enabled` switch.
+
+### Verifying a delivery
+
+Every delivery carries these headers. Look them up case-insensitively, as with all HTTP headers:
+
+| Header | Value |
+| --- | --- |
+| `0xa-signature` | `t=<unix seconds>,v1=<hex digest>`, with a second `v1` during a secret rotation |
+| `0xa-event-id` | Event id, stable across every retry and repeat delivery |
+| `0xa-event-type` | The event type, for example `webhook.test` |
+
+`v1` is `HMAC-SHA256(secret, "<t>." + raw body)`, hex encoded. The key is the whole `whsec_...` string exactly as you received it: do not strip the prefix and do not decode it.
+
+**Verify the raw body.** Re-serialising a parsed body changes key order, spacing and number formatting, so `JSON.stringify(req.body)` produces different bytes and every signature fails. Capture the body before any parser touches it. The SDK helpers take the body as a string, `Buffer`, `Uint8Array` or `ArrayBuffer`, and refuse a parsed object.
+
+```typescript
+import express from 'express';
+import { constructWebhookEvent, WebhookSignatureError } from '@0xarchive/sdk';
+
+const app = express();
+
+app.post(
+  '/webhooks/0xarchive',
+  express.raw({ type: 'application/json' }), // raw Buffer, not express.json()
+  async (req, res) => {
+    let event;
+    try {
+      event = await constructWebhookEvent({
+        payload: req.body,
+        headers: req.headers,
+        secret: process.env.OXARCHIVE_WEBHOOK_SECRET!,
+      });
+    } catch (err) {
+      if (err instanceof WebhookSignatureError) {
+        console.warn(`rejected delivery: ${err.reason}`);
+        return res.sendStatus(401);
+      }
+      throw err;
+    }
+
+    res.sendStatus(202);        // acknowledge within 10 seconds
+    void handle(event);         // then do the work out of band
+  }
+);
+```
+
+Fetch-style handlers (Next.js route handlers, edge runtimes) read the body as text:
+
+```typescript
+import { verifyWebhookSignature } from '@0xarchive/sdk';
+
+export async function POST(request: Request): Promise<Response> {
+  const raw = await request.text();   // before any JSON parsing
+  const ok = await verifyWebhookSignature({
+    payload: raw,
+    headers: request.headers,
+    secret: [process.env.WEBHOOK_SECRET!, process.env.WEBHOOK_SECRET_PREVIOUS!].filter(Boolean),
+  });
+  if (!ok) return new Response('bad signature', { status: 401 });
+
+  const event = JSON.parse(raw);
+  queue(event);
+  return new Response(null, { status: 202 });
+}
+```
+
+Both helpers compare in constant time, accept a delivery when any `v1` in the header matches any secret you pass, and enforce a 300 second replay window in both directions by default (`toleranceSeconds` changes it). `constructWebhookEvent` and `assertWebhookSignature` throw `WebhookSignatureError` naming the check that failed; `verifyWebhookSignature` returns a boolean. They use WebCrypto, which Node 20 and later, browsers and edge runtimes provide; on Node 18, pass `subtle: require('node:crypto').webcrypto.subtle`.
+
+On the receiving side:
+
+1. **Deduplicate on the event id.** Delivery is at least once, and retries and repeat deliveries reuse the id. `event.id` is the signed copy of the `0xa-event-id` header; prefer it, since the header itself is not covered by the signature.
+2. **Answer 2xx quickly.** Respond within 10 seconds and do the work afterwards. A non-2xx response, a timeout or a connection error is retried after 5 seconds, 30 seconds, 2 minutes, 10 minutes and 1 hour, then hourly, for up to 24 hours. An endpoint with 10 or more consecutive failures sustained for 6 hours or more is switched off (`auto_disabled`); `client.webhooks.enableEndpoint(id)` brings it back once the receiver is healthy.
+3. **Reject what does not verify.** Answer with a 4xx and do not process the event.
+
+These vectors check a receiver in any language. The secrets are placeholders, and the body is 186 bytes with no trailing newline, so the signed string is 197 bytes.
+
+```
+t      = 1758240000
+body   = {"id": "11111111-1111-4111-8111-111111111111", "data": {"message": "Test event from 0xArchive."}, "type": "webhook.test", "observed_at": "2026-09-19T00:00:00+00:00", "schema_version": 1}
+
+secret = whsec_0000000000000000000000000000000000000000000000000000000000000000
+  0xa-signature: t=1758240000,v1=027f40e95c9aa4e8097c22493f6f019ad25407ddf35b13103f95e5501d49ec0b
+
+during a rotation, with the previous secret
+prev   = whsec_1111111111111111111111111111111111111111111111111111111111111111
+  0xa-signature: t=1758240000,v1=027f40e95c9aa4e8097c22493f6f019ad25407ddf35b13103f95e5501d49ec0b,v1=f8e6ae6781adad70ed0f94773fa2745147b718136e83fc22cafa09ded928095c
+```
+
+A verifier holding only the previous secret must accept the second header and reject the first. A verifier that reads only the first `v1` fails that case, which is the bug to catch before a rotation does.
+
+### Rotating a secret
+
+`rotateSecret` returns a new secret once and keeps the previous one verifying for 24 hours. Every delivery in that window carries two `v1` signatures, one per secret, so a receiver holding either keeps working.
+
+```typescript
+const { secret } = await client.webhooks.rotateSecret(endpoint.id);
+// Accept both until every instance has the new one, then drop the old one.
+const ok = await verifyWebhookSignature({
+  payload: rawBody,
+  headers,
+  secret: [secret, previousSecret],
+});
+```
+
+### Deliveries and repeat deliveries
+
+`listDeliveries` returns an endpoint's delivery log, newest first, each record with its state, attempt count, last status code, error and latency, and the payload as sent. `redeliver` queues a past delivery again with the same event id, which is the safe way to replay an event into a receiver that has fixed a bug.
+
+```typescript
+const deliveries = await client.webhooks.listDeliveries(endpoint.id, { limit: 20 });
+const failed = deliveries.filter((d) => d.state === 'failed' || d.state === 'exhausted');
+for (const delivery of failed) {
+  console.log(`${delivery.eventType}: ${delivery.lastStatusCode} ${delivery.lastError}`);
+  await client.webhooks.redeliver(delivery.id);
+}
+```
+
+### Watched wallets
+
+Address-scoped events report only on wallets on your watched list. Add them first, then subscribe.
+
+```typescript
+await client.webhooks.addAddress({
+  address: '0x1111111111111111111111111111111111111111',
+  label: 'desk',
+});
+
+const { addresses, limit } = await client.webhooks.listAddresses();
+console.log(`watching ${addresses.length} of ${limit}`);
+
+await client.webhooks.createSubscription({
+  endpointId: endpoint.id,
+  eventType: 'account.fill',
+  filters: { min_notional_usd: 25_000 },
+});
+```
+
+### Method reference
+
+| Method | Route |
+| --- | --- |
+| `webhooks.eventTypes()` | `GET /v1/webhooks/event-types` |
+| `webhooks.limits()` | `GET /v1/webhooks/limits` |
+| `webhooks.listEndpoints()` | `GET /v1/webhooks/endpoints` |
+| `webhooks.createEndpoint(params)` | `POST /v1/webhooks/endpoints` |
+| `webhooks.deleteEndpoint(id)` | `DELETE /v1/webhooks/endpoints/{id}` |
+| `webhooks.enableEndpoint(id)` | `POST /v1/webhooks/endpoints/{id}/enable` |
+| `webhooks.rotateSecret(id)` | `POST /v1/webhooks/endpoints/{id}/rotate` |
+| `webhooks.testEndpoint(id)` | `POST /v1/webhooks/endpoints/{id}/test` |
+| `webhooks.listDeliveries(id, params?)` | `GET /v1/webhooks/endpoints/{id}/deliveries` |
+| `webhooks.redeliver(deliveryId)` | `POST /v1/webhooks/deliveries/{id}/redeliver` |
+| `webhooks.listSubscriptions()` | `GET /v1/webhooks/subscriptions` |
+| `webhooks.createSubscription(params)` | `POST /v1/webhooks/subscriptions` |
+| `webhooks.updateSubscription(id, params)` | `PATCH /v1/webhooks/subscriptions/{id}` |
+| `webhooks.deleteSubscription(id)` | `DELETE /v1/webhooks/subscriptions/{id}` |
+| `webhooks.resumeSubscription(id)` | `POST /v1/webhooks/subscriptions/{id}/resume` |
+| `webhooks.resumeAllSubscriptions()` | `POST /v1/webhooks/subscriptions/resume` |
+| `webhooks.dryRun(params)` | `POST /v1/webhooks/subscriptions/dry-run` |
+| `webhooks.estimate(params)` | `POST /v1/webhooks/subscriptions/estimate` |
+| `webhooks.listAddresses()` | `GET /v1/webhooks/addresses` |
+| `webhooks.addAddress(params)` | `POST /v1/webhooks/addresses` |
+| `webhooks.deleteAddress(id)` | `DELETE /v1/webhooks/addresses/{id}` |
+
+See the [webhooks guide](https://docs.0xarchive.io/webhooks) for the event catalog and payloads.
 
 ## WebSocket Client
 
@@ -1492,6 +1831,7 @@ const ws = new OxArchiveWs({
 | `all_tickers` | All market tickers | No | Yes | No |
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
+| `orderbook_full` | Full-depth L2 order book (every price level) | Yes | Yes | No |
 
 Each `liquidations` data message is a fill row with `is_liquidation: true` — the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
 
@@ -1500,6 +1840,27 @@ Hyperliquid core `l4_diffs` and `l4_orders` support bounded replay as an
 by `(block_number, seq)`; pass an explicit `end` for the bounded request and
 the replay `speed` option is ignored. HIP-3,
 HIP-4, and Hyperliquid Spot L4 channels remain live-only.
+
+`orderbook_full` (and `hip3_orderbook_full` for HIP-3) streams the whole
+aggregated book rather than the top levels. A subscription starts with an
+`l4_snapshot` message holding every bid and ask level (`{ px, sz, n }`) plus
+level counts, total sizes, mid, spread and `last_block_number`, then sends
+`l4_batch` messages of level changes (`{ side, px, sz, n, bn }`, where `sz: 0`
+removes the level). Read them with `onMessage`; the types are
+`WsL2FullDepthSnapshot` and `WsL2FullDepthBatch`. These channels are
+live-only: the SDK refuses a replay request for them before sending it. For
+full-depth history use `l2Orderbook.history()` and `l2Orderbook.diffs()`.
+
+```typescript
+ws.on('onMessage', (message) => {
+  if (message.type === 'l4_snapshot' && message.channel === 'orderbook_full') {
+    console.log(`${message.data.bid_count} bid levels, ${message.data.ask_count} ask levels`);
+  } else if (message.type === 'l4_batch' && message.channel === 'orderbook_full') {
+    for (const change of message.data) console.log(change.side, change.px, change.sz);
+  }
+});
+ws.subscribe('orderbook_full', 'BTC');
+```
 
 #### HIP-3 Builder Perps Channels
 
@@ -1513,6 +1874,7 @@ HIP-4, and Hyperliquid Spot L4 channels remain live-only.
 | `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
+| `hip3_orderbook_full` | HIP-3 full-depth L2 order book (every price level) | Yes | Yes | No |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -1907,11 +2269,32 @@ import type {
   WalletPositions,
   PositionsResponse,
   LighterL1Accounts,
+  // CVD, HIP-3 oracle, HIP-4 questions, wallet classification, symbols
+  CvdBucket,
+  Hip3OracleDiscoveryBounds,
+  Hip3OracleExternalPrice,
+  Hip4Question,
+  WalletClassification,
+  SymbolEntry,
+  // Webhooks
+  WebhookEvent,
+  WebhookEndpoint,
+  WebhookSubscription,
+  WebhookSubscriptionConfig,
+  WebhookCondition,
+  WebhookDelivery,
+  WebhookEventTypeDeclaration,
+  WebhookLimits,
+  WebhookEstimateResult,
+  WebhookDryRunResult,
+  WebhookWatchedAddress,
   WsOptions,
   WsChannel,
   WsConnectionState,
   WsReplaySnapshot,
   WsSubscribeOptions,
+  WsL2FullDepthSnapshot,
+  WsL2FullDepthBatch,
   // Live Lighter WebSocket payloads (both deployments)
   LighterLiveOrderbook,
   LighterLiveTrade,

@@ -9,6 +9,8 @@ import {
   OpenInterestResource,
   DataQualityResource,
   Web3Resource,
+  WebhooksResource,
+  SymbolsResource,
 } from './resources';
 
 const DEFAULT_BASE_URL = 'https://api.0xarchive.io';
@@ -26,6 +28,9 @@ const DEFAULT_TIMEOUT = 30000;
  *   trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
  * - `client.lighter` - Lighter.xyz, mainnet deployment
  * - `client.rhLighter` - Lighter.xyz, Robinhood Chain deployment (USDG-quoted)
+ *
+ * Webhook management is on `client.webhooks`, and the public symbol
+ * universe with coverage per symbol on `client.symbols`.
  *
  * Account positions are on `client.hyperliquid.positions`,
  * `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
@@ -109,6 +114,19 @@ export class OxArchive {
   public readonly web3: Web3Resource;
 
   /**
+   * Webhooks: endpoints, subscriptions, watched wallets, deliveries, the
+   * event catalog, plan limits and the estimate and dry-run previews. Pair
+   * with `verifyWebhookSignature` or `constructWebhookEvent` on your receiver.
+   */
+  public readonly webhooks: WebhooksResource;
+
+  /**
+   * The public symbol universe across every venue family, with coverage
+   * dates and data types per symbol (`GET /v1/symbols`).
+   */
+  public readonly symbols: SymbolsResource;
+
+  /**
    * @deprecated Use client.hyperliquid.orderbook instead
    */
   public readonly orderbook: OrderBookResource;
@@ -161,6 +179,12 @@ export class OxArchive {
 
     // Web3 wallet-based authentication
     this.web3 = new Web3Resource(this.http);
+
+    // Webhooks (endpoints, subscriptions, watched addresses, deliveries)
+    this.webhooks = new WebhooksResource(this.http);
+
+    // Public symbol universe (cross-venue)
+    this.symbols = new SymbolsResource(this.http);
 
     // Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
     // These will be removed in v2.0

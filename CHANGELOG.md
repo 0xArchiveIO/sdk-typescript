@@ -64,12 +64,60 @@ semver in spirit.
 - `OxArchiveError.errorCode`: the API's stable error code when it sends one,
   for example `snapshot_advanced` on a 409 from a positions cursor whose
   snapshot was replaced.
-- `OrderFlowParams.cursor` (Hyperliquid, HIP-3 and HIP-4): a resume point
-  in Unix milliseconds; the API starts the response at the first bucket that
-  opens after it. `orders.flow()` and `hyperliquid.hip4.getOrderFlow()`
-  already sent any params they were given, so this adds the type and the
-  docs. The API does not return `nextCursor` on order flow yet, so
-  `nextCursor` on an order-flow response is undefined.
+- `OrderFlowParams.cursor` (Hyperliquid, HIP-3 and HIP-4). Order flow is
+  paged: a page holds the oldest `limit` buckets of the window, and
+  `nextCursor` is set while more may follow. Pass it back as `cursor` with
+  the same `start`, `end` and `interval` until it is undefined.
+  `orders.flow()` and `hyperliquid.hip4.getOrderFlow()` already sent any
+  params they were given, so this adds the type and the docs.
+- Webhooks: `client.webhooks` covers all 21 webhook routes. Catalog and
+  limits (`eventTypes()`, `limits()`); endpoints (`listEndpoints()`,
+  `createEndpoint()`, `deleteEndpoint()`, `enableEndpoint()`,
+  `rotateSecret()`, `testEndpoint()`); deliveries (`listDeliveries()`,
+  `redeliver()`); subscriptions (`listSubscriptions()`,
+  `createSubscription()`, `updateSubscription()`, `deleteSubscription()`,
+  `resumeSubscription()`, `resumeAllSubscriptions()`); the previews
+  (`estimate()`, `dryRun()`); and watched wallets (`listAddresses()`,
+  `addAddress()`, `deleteAddress()`). Subscriptions carry their pause state
+  (`status`, `pauseReason`, `pauseMessage`, `suppressedCount` and the
+  record of the previous pause), and a resume returns the window that was
+  missed (`gap.replayWindow`).
+- Webhook signature verification: `constructWebhookEvent()` verifies a
+  delivery and returns the parsed event, `verifyWebhookSignature()` answers
+  the same question as a boolean, and `assertWebhookSignature()` throws a
+  `WebhookSignatureError` naming the check that failed. They take the raw
+  body as a string, `Buffer`, `Uint8Array` or `ArrayBuffer` and refuse a
+  parsed object, accept a delivery when any `v1` in `0xa-signature` matches
+  any secret passed (so both signatures work during a secret rotation),
+  compare in constant time, and enforce a 300 second replay window by
+  default (`toleranceSeconds`). `createWebhookSignatureHeader()`,
+  `parseWebhookSignatureHeader()` and `readWebhookHeader()` help test a
+  receiver.
+- Cumulative volume delta: `client.hyperliquid.cvd.history()` and
+  `client.hyperliquid.hip3.cvd.history()` return taker buy and sell notional,
+  delta and a running total per bucket (`1m` to `1w`, default `1h`), cursor
+  paged. Pass `nextCursor` back unchanged with the same window; the running
+  total restarts on every page.
+- HIP-3 oracle: `client.hyperliquid.hip3.oracle.externalPrice()` (the latest
+  deployer-pushed external price and mark price) and `discoveryBounds()`
+  (the instantaneous discovery bounds around the reference price).
+- HIP-4 questions: `client.hyperliquid.hip4.questions.list()` (cursor paged)
+  and `get()`, with `listQuestions()` and `getQuestion()` on the HIP-4
+  client. A question groups binary outcomes under one ballot.
+- Wallet classification: `client.hyperliquid.wallets.classify()` and
+  `client.hyperliquid.hip3.wallets.classify()` return precomputed daily
+  behavioral metrics per wallet, with filters, sorting and offset paging.
+- `client.symbols.list()`: the public symbol universe across every venue
+  family, with coverage dates, data types, and coverage and size per data
+  type.
+- WebSocket channels `orderbook_full` (Hyperliquid core) and
+  `hip3_orderbook_full` (HIP-3): the full-depth L2 book, live. A
+  subscription starts with an `l4_snapshot` message holding every price
+  level and continues with `l4_batch` messages of level changes, typed as
+  `WsL2FullDepthSnapshot` and `WsL2FullDepthBatch` and accepted by
+  `WsServerMessageSchema`. The API does not replay these channels, so
+  `replay()` and `multiReplay()` refuse them before sending.
+- Types and Zod schemas for every new response.
 
 ### Changed
 - `trades.list()` now also returns `meta`, so Lighter callers (both
@@ -85,8 +133,23 @@ semver in spirit.
   accepts it.
 - `OrderFlowParams.interval` documents the buckets the API serves: `'1m'`
   (the default), `'5m'`, `'15m'` and `'1h'`.
+- The HTTP layer gained `PATCH` and `DELETE`, which the webhook routes need,
+  and every verb now shares one request path. Behaviour for existing
+  resources is unchanged.
+- Response key conversion can leave a subtree exactly as the API sent it.
+  A webhook subscription's `filters`, a delivery's `payload`, an
+  occurrence's `data`, the event catalog's `params`, `metrics`, `operators`
+  and `filtersExample`, and the symbol list's `coverageByType` and
+  `sizePerDay` keep their keys, because those keys are data. Every other
+  response is converted as before.
 
 ### Fixed
+- `OxArchiveError.requestId` is set on failed requests. An error response
+  carries `request_id` at the top level rather than under `meta`, so it was
+  undefined on every error before.
+- `hyperliquid.hip4.outcomes.list()` and `listOutcomes()` send `isSettled` as
+  `is_settled`, the parameter the API reads. Before, the filter was ignored
+  and settled and live outcomes came back alike.
 - Times without a time zone are UTC on every method. Before, a date-time
   string without an offset (`'2026-09-01T00:00:00'`) was read as the
   machine's local time where the SDK parsed it (candles, tick-level order
@@ -99,6 +162,12 @@ semver in spirit.
   offset-less date-time is UTC, and a `Z` or `+hh:mm` offset is honored.
 
 ### Documentation
+- The README's order-flow example follows `nextCursor` with the same
+  window.
+- README sections for webhooks (setup, previews, plans and pauses,
+  verifying a delivery with test vectors, secret rotation, deliveries,
+  watched wallets), CVD, the HIP-3 oracle, HIP-4 questions, wallet
+  classification, the symbol universe and the full-depth WebSocket channels.
 - The README's HIP-3 coverage row lists each dataset's first date, replacing
   "February 2026+": trades and oracle prices from 2025-10-13, candles and
   liquidations from 2025-12-22, order book, funding and open interest from

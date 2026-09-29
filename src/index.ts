@@ -10,6 +10,9 @@
  *   and Robinhood Chain at /v1/rh-lighter and client.rhLighter
  * - Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
  *   client.lighter.positions and client.rhLighter.positions
+ * - Webhook management on client.webhooks, with verifyWebhookSignature and
+ *   constructWebhookEvent for receivers
+ * - The public symbol universe on client.symbols
  *
  * @example
  * ```typescript
@@ -85,6 +88,40 @@ export {
 // L2 Full-Depth Orderbook resource
 export { L2OrderBookResource, type L2OrderBookParams } from './resources/l2-orderbook';
 export { Hip3BreadthResource } from './resources/hip3-breadth';
+
+// CVD, HIP-3 oracle, HIP-4 questions, wallet classification and symbol resources
+export {
+  CvdResource,
+  Hip3OracleResource,
+  Hip4QuestionsResource,
+  WalletsResource,
+  SymbolsResource,
+} from './resources';
+
+// Webhooks: management resource and signature verification for your receiver
+export { WebhooksResource } from './resources/webhooks';
+export {
+  constructWebhookEvent,
+  verifyWebhookSignature,
+  assertWebhookSignature,
+  createWebhookSignatureHeader,
+  parseWebhookSignatureHeader,
+  readWebhookHeader,
+  WebhookSignatureError,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_EVENT_ID_HEADER,
+  WEBHOOK_EVENT_TYPE_HEADER,
+  DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+  type WebhookEvent,
+  type WebhookHeaders,
+  type WebhookPayload,
+  type WebhookDeliveryContext,
+  type WebhookVerificationFailure,
+  type ParsedWebhookSignature,
+  type VerifyWebhookOptions,
+  type SubtleCryptoLike,
+  type WebhookCryptoKey,
+} from './webhook-signature';
 
 // Tick-level history params
 export type { TickHistoryParams } from './resources/orderbook';
@@ -185,6 +222,26 @@ export {
   // Price Snapshot schemas
   PriceSnapshotSchema,
   PriceSnapshotArrayResponseSchema,
+  // CVD schemas
+  CvdBucketSchema,
+  CvdBucketArrayResponseSchema,
+  // HIP-3 oracle schemas
+  Hip3OracleDiscoveryBoundsSchema,
+  Hip3OracleExternalPriceSchema,
+  Hip3OracleDiscoveryBoundsResponseSchema,
+  Hip3OracleExternalPriceResponseSchema,
+  // HIP-4 question schemas
+  Hip4QuestionSchema,
+  Hip4QuestionResponseSchema,
+  Hip4QuestionArrayResponseSchema,
+  // Wallet classification schemas
+  WalletClassifyMetricsSchema,
+  ClassifiedWalletSchema,
+  WalletClassificationSchema,
+  WalletClassificationResponseSchema,
+  // Symbol universe schemas
+  SymbolEntrySchema,
+  SymbolsResponseSchema,
   // WebSocket schemas
   WsChannelSchema,
   WsConnectionStateSchema,
@@ -201,6 +258,9 @@ export {
   WsReplayStoppedSchema,
   WsL4SnapshotSchema,
   WsL4BatchSchema,
+  WsL2FullDepthLevelSchema,
+  WsL2FullDepthSnapshotDataSchema,
+  WsL2FullDepthDeltaSchema,
   WsReplaySnapshotSchema,
   WsHistoricalDataSchema,
   WsStreamStartedSchema,
@@ -240,6 +300,12 @@ export {
   type ValidatedAccountSummary,
   type ValidatedMarketPositionsSummary,
   type ValidatedWalletPositions,
+  type ValidatedCvdBucket,
+  type ValidatedHip3OracleDiscoveryBounds,
+  type ValidatedHip3OracleExternalPrice,
+  type ValidatedHip4Question,
+  type ValidatedWalletClassification,
+  type ValidatedSymbolEntry,
 } from './schemas';
 
 // Types
@@ -352,6 +418,24 @@ export type {
   // Price History
   PriceSnapshot,
   PriceHistoryParams,
+  // CVD
+  CvdInterval,
+  CvdParams,
+  CvdBucket,
+  // HIP-3 oracle
+  Hip3OracleDiscoveryBounds,
+  Hip3OracleExternalPrice,
+  // HIP-4 questions
+  Hip4Question,
+  Hip4ListQuestionsParams,
+  // Wallet classification
+  WalletClassifySort,
+  WalletClassifyParams,
+  WalletClassifyMetrics,
+  ClassifiedWallet,
+  WalletClassification,
+  // Symbol universe
+  SymbolEntry,
   // Data Quality
   SystemStatusValue,
   ExchangeStatus,
@@ -396,6 +480,7 @@ export type {
   Hip4L4Channel,
   SpotL4Channel,
   HyperliquidL4LiveOnlyChannel,
+  FullDepthL2Channel,
   LighterLiveChannel,
   LighterReplayOnlyChannel,
   RhLighterLiveChannel,
@@ -453,6 +538,12 @@ export type {
   WsL4DiffEvent,
   WsL4OrderEvent,
   WsL4BatchEvent,
+  // Full-depth L2 WebSocket types
+  WsL2FullDepthLevel,
+  WsL2FullDepthSnapshotData,
+  WsL2FullDepthDelta,
+  WsL2FullDepthSnapshot,
+  WsL2FullDepthBatch,
   // Live Lighter WebSocket payloads
   LighterLiveBookLevel,
   LighterLiveOrderbook,
@@ -461,6 +552,50 @@ export type {
   LighterLiveStats,
   // HIP-4 settlement event
   WsOutcomeSettled,
+  // Webhooks
+  WebhookSubscriptionConfig,
+  WebhookConditionCanonicalOperator,
+  WebhookConditionOperator,
+  WebhookCondition,
+  WebhookParamDeclaration,
+  WebhookMetricDeclaration,
+  WebhookCostFloor,
+  WebhookEventTypeDeclaration,
+  WebhookEndpointStatus,
+  WebhookEndpoint,
+  CreatedWebhookEndpoint,
+  CreateWebhookEndpointParams,
+  RotatedWebhookSecret,
+  WebhookPauseReason,
+  WebhookSubscription,
+  CreateWebhookSubscriptionParams,
+  UpdateWebhookSubscriptionParams,
+  WebhookReplayWindow,
+  WebhookResumeGap,
+  WebhookSubscriptionResumeResult,
+  WebhookSubscriptionResumeAllResult,
+  WebhookDeliveryState,
+  WebhookDelivery,
+  ListWebhookDeliveriesParams,
+  WebhookTestFireResult,
+  WebhookRedeliveryResult,
+  WebhookWatchedAddress,
+  WebhookWatchedAddressList,
+  AddWebhookAddressParams,
+  WebhookLimitUsage,
+  WebhookDeliveryBudget,
+  WebhookPausedSubscriptions,
+  WebhookLimits,
+  WebhookWindow,
+  WebhookOccurrence,
+  WebhookDryRunParams,
+  WebhookDryRunResult,
+  WebhookEstimateParams,
+  WebhookDayCount,
+  WebhookEstimateRung,
+  WebhookEstimateDistribution,
+  WebhookEstimateBasis,
+  WebhookEstimateResult,
   // Errors
   ApiError,
 } from './types';

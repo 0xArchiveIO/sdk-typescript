@@ -28,3 +28,9 @@ export {
   LighterAccountsResource,
   type LighterAccountIndex,
 } from './positions';
+export { WebhooksResource } from './webhooks';
+export { CvdResource } from './cvd';
+export { Hip3OracleResource } from './hip3-oracle';
+export { Hip4QuestionsResource } from './hip4-questions';
+export { WalletsResource } from './wallets';
+export { SymbolsResource } from './symbols';
