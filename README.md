@@ -347,6 +347,7 @@ snapshots; `interval` uses the last snapshot in each bucket.
 
 ```typescript
 const breadthNow = await client.hyperliquid.hip3.breadth.current();
+const coreBreadthNow = await client.hyperliquid.breadth.current(); // core perps, same shape
 const breadthHistory = await client.hyperliquid.hip3.breadth.history({
   start: Date.parse('2026-08-28T00:00:00Z'),
   end: Date.now(),
