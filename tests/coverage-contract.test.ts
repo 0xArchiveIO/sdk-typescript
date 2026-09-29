@@ -58,6 +58,8 @@ describe('HIP-4 candles and coverage contract', () => {
         },
       ],
       nextCursor: '1777708860000',
+      hasMore: true,
+      meta: { count: 1, nextCursor: '1777708860000', requestId: 'request-1' },
     });
 
     const [requestUrl] = fetchMock.mock.calls[0] as [string];
@@ -304,8 +306,8 @@ describe('HIP-4 candles and coverage contract', () => {
     expect(l3Section).toContain('2026-03-05T00:00:00Z');
     expect(l3Section).not.toContain('1704067200000');
     expect(readme).not.toContain('tick-level individual order detail');
-    expect(readme).toContain('live bridges are paused');
-    expect(types).toContain('stored replay only; live bridges paused');
+    expect(readme).not.toContain('live bridges are paused');
+    expect(types).not.toContain('live bridges paused');
     expect(types).toContain('The SDK URL-encodes `#` to `%23` on the wire');
     expect(types).not.toContain('it does NOT auto-encode `#`');
     expect(readme).toMatch(/Per fill.*maker.*taker/i);
@@ -421,9 +423,10 @@ describe('HIP-4 candles and coverage contract', () => {
       },
       namespaces: { eligible: {}, above: {}, at: {}, below: {} },
     });
-    expect(history).toEqual({
+    expect(history).toMatchObject({
       data: [current],
       nextCursor: '1756382400000',
+      hasMore: true,
     });
 
     const currentUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));

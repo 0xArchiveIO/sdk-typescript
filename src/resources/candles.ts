@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, Candle, CandleHistoryParams, CursorResponse } from '../types';
 import { CandleArrayResponseSchema } from '../schemas';
 import { toUnixMs } from '../time';
@@ -26,7 +26,7 @@ import { toUnixMs } from '../time';
  *
  * // Get all pages
  * const allCandles = [...result.data];
- * while (result.nextCursor) {
+ * while (result.hasMore) {
  *   result = await client.hyperliquid.candles.history('BTC', {
  *     start: Date.now() - 86400000,
  *     end: Date.now(),
@@ -72,9 +72,6 @@ export class CandlesResource {
       query as unknown as Record<string, unknown>,
       this.http.validationEnabled ? CandleArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }

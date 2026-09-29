@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, OpenInterest, OpenInterestHistoryParams } from '../types';
 import { OpenInterestResponseSchema, OpenInterestArrayResponseSchema } from '../schemas';
 
@@ -19,7 +19,7 @@ import { OpenInterestResponseSchema, OpenInterestArrayResponseSchema } from '../
  *
  * // Get all pages
  * const allRecords = [...result.data];
- * while (result.nextCursor) {
+ * while (result.hasMore) {
  *   result = await client.openInterest.history('ETH', {
  *     start: Date.now() - 86400000,
  *     end: Date.now(),
@@ -50,10 +50,7 @@ export class OpenInterestResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OpenInterestArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**

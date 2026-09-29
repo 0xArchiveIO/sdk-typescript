@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -15,9 +15,17 @@ import { TriggerLevelsHistoryResponseSchema, TriggerLevelsResponseSchema } from 
  * HIP-3 and HIP-4 only: Spot order history takes no filters.
  */
 export interface OrderHistoryParams extends CursorPaginationParams {
+  /** Only this wallet's orders. */
   user?: string;
+  /** Only events with this status (e.g. `filled`, `canceled`, `open`). */
   status?: string;
+  /** Only this order type (e.g. `Limit`, `Stop Market`). */
   order_type?: string;
+  /**
+   * `true` keeps only trigger events (status `triggered`); `false` leaves
+   * them out. Send the same value on every page of a cursor walk.
+   */
+  triggered?: boolean;
 }
 
 export interface OrderFlowParams {
@@ -72,7 +80,7 @@ export class OrderHistoryResource<P extends CursorPaginationParams = CursorPagin
       `${this.basePath}/orders/${this.coinTransform(symbol)}/history`,
       params as unknown as Record<string, unknown>
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 }
 
@@ -87,8 +95,8 @@ export class OrderFlowResource extends OrderHistoryResource<OrderHistoryParams> 
    *
    * Buckets are labelled by their open time in UTC, and buckets with no
    * events are omitted. A page holds the oldest `limit` buckets of the
-   * window; while `nextCursor` is set, pass it back as `cursor` with the
-   * same `start`, `end` and `interval`, and stop when it is undefined.
+   * window; while `hasMore` is true, pass `nextCursor` back as `cursor` with
+   * the same `start`, `end` and `interval`, and stop when `hasMore` is false.
    *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
    * @param params - Time range, interval, and cursor pagination parameters
@@ -99,7 +107,7 @@ export class OrderFlowResource extends OrderHistoryResource<OrderHistoryParams> 
       `${this.basePath}/orders/${this.coinTransform(symbol)}/flow`,
       params as unknown as Record<string, unknown>
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 
   /**
@@ -114,7 +122,7 @@ export class OrderFlowResource extends OrderHistoryResource<OrderHistoryParams> 
       `${this.basePath}/orders/${this.coinTransform(symbol)}/tpsl`,
       params as unknown as Record<string, unknown>
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 }
 
@@ -186,9 +194,6 @@ export class OrdersResource extends OrderFlowResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? TriggerLevelsHistoryResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }

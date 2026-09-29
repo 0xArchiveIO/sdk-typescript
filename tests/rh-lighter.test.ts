@@ -29,12 +29,14 @@ function requestUrl(fetchMock: ReturnType<typeof vi.fn>, call = 0): URL {
 
 const range = { start: 1_782_504_626_605, end: 1_782_591_026_605 };
 
-// A liquidation row as the API serializes it (snake_case). Rows from before
-// live capture, backfilled from the venue's finalized export, carry source
+// A liquidation row as the API serializes it (snake_case, API version
+// 2026-10-01: RFC 3339 timestamp plus timestamp_ms). Rows from before live
+// capture, backfilled from the venue's finalized export, carry source
 // 'bucket' and an empty raw_json.
 const LIQUIDATION_ROW = {
   symbol: 'BTC',
-  timestamp: 1_782_600_000_000,
+  timestamp: '2026-06-27T22:40:00.000Z',
+  timestamp_ms: 1_782_600_000_000,
   transaction_time_us: 1_782_600_000_000_123,
   trade_id: 41_234_567,
   liquidation_type: 'partial',
@@ -179,13 +181,14 @@ describe('Lighter on Robinhood Chain REST client', () => {
     expect(requestUrl(fetchMock).pathname).toBe('/v1/rh-lighter/trades/BTC');
   });
 
-  it('surfaces the candles refusal as an OxArchiveError until candles are enabled', async () => {
+  it('surfaces a candles refusal as an OxArchiveError with its error code', async () => {
     stubFetch(
       reply(
         {
           success: false,
-          error:
-            'Candles are not yet available for Lighter (Robinhood Chain). Trades, orderbook, open interest, funding and liquidations are.',
+          code: 503,
+          error_code: 'upstream_unavailable',
+          error: 'Candles are temporarily unavailable for Lighter (Robinhood Chain).',
         },
         503,
       ),
@@ -194,7 +197,7 @@ describe('Lighter on Robinhood Chain REST client', () => {
 
     const failure = client.rhLighter.candles.history('BTC', { ...range, interval: '1h' });
     await expect(failure).rejects.toBeInstanceOf(OxArchiveError);
-    await expect(failure).rejects.toMatchObject({ code: 503 });
+    await expect(failure).rejects.toMatchObject({ code: 503, status: 503, errorCode: 'upstream_unavailable' });
   });
 });
 
@@ -219,7 +222,8 @@ describe('Lighter liquidations (both deployments)', () => {
     expect(first.data).toHaveLength(1);
     expect(first.data[0]).toStrictEqual({
       symbol: 'BTC',
-      timestamp: 1_782_600_000_000,
+      timestamp: '2026-06-27T22:40:00.000Z',
+      timestampMs: 1_782_600_000_000,
       transactionTimeUs: 1_782_600_000_000_123,
       tradeId: 41_234_567,
       liquidationType: 'partial',
@@ -258,7 +262,7 @@ describe('Lighter liquidations (both deployments)', () => {
 
   it('returns Lighter volume buckets (total and count)', async () => {
     const fetchMock = stubFetch(
-      ok([{ symbol: 'ETH', timestamp: 1_782_604_800_000, total_usd: 125_000.5, count: 7 }], {
+      ok([{ symbol: 'ETH', timestamp: '2026-06-28T00:00:00.000Z', timestamp_ms: 1_782_604_800_000, total_usd: 125_000.5, count: 7 }], {
         next_cursor: '1782604800000',
       }),
     );
@@ -266,7 +270,9 @@ describe('Lighter liquidations (both deployments)', () => {
 
     const volume = await client.lighter.liquidations.volume('eth', { ...range, interval: '1h' });
 
-    expect(volume.data).toStrictEqual([{ symbol: 'ETH', timestamp: 1_782_604_800_000, totalUsd: 125_000.5, count: 7 }]);
+    expect(volume.data).toStrictEqual([
+      { symbol: 'ETH', timestamp: '2026-06-28T00:00:00.000Z', timestampMs: 1_782_604_800_000, totalUsd: 125_000.5, count: 7 },
+    ]);
     expect(volume.nextCursor).toBe('1782604800000');
     const url = requestUrl(fetchMock);
     expect(url.pathname).toBe('/v1/lighter/liquidations/ETH/volume');

@@ -3,6 +3,10 @@
  * For large historical downloads, use the S3 Parquet bulk export at
  * https://www.0xarchive.io/data.
  *
+ * The client connects with `version=2026-10-01` (`API_VERSION`), the API
+ * contract this SDK parses: error messages carry `error_code`, and Lighter and
+ * Robinhood Chain replay rows use the live payload shapes.
+ *
  * @example Real-time streaming
  * ```typescript
  * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
@@ -11,7 +15,7 @@
  * ws.subscribeOrderbook('BTC');
  * ```
  *
- * @example Live Lighter.xyz data
+ * @example Live Lighter data
  * ```typescript
  * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
  * ws.onLighterOrderbook((coin, book) => console.log(coin, book.levels[0][0]?.px));
@@ -50,10 +54,13 @@ import type {
   WsReplay,
   WsStandardReplayChannel,
   WsStandardReplayOptions,
-  WsCoreL4ReplayOptions,
+  WsBulkReplayChannel,
+  WsBulkReplayOptions,
+  WsError,
   HyperliquidCoreL4Channel,
   HyperliquidL4LiveOnlyChannel,
   FullDepthL2Channel,
+  CapabilityDatatype,
   LighterLiveChannel,
   LighterReplayOnlyChannel,
   RhLighterLiveChannel,
@@ -81,35 +88,142 @@ import type {
   WsGapDetected,
   WsOutcomeSettled,
 } from './types';
+import { API_VERSION, type Venue } from './contract';
 
 const DEFAULT_WS_URL = 'wss://api.0xarchive.io/ws';
 const DEFAULT_PING_INTERVAL = 30000; // 30 seconds
 const DEFAULT_RECONNECT_DELAY = 1000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
 
+// =============================================================================
+// Channel capabilities
+// =============================================================================
+
+/** What one WebSocket channel offers. */
+export interface WsChannelCapability {
+  /** The venue the channel belongs to (`/v1/capabilities` `venue`). */
+  venue: Venue;
+  /** The datatype the channel carries (`/v1/capabilities` `datatype`). */
+  datatype: CapabilityDatatype;
+  /** True when the channel accepts live subscriptions. */
+  live: boolean;
+  /** True when the channel replays history. */
+  replay: boolean;
+  /**
+   * True when the replay is bulk: single-channel, bounded by an explicit
+   * `end`, `speed` ignored, delivered as an `l4_snapshot` anchor and ordered
+   * `l4_batch` pages.
+   */
+  bulkReplay: boolean;
+}
+
+const offer = (
+  venue: Venue,
+  datatype: CapabilityDatatype,
+  modes: { live?: boolean; replay?: boolean; bulk?: boolean },
+): WsChannelCapability => ({
+  venue,
+  datatype,
+  live: modes.live ?? false,
+  replay: (modes.replay ?? false) || (modes.bulk ?? false),
+  bulkReplay: modes.bulk ?? false,
+});
+
+const LIVE_AND_REPLAY = { live: true, replay: true } as const;
+const LIVE_AND_BULK = { live: true, bulk: true } as const;
+const LIVE_ONLY = { live: true } as const;
+const REPLAY_ONLY = { replay: true } as const;
+
+/**
+ * Every WebSocket channel with the modes it offers. This one table mirrors
+ * `GET /v1/capabilities` (`client.capabilities()`); the client's live and
+ * replay checks read it, so a channel is refused before sending exactly when
+ * the API would refuse it.
+ */
+export const WS_CHANNEL_CAPABILITIES: Readonly<Record<WsChannel, WsChannelCapability>> = Object.freeze({
+  // Hyperliquid core
+  orderbook: offer('hyperliquid', 'l2_orderbook', LIVE_AND_REPLAY),
+  orderbook_full: offer('hyperliquid', 'l2_full_depth', LIVE_AND_BULK),
+  l4_diffs: offer('hyperliquid', 'l4_diffs', LIVE_AND_BULK),
+  l4_orders: offer('hyperliquid', 'l4_orders', LIVE_AND_BULK),
+  trades: offer('hyperliquid', 'trades', LIVE_AND_REPLAY),
+  candles: offer('hyperliquid', 'candles', REPLAY_ONLY),
+  funding: offer('hyperliquid', 'funding', LIVE_AND_REPLAY),
+  open_interest: offer('hyperliquid', 'oi', LIVE_AND_REPLAY),
+  liquidations: offer('hyperliquid', 'liquidations', LIVE_AND_REPLAY),
+  ticker: offer('hyperliquid', 'ticker', LIVE_ONLY),
+  all_tickers: offer('hyperliquid', 'ticker', LIVE_ONLY),
+  // HIP-3
+  hip3_orderbook: offer('hip3', 'l2_orderbook', LIVE_AND_REPLAY),
+  hip3_orderbook_full: offer('hip3', 'l2_full_depth', LIVE_AND_BULK),
+  hip3_l4_diffs: offer('hip3', 'l4_diffs', LIVE_AND_BULK),
+  hip3_l4_orders: offer('hip3', 'l4_orders', LIVE_AND_BULK),
+  hip3_trades: offer('hip3', 'trades', LIVE_AND_REPLAY),
+  hip3_candles: offer('hip3', 'candles', REPLAY_ONLY),
+  hip3_funding: offer('hip3', 'funding', LIVE_AND_REPLAY),
+  hip3_open_interest: offer('hip3', 'oi', LIVE_AND_REPLAY),
+  hip3_liquidations: offer('hip3', 'liquidations', LIVE_AND_REPLAY),
+  // HIP-4
+  hip4_orderbook: offer('hip4', 'l2_orderbook', LIVE_AND_REPLAY),
+  hip4_l4_diffs: offer('hip4', 'l4_diffs', LIVE_AND_BULK),
+  hip4_l4_orders: offer('hip4', 'l4_orders', LIVE_AND_BULK),
+  hip4_trades: offer('hip4', 'trades', LIVE_AND_REPLAY),
+  hip4_open_interest: offer('hip4', 'oi', LIVE_AND_REPLAY),
+  // Hyperliquid Spot
+  spot_orderbook: offer('spot', 'l2_orderbook', LIVE_ONLY),
+  spot_l4_diffs: offer('spot', 'l4_diffs', LIVE_AND_BULK),
+  spot_l4_orders: offer('spot', 'l4_orders', LIVE_AND_BULK),
+  spot_trades: offer('spot', 'trades', LIVE_ONLY),
+  spot_twap: offer('spot', 'twap', LIVE_ONLY),
+  // Lighter
+  lighter_orderbook: offer('lighter', 'l2_orderbook', LIVE_AND_REPLAY),
+  lighter_l3_orderbook: offer('lighter', 'l3_orderbook', REPLAY_ONLY),
+  lighter_trades: offer('lighter', 'trades', LIVE_AND_REPLAY),
+  lighter_candles: offer('lighter', 'candles', REPLAY_ONLY),
+  lighter_funding: offer('lighter', 'funding', LIVE_AND_REPLAY),
+  lighter_open_interest: offer('lighter', 'oi', LIVE_AND_REPLAY),
+  // Lighter on Robinhood Chain
+  rh_lighter_orderbook: offer('rh-lighter', 'l2_orderbook', LIVE_AND_REPLAY),
+  rh_lighter_trades: offer('rh-lighter', 'trades', LIVE_AND_REPLAY),
+  rh_lighter_candles: offer('rh-lighter', 'candles', REPLAY_ONLY),
+  rh_lighter_funding: offer('rh-lighter', 'funding', LIVE_AND_REPLAY),
+  rh_lighter_open_interest: offer('rh-lighter', 'oi', LIVE_AND_REPLAY),
+});
+
+const ALL_CHANNELS = Object.keys(WS_CHANNEL_CAPABILITIES) as WsChannel[];
+const channelsWhere = (test: (c: WsChannelCapability) => boolean): ReadonlySet<WsChannel> =>
+  new Set(ALL_CHANNELS.filter((channel) => test(WS_CHANNEL_CAPABILITIES[channel])));
+
+/** Channels that accept live subscriptions. */
+export const WS_LIVE_CHANNELS: ReadonlySet<WsChannel> = channelsWhere((c) => c.live);
+
+/** Channels the API replays (timed or bulk). */
+export const WS_REPLAY_CHANNELS: ReadonlySet<WsChannel> = channelsWhere((c) => c.replay);
+
+/** Channels replayed in bulk: every L4 channel and the full-depth L2 channels. */
+export const WS_BULK_REPLAY_CHANNELS: ReadonlySet<WsBulkReplayChannel> = channelsWhere(
+  (c) => c.bulkReplay,
+) as ReadonlySet<WsBulkReplayChannel>;
+
+/** The capability row of a channel, or undefined for a name the SDK does not know. */
+function capabilityOf(channel: WsChannel): WsChannelCapability | undefined {
+  return (WS_CHANNEL_CAPABILITIES as Record<string, WsChannelCapability | undefined>)[channel];
+}
+
 /** Every Lighter channel. All six support historical replay. */
-export const LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = new Set([
-  'lighter_orderbook',
-  'lighter_trades',
-  'lighter_candles',
-  'lighter_open_interest',
-  'lighter_funding',
-  'lighter_l3_orderbook',
-]);
+export const LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = channelsWhere(
+  (c) => c.venue === 'lighter' && c.replay,
+);
 
 /** Lighter channels that also accept live subscriptions. */
-export const LIGHTER_LIVE_CHANNELS: ReadonlySet<LighterLiveChannel> = new Set([
-  'lighter_orderbook',
-  'lighter_trades',
-  'lighter_open_interest',
-  'lighter_funding',
-]);
+export const LIGHTER_LIVE_CHANNELS: ReadonlySet<LighterLiveChannel> = channelsWhere(
+  (c) => c.venue === 'lighter' && c.live,
+) as ReadonlySet<LighterLiveChannel>;
 
 /** Lighter channels that support historical replay only. */
-export const LIGHTER_REPLAY_ONLY_CHANNELS: ReadonlySet<LighterReplayOnlyChannel> = new Set([
-  'lighter_candles',
-  'lighter_l3_orderbook',
-]);
+export const LIGHTER_REPLAY_ONLY_CHANNELS: ReadonlySet<LighterReplayOnlyChannel> = channelsWhere(
+  (c) => c.venue === 'lighter' && !c.live,
+) as ReadonlySet<LighterReplayOnlyChannel>;
 
 export const LIGHTER_SUBSCRIPTION_ERROR =
   'lighter_candles and lighter_l3_orderbook support replay, not live subscriptions. ' +
@@ -123,26 +237,19 @@ export const LIGHTER_SUBSCRIPTION_ERROR =
  * a separate family from the mainnet `lighter_*` channels (one replay cannot
  * mix the two).
  */
-export const RH_LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = new Set([
-  'rh_lighter_orderbook',
-  'rh_lighter_trades',
-  'rh_lighter_candles',
-  'rh_lighter_open_interest',
-  'rh_lighter_funding',
-]);
+export const RH_LIGHTER_REPLAY_CHANNELS: ReadonlySet<WsChannel> = channelsWhere(
+  (c) => c.venue === 'rh-lighter' && c.replay,
+);
 
 /** Lighter on Robinhood Chain channels that also accept live subscriptions. */
-export const RH_LIGHTER_LIVE_CHANNELS: ReadonlySet<RhLighterLiveChannel> = new Set([
-  'rh_lighter_orderbook',
-  'rh_lighter_trades',
-  'rh_lighter_open_interest',
-  'rh_lighter_funding',
-]);
+export const RH_LIGHTER_LIVE_CHANNELS: ReadonlySet<RhLighterLiveChannel> = channelsWhere(
+  (c) => c.venue === 'rh-lighter' && c.live,
+) as ReadonlySet<RhLighterLiveChannel>;
 
 /** Lighter on Robinhood Chain channels that support historical replay only. */
-export const RH_LIGHTER_REPLAY_ONLY_CHANNELS: ReadonlySet<RhLighterReplayOnlyChannel> = new Set([
-  'rh_lighter_candles',
-]);
+export const RH_LIGHTER_REPLAY_ONLY_CHANNELS: ReadonlySet<RhLighterReplayOnlyChannel> = channelsWhere(
+  (c) => c.venue === 'rh-lighter' && !c.live,
+) as ReadonlySet<RhLighterReplayOnlyChannel>;
 
 export const RH_LIGHTER_SUBSCRIPTION_ERROR =
   'rh_lighter_candles supports replay, not live subscriptions. Use REST for current data ' +
@@ -165,17 +272,22 @@ const LIGHTER_BOOK_CHANNELS: ReadonlySet<WsChannel> = new Set(['lighter_orderboo
 
 /** Lighter symbols (either deployment) are case-insensitive on the server. */
 function isLighterFamilyChannel(channel: WsChannel): boolean {
-  return LIGHTER_REPLAY_CHANNELS.has(channel) || RH_LIGHTER_REPLAY_CHANNELS.has(channel);
+  const venue = capabilityOf(channel)?.venue;
+  return venue === 'lighter' || venue === 'rh-lighter';
 }
 
-export const HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR =
-  'Hyperliquid HIP-3, HIP-4, and Spot L4 channels support live subscriptions only; replay is unavailable.';
-
+/** Hyperliquid core L4 channels. */
 export const HYPERLIQUID_CORE_L4_REPLAY_CHANNELS: ReadonlySet<HyperliquidCoreL4Channel> = new Set([
   'l4_diffs',
   'l4_orders',
 ]);
 
+/**
+ * The HIP-3, HIP-4 and Spot L4 channels.
+ *
+ * @deprecated These channels now replay like the core L4 channels; see
+ * {@link WS_BULK_REPLAY_CHANNELS}.
+ */
 export const HYPERLIQUID_L4_LIVE_ONLY_CHANNELS: ReadonlySet<HyperliquidL4LiveOnlyChannel> = new Set([
   'hip3_l4_diffs',
   'hip3_l4_orders',
@@ -185,26 +297,45 @@ export const HYPERLIQUID_L4_LIVE_ONLY_CHANNELS: ReadonlySet<HyperliquidL4LiveOnl
   'spot_l4_orders',
 ]);
 
-export const FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR =
-  'orderbook_full and hip3_orderbook_full are live-only; replay is unavailable. For full-depth ' +
-  'history use the REST L2 history and diffs routes (l2Orderbook.history() and l2Orderbook.diffs()).';
-
 /**
- * Full-depth L2 order book channels (every price level). Live subscriptions
- * start with an `l4_snapshot` message holding the whole aggregated book,
- * followed by `l4_batch` messages of level changes. Replay is unavailable.
+ * Full-depth L2 order book channels (every price level). A subscription or a
+ * replay starts with an `l4_snapshot` message holding the whole aggregated
+ * book, followed by `l4_batch` messages of level changes.
  */
 export const FULL_DEPTH_L2_CHANNELS: ReadonlySet<FullDepthL2Channel> = new Set([
   'orderbook_full',
   'hip3_orderbook_full',
 ]);
 
+/** The refusal for a live subscription to a channel that only replays. */
+export function replayOnlyError(channel: WsChannel): string {
+  if (LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as LighterReplayOnlyChannel)) return LIGHTER_SUBSCRIPTION_ERROR;
+  if (RH_LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as RhLighterReplayOnlyChannel)) return RH_LIGHTER_SUBSCRIPTION_ERROR;
+  return (
+    `${channel} supports replay, not live subscriptions. Use REST for current data ` +
+    'or a replay request for stored history.'
+  );
+}
+
+/** The refusal for a replay of a channel that only streams live. */
+export function liveOnlyError(channel: WsChannel): string {
+  return `${channel} is live only; the API does not replay it. Subscribe for live data or use REST for history.`;
+}
+
+/** The refusal for a bulk replay without `end`. */
+export function bulkReplayEndError(channel: WsChannel): string {
+  return `${channel} replay requires an explicit end timestamp.`;
+}
+
+/** The refusal for a bulk channel inside a multi-channel replay. */
+export function bulkReplayMultiError(channel: WsChannel): string {
+  return `${channel} supports single-channel replay only; replay it with replay(), not multiReplay().`;
+}
+
 function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptions): void {
-  if (LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as LighterReplayOnlyChannel)) {
-    throw new Error(LIGHTER_SUBSCRIPTION_ERROR);
-  }
-  if (RH_LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as RhLighterReplayOnlyChannel)) {
-    throw new Error(RH_LIGHTER_SUBSCRIPTION_ERROR);
+  const capability = capabilityOf(channel);
+  if (capability && !capability.live) {
+    throw new Error(replayOnlyError(channel));
   }
   const intervalMs = options?.intervalMs;
   // `== null` also treats an explicit null from JavaScript callers as omitted.
@@ -256,16 +387,28 @@ function rhLighterLiveChannel(channel: RhLighterLiveChannelInput): RhLighterLive
   return (channel.startsWith('rh_lighter_') ? channel : `rh_lighter_${channel}`) as RhLighterLiveChannel;
 }
 
-function validateReplayChannel(channel: WsChannel, end?: number): void {
-  if (HYPERLIQUID_L4_LIVE_ONLY_CHANNELS.has(channel as HyperliquidL4LiveOnlyChannel)) {
-    throw new Error(HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR);
+function validateReplayChannel(channel: WsChannel, end: number | undefined, multiChannel: boolean): void {
+  const capability = capabilityOf(channel);
+  if (!capability) {
+    // A channel the SDK does not know yet: let the API answer.
+    return;
   }
-  if (FULL_DEPTH_L2_CHANNELS.has(channel as FullDepthL2Channel)) {
-    throw new Error(FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR);
+  if (!capability.replay) {
+    throw new Error(liveOnlyError(channel));
   }
-  if (HYPERLIQUID_CORE_L4_REPLAY_CHANNELS.has(channel as HyperliquidCoreL4Channel) && end === undefined) {
-    throw new Error('Hyperliquid core L4 replay requires an explicit end timestamp.');
+  if (capability.bulkReplay) {
+    if (multiChannel) {
+      throw new Error(bulkReplayMultiError(channel));
+    }
+    if (end === undefined || end === null) {
+      throw new Error(bulkReplayEndError(channel));
+    }
   }
+}
+
+/** True for a Lighter or Robinhood Chain book in the live shape (`{coin, time, levels}`). */
+function isLiveShapedBook(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && 'levels' in raw && !('bids' in raw);
 }
 
 // Server idle timeout is 60 seconds. The SDK sends pings every 30 seconds
@@ -413,12 +556,20 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * WebSocket client for supported live data and historical replay.
  *
  * Live subscriptions cover Hyperliquid channels and four channels on each
- * Lighter.xyz deployment: mainnet (`lighter_orderbook`, `lighter_trades`,
+ * Lighter deployment: mainnet (`lighter_orderbook`, `lighter_trades`,
  * `lighter_open_interest`, `lighter_funding`) and Robinhood Chain
  * (`rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`,
- * `rh_lighter_funding`). `lighter_candles`, `lighter_l3_orderbook` and
- * `rh_lighter_candles` are replay-only. Live Lighter data, on either
- * deployment, is served on `wss://api.0xarchive.io/ws` (the default URL).
+ * `rh_lighter_funding`). `candles`, `hip3_candles`, `lighter_candles`,
+ * `lighter_l3_orderbook` and `rh_lighter_candles` are replay-only. Live
+ * Lighter data, on either deployment, is served on `wss://api.0xarchive.io/ws`
+ * (the default URL). `WS_CHANNEL_CAPABILITIES` lists what every channel
+ * offers.
+ *
+ * Server errors arrive as `{"type":"error"}` messages with a stable
+ * `errorCode` (`onServerError()`). `slow_consumer` means the connection fell
+ * behind a stream and messages were dropped: re-subscribe, or restart the
+ * replay, to resync. `endpoint_unsupported` means the endpoint does not serve
+ * the channel; the message names the one that does.
  *
  * **Keep-Alive:** The server sends WebSocket ping frames every 30 seconds
  * and will disconnect idle connections after 60 seconds. This SDK automatically
@@ -451,6 +602,7 @@ export class OxArchiveWs {
   private liquidationsHandlers: Array<(channel: WsChannel, coin: string, data: Trade[]) => void> = [];
   private gapHandlers: Array<(channel: WsChannel, coin: string, gapStart: number, gapEnd: number, durationMinutes: number) => void> = [];
   private outcomeSettledHandlers: Array<(coin: string, outcomeId: number, side: number, settlementValue?: number, settlementAt?: string) => void> = [];
+  private serverErrorHandlers: Array<(error: WsError) => void> = [];
   private lighterOrderbookHandlers: Array<(coin: string, data: LighterLiveOrderbook) => void> = [];
   private lighterTradesHandlers: Array<(coin: string, data: LighterLiveTrade[]) => void> = [];
   private lighterStatsHandlers: Array<(channel: 'lighter_open_interest' | 'lighter_funding', coin: string, data: LighterLiveStats) => void> = [];
@@ -487,7 +639,10 @@ export class OxArchiveWs {
     this.setState('connecting');
 
     return new Promise((resolve, reject) => {
-      const url = `${this.options.wsUrl}?apiKey=${encodeURIComponent(this.options.apiKey)}`;
+      const separator = this.options.wsUrl.includes('?') ? '&' : '?';
+      const url =
+        `${this.options.wsUrl}${separator}apiKey=${encodeURIComponent(this.options.apiKey)}` +
+        `&version=${API_VERSION}`;
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -557,9 +712,9 @@ export class OxArchiveWs {
    * `lighter_trades`, `lighter_open_interest` and `lighter_funding`, and on
    * the Robinhood Chain deployment's `rh_lighter_orderbook`,
    * `rh_lighter_trades`, `rh_lighter_open_interest` and `rh_lighter_funding`.
-   * `lighter_candles`, `lighter_l3_orderbook` and `rh_lighter_candles` are
-   * replay-only and throw here; use REST for current data or a bounded replay
-   * for stored history.
+   * Replay-only channels (`candles`, `hip3_candles`, `lighter_candles`,
+   * `lighter_l3_orderbook`, `rh_lighter_candles`) throw here; use REST for
+   * current data or a bounded replay for stored history.
    *
    * `orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3)
    * stream the full-depth L2 book: an `l4_snapshot` message with every price
@@ -570,8 +725,8 @@ export class OxArchiveWs {
    * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive
    * @param options - `intervalMs` sets the book rate for `lighter_orderbook`
    *   and `rh_lighter_orderbook` only (100 to 5000 ms, default one book a second)
-   * @throws Error for a replay-only Lighter channel, or an `intervalMs` on
-   *   another channel or outside 100 to 5000
+   * @throws Error for a replay-only channel, or an `intervalMs` on another
+   *   channel or outside 100 to 5000
    */
   subscribe(channel: WsChannel, coin?: string, options?: WsSubscribeOptions): void {
     validateLiveSubscription(channel, options);
@@ -716,7 +871,7 @@ export class OxArchiveWs {
   }
 
   /**
-   * Subscribe to a live Lighter.xyz channel.
+   * Subscribe to a live Lighter channel.
    *
    * @param channel One of `orderbook`, `trades`, `open_interest`, `funding`
    *   (or the full `lighter_*` form). Candles and L3 are replay-only.
@@ -740,7 +895,7 @@ export class OxArchiveWs {
     this.subscribe(lighterLiveChannel(channel), symbol, options);
   }
 
-  /** Unsubscribe from a live Lighter.xyz channel. Accepts the short form
+  /** Unsubscribe from a live Lighter channel. Accepts the short form
    * (`'orderbook'`) or the full form (`'lighter_orderbook'`). */
   unsubscribeLighter(channel: LighterLiveChannelInput, symbol: string): void {
     this.unsubscribe(lighterLiveChannel(channel), symbol);
@@ -817,10 +972,23 @@ export class OxArchiveWs {
   // ==========================================================================
 
   /**
-   * Start historical replay with timing preserved.
-   * All six Lighter channels and all five Lighter on Robinhood Chain
-   * (`rh_lighter_*`) channels support replay. Replay rows keep their existing
-   * shapes, which differ from the live Lighter payloads.
+   * Start a historical replay.
+   *
+   * Which channels replay is `WS_CHANNEL_CAPABILITIES` (it mirrors
+   * `client.capabilities()`); a channel the API does not replay (`ticker`,
+   * `all_tickers`, `spot_orderbook`, `spot_trades`, `spot_twap`) is refused
+   * before sending.
+   *
+   * - Timed replay (every other channel) preserves the original timing,
+   *   scaled by `speed`, and delivers `historical_data` messages. Lighter and
+   *   Robinhood Chain rows use the live payload shapes
+   *   (`LighterLiveOrderbook`, a one-leg `LighterLiveTrade[]`,
+   *   `LighterLiveStats`).
+   * - Bulk replay (every L4 channel, on core, HIP-3, HIP-4 and Spot, and the
+   *   full-depth `orderbook_full` and `hip3_orderbook_full`) needs an
+   *   explicit `end`, ignores `speed`, and is single-channel: an
+   *   `l4_snapshot` anchored at the nearest checkpoint at or before `start`,
+   *   then `l4_batch` pages in block order.
    *
    * @param channel - Data channel to replay
    * @param coin - Trading pair (e.g., 'BTC', 'ETH')
@@ -833,12 +1001,15 @@ export class OxArchiveWs {
    *   end: Date.now(),
    *   speed: 10 // 10x faster than real-time
    * });
+   *
+   * // Bulk: HIP-3 L4 diffs for one hour
+   * ws.replay('hip3_l4_diffs', 'xyz:SP500', { start: t0, end: t0 + 3_600_000 });
    * ```
    */
   replay(
-    channel: HyperliquidCoreL4Channel,
+    channel: WsBulkReplayChannel,
     coin: string,
-    options: WsCoreL4ReplayOptions,
+    options: WsBulkReplayOptions,
   ): void;
   replay(
     channel: WsStandardReplayChannel,
@@ -857,7 +1028,7 @@ export class OxArchiveWs {
       interval?: string;
     },
   ): void {
-    validateReplayChannel(channel, options.end);
+    validateReplayChannel(channel, options.end, false);
     this.send({
       op: 'replay',
       channel,
@@ -874,6 +1045,8 @@ export class OxArchiveWs {
    * Start a multi-channel historical replay with timing preserved.
    * Data from all channels is interleaved chronologically. Before the timeline
    * begins, `replay_snapshot` messages provide initial state for each channel.
+   * Channels must come from one family (Hyperliquid, HIP-3, HIP-4, Lighter or
+   * Lighter on Robinhood Chain); bulk channels (L4, full depth) replay alone.
    *
    * @param channels - Array of data channels to replay simultaneously
    * @param coin - Trading pair (e.g., 'BTC', 'ETH')
@@ -899,7 +1072,7 @@ export class OxArchiveWs {
     options: WsStandardReplayOptions,
   ): void {
     for (const channel of channels) {
-      validateReplayChannel(channel, options.end);
+      validateReplayChannel(channel, options.end, true);
     }
     this.send({
       op: 'replay',
@@ -1036,7 +1209,12 @@ export class OxArchiveWs {
   // ==========================================================================
 
   /**
-   * Handle historical data points (replay mode)
+   * Handle historical data points (timed replay). `data` is the channel's
+   * row: on Lighter and Robinhood Chain channels it has the live payload
+   * shape (`LighterLiveOrderbook` for books, an array of one
+   * `LighterLiveTrade` leg for trades, `LighterLiveStats` for open interest
+   * and funding). Bulk replay (L4, full depth) arrives as `l4_snapshot` and
+   * `l4_batch` messages instead; read those with `onMessage`.
    */
   onHistoricalData<T = unknown>(
     handler: (coin: string, timestamp: number, data: T) => void
@@ -1047,7 +1225,9 @@ export class OxArchiveWs {
   /**
    * Handle historical tick data (granularity='tick' mode)
    * Receives a checkpoint (full orderbook) followed by incremental deltas.
-   * This is for tick-level granularity on Lighter.xyz orderbook data.
+   * This is for tick-level granularity on Lighter orderbook data. The server
+   * sends the checkpoint as a live-shaped book (`{coin, time, levels}`); the
+   * SDK converts it to an `OrderBook` before handlers run.
    */
   onHistoricalTickData(
     handler: (coin: string, checkpoint: OrderBook, deltas: OrderbookDelta[]) => void
@@ -1248,7 +1428,7 @@ export class OxArchiveWs {
    * two legs (one per side) sharing `tid`: count trades by distinct `tid` and
    * sum volume over one leg per `tid`. `fee`, `fee_token`, `closed_pnl` and
    * `dir` are null in live messages; the finalized record with fees is served
-   * by `client.lighter.trades.list()`. While any `onLighterTrades` handler is
+   * by `client.lighter.trades.history()`. While any `onLighterTrades` handler is
    * registered, Lighter trades are not passed to `onTrades`; without one,
    * `onTrades` receives them converted to `Trade` (one entry per leg, with the
    * account index in `accountIndex`).
@@ -1294,7 +1474,7 @@ export class OxArchiveWs {
    * `onRhLighterTrades` handler is registered, Robinhood Chain trades are not
    * passed to `onTrades`; without one, `onTrades` receives them converted to
    * `Trade` (one entry per leg, with the account index in `accountIndex`).
-   * The reconciled record is `client.rhLighter.trades.list()`.
+   * The reconciled record is `client.rhLighter.trades.history()`.
    */
   onRhLighterTrades(handler: (coin: string, data: LighterLiveTrade[]) => void): void {
     this.rhLighterTradesHandlers.push(handler);
@@ -1309,6 +1489,28 @@ export class OxArchiveWs {
     handler: (channel: 'rh_lighter_open_interest' | 'rh_lighter_funding', coin: string, data: LighterLiveStats) => void
   ): void {
     this.rhLighterStatsHandlers.push(handler);
+  }
+
+  /**
+   * Handle `{"type":"error"}` messages from the server. `errorCode` is the
+   * stable code (see `ERROR_CODES`): for example `unsupported_for_venue` when
+   * a channel does not offer the requested mode, `rate_limited` when
+   * subscribing too fast, and `slow_consumer` when the connection fell behind
+   * a stream and messages were dropped (re-subscribe, or restart the replay,
+   * to resync).
+   *
+   * @example
+   * ```typescript
+   * ws.onServerError((error) => {
+   *   if (error.errorCode === 'slow_consumer') {
+   *     ws.unsubscribe('l4_diffs', 'BTC');
+   *     ws.subscribe('l4_diffs', 'BTC');
+   *   }
+   * });
+   * ```
+   */
+  onServerError(handler: (error: WsError) => void): void {
+    this.serverErrorHandlers.push(handler);
   }
 
   /**
@@ -1414,6 +1616,21 @@ export class OxArchiveWs {
   }
 
   private handleMessage(message: WsServerMessage): void {
+    if (message.type === 'error') {
+      // Surface the wire's error_code as errorCode, as REST errors do.
+      const code = (message as WsError).error_code;
+      if (typeof code === 'string') {
+        (message as WsError).errorCode = code;
+      }
+    } else if (message.type === 'historical_tick_data') {
+      // Lighter tick replay sends its checkpoint in the live book shape
+      // ({coin, time, levels}); handlers receive it as an OrderBook.
+      const msg = message as WsHistoricalTickData;
+      if (isLiveShapedBook(msg.checkpoint)) {
+        msg.checkpoint = transformOrderbook(msg.coin, msg.checkpoint as unknown as Record<string, unknown>);
+      }
+    }
+
     // Call the generic onMessage handler first
     this.handlers.onMessage?.(message);
 
@@ -1553,6 +1770,12 @@ export class OxArchiveWs {
           for (const handler of this.liquidationsHandlers) {
             handler(message.channel, message.coin, fills);
           }
+        }
+        break;
+      }
+      case 'error': {
+        for (const handler of this.serverErrorHandlers) {
+          handler(message as WsError);
         }
         break;
       }

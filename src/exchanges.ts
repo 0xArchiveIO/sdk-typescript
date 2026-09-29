@@ -1,4 +1,4 @@
-import type { HttpClient } from './http';
+import { type HttpClient, cursorPage } from './http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -60,7 +60,7 @@ import {
  * ```typescript
  * const client = new OxArchive({ apiKey: '...' });
  * const orderbook = await client.hyperliquid.orderbook.get('BTC');
- * const trades = await client.hyperliquid.trades.list('ETH', { start, end });
+ * const trades = await client.hyperliquid.trades.history('ETH', { start, end });
  * ```
  */
 export class HyperliquidClient {
@@ -212,10 +212,7 @@ export class HyperliquidClient {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }
 
@@ -374,10 +371,7 @@ export class Hip3Client {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }
 
@@ -556,17 +550,19 @@ export class Hip4Client {
   }
 
   /**
-   * Get historical fills for a HIP-4 coin.
+   * Get historical fills for a HIP-4 coin, one page at a time (optional
+   * `side: 'buy' | 'sell'`).
    */
   async getTrades(coin: string, params: import('./types').GetTradesCursorParams) {
     return this.trades.list(coin, params);
   }
 
   /**
-   * Get most recent N fills for a HIP-4 coin (latest first).
+   * Get most recent N fills for a HIP-4 coin (latest first). Pass
+   * `{ limit, side }` to keep only buys or only sells.
    */
-  async getTradesRecent(coin: string, limit?: number) {
-    return this.trades.recent(coin, limit);
+  async getTradesRecent(coin: string, limitOrParams?: number | import('./types').RecentTradesParams) {
+    return this.trades.recent(coin, limitOrParams);
   }
 
   /**
@@ -625,10 +621,7 @@ export class Hip4Client {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**
@@ -783,7 +776,7 @@ export class LighterDeploymentClient {
 
   /**
    * Trade/fill history (one row per fill; maker/taker context where returned).
-   * `list()` serves reconciled trades up to `meta.finalizedThrough`;
+   * `history()` (also `list()`) serves reconciled trades up to `meta.finalizedThrough`;
    * `recent()` serves the preliminary tier.
    */
   public readonly trades: TradesResource;
@@ -881,17 +874,14 @@ export class LighterDeploymentClient {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? PriceSnapshotArrayResponseSchema as any : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }
 
 /**
- * Lighter.xyz exchange client (mainnet deployment)
+ * Lighter exchange client (mainnet deployment)
  *
- * Access Lighter.xyz market data through the 0xarchive API. The Robinhood
+ * Access Lighter market data through the 0xarchive API. The Robinhood
  * Chain deployment of Lighter is `client.rhLighter`. Candles are served from
  * 2025-08-01.
  *
@@ -899,7 +889,7 @@ export class LighterDeploymentClient {
  * ```typescript
  * const client = new OxArchive({ apiKey: '...' });
  * const orderbook = await client.lighter.orderbook.get('BTC');
- * const trades = await client.lighter.trades.list('ETH', { start, end });
+ * const trades = await client.lighter.trades.history('ETH', { start, end });
  * const instruments = await client.lighter.instruments.list();
  * console.log(`ETH taker fee: ${instruments[0].takerFee}`);
  * ```
@@ -934,8 +924,7 @@ export class LighterClient extends LighterDeploymentClient {
  *
  * Coverage: trades and liquidations from 2026-06-26 20:10:26 UTC (venue
  * launch); order book, open interest and funding from 2026-08-22 18:43 UTC;
- * candles from 2026-06-26 once candles are enabled for this deployment (until
- * then the candles route returns an error). Trades are reconciled up to
+ * candles from 2026-06-26 20:10 UTC. Trades are reconciled up to
  * `meta.finalizedThrough`, about a day behind; `trades.recent()` serves the
  * preliminary tier, exactly as on mainnet.
  *
@@ -944,7 +933,7 @@ export class LighterClient extends LighterDeploymentClient {
  * const client = new OxArchive({ apiKey: '...' });
  * const instruments = await client.rhLighter.instruments.list();
  * const book = await client.rhLighter.orderbook.get('BTC');
- * const trades = await client.rhLighter.trades.list('AAPL-USDG', { start, end });
+ * const trades = await client.rhLighter.trades.history('AAPL-USDG', { start, end });
  * console.log(trades.meta?.finalizedThrough);
  * ```
  */

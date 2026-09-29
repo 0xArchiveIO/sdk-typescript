@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, CursorPaginationParams } from '../types';
 
 export interface L2OrderBookParams {
@@ -6,11 +6,18 @@ export interface L2OrderBookParams {
   depth?: number;
 }
 
+/** Parameters for full-depth L2 history (`l2Orderbook.history()`). */
+export interface L2OrderBookHistoryParams extends CursorPaginationParams {
+  /** Price levels per side in each snapshot (default: every level). */
+  depth?: number;
+}
+
 /**
  * L2 Full-Depth Order Book API resource (derived from L4 data)
  *
  * Access aggregated price-level orderbook snapshots, history, and tick-level diffs.
- * Data available from March 10, 2026.
+ * Served from 2026-03-11 01:03 UTC (the first L4 checkpoint), on Hyperliquid
+ * core and HIP-3.
  *
  * @example
  * ```typescript
@@ -52,12 +59,12 @@ export class L2OrderBookResource {
   }
 
   /**
-   * Get paginated L2 full-depth history. Every snapshot carries the full
-   * book; the route takes no `depth`.
+   * Get paginated L2 full-depth history. Each snapshot carries the full book,
+   * or the best `depth` levels per side when `depth` is set.
    */
   async history(
     symbol: string,
-    params: CursorPaginationParams,
+    params: L2OrderBookHistoryParams,
   ): Promise<CursorResponse<any[]>> {
     const coin = this.coinTransform(symbol);
     const resp: ApiResponse<any[]> = await this.http.get(
@@ -65,10 +72,7 @@ export class L2OrderBookResource {
       params as unknown as Record<string, unknown>,
     );
     // http.get camelizes response keys, so the wire's next_cursor arrives as nextCursor
-    return {
-      data: resp.data,
-      nextCursor: resp.meta?.nextCursor ?? undefined,
-    };
+    return cursorPage(resp);
   }
 
   /** Get tick-level L2 order book diffs. */
@@ -81,9 +85,6 @@ export class L2OrderBookResource {
       `${this.basePath}/orderbook/${coin}/l2/diffs`,
       params as unknown as Record<string, unknown>,
     );
-    return {
-      data: resp.data,
-      nextCursor: resp.meta?.nextCursor ?? undefined,
-    };
+    return cursorPage(resp);
   }
 }

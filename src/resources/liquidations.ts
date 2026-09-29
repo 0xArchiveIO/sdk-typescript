@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -39,7 +39,7 @@ import {
  *
  * // Get all pages
  * const allLiquidations = [...result.data];
- * while (result.nextCursor) {
+ * while (result.hasMore) {
  *   result = await client.hyperliquid.liquidations.history('BTC', {
  *     start: Date.now() - 86400000,
  *     end: Date.now(),
@@ -70,10 +70,7 @@ export class MarketLiquidationsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**
@@ -92,10 +89,7 @@ export class MarketLiquidationsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationVolumeArrayResponseSchema as any : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**
@@ -140,10 +134,7 @@ export class MarketLiquidationsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationLevelsHistoryResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }
 
@@ -178,9 +169,6 @@ export class LiquidationsResource extends MarketLiquidationsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }

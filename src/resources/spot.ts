@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -74,6 +74,17 @@ export class SpotTwapResource {
     private coinTransform: (s: string) => string = (c) => c.toUpperCase(),
   ) {}
 
+  /**
+   * TWAP statuses for a single spot pair, one page at a time. The same call
+   * as {@link bySymbol}, named like the other history methods.
+   */
+  async history(
+    symbol: string,
+    params: CursorPaginationParams,
+  ): Promise<CursorResponse<SpotTwapStatus[]>> {
+    return this.bySymbol(symbol, params);
+  }
+
   /** TWAP statuses for a single spot pair. */
   async bySymbol(
     symbol: string,
@@ -83,7 +94,7 @@ export class SpotTwapResource {
       `${this.basePath}/twap/${this.coinTransform(symbol)}`,
       params as unknown as Record<string, unknown>,
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 
   /** TWAP statuses for a single user wallet across every spot pair. */
@@ -95,6 +106,6 @@ export class SpotTwapResource {
       `${this.basePath}/twap/user/${user}`,
       params as unknown as Record<string, unknown>,
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 }

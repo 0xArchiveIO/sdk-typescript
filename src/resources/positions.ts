@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   AccountSummary,
   ApiResponse,
@@ -101,8 +101,9 @@ function accountIndexPath(value: LighterAccountIndex): string {
 
 /**
  * Follow `nextCursor` until the last page. Pages can be empty and still carry
- * a cursor (a window with hours that hold no rows), so only a missing or
- * repeated cursor ends the walk.
+ * a cursor (a window with hours that hold no rows), so a short or empty page
+ * does not end the walk: `hasMore === false`, a missing cursor or a repeated
+ * cursor does.
  */
 async function* followCursor<P, T>(
   fetchPage: (cursor: string | undefined) => Promise<PositionsResponse<P>>,
@@ -117,7 +118,7 @@ async function* followCursor<P, T>(
       yield row;
     }
     const next = page.nextCursor;
-    if (!next || seen.has(next)) {
+    if (page.hasMore === false || !next || seen.has(next)) {
       return;
     }
     seen.add(next);
@@ -145,11 +146,7 @@ abstract class PositionsRoutes {
       query,
       this.http.validationEnabled ? (schema as unknown as z.ZodType<ApiResponse<T>>) : undefined,
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta?.nextCursor,
-      meta: response.meta,
-    };
+    return { ...cursorPage(response), meta: response.meta };
   }
 
   protected symbolFilter(symbol: string | undefined): string | undefined {

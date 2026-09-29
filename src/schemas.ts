@@ -21,10 +21,16 @@ import { z } from 'zod';
 // Base Schemas
 // =============================================================================
 
+export const VenueSchema = z.enum(['hyperliquid', 'hip3', 'hip4', 'spot', 'lighter', 'rh-lighter']);
+
 export const ApiMetaSchema = z.object({
   count: z.number(),
   nextCursor: z.string().optional(),
+  hasMore: z.boolean().optional(),
   requestId: z.string(),
+  // Per-symbol routes: the canonical public symbol and its venue
+  symbol: z.string().optional(),
+  venue: VenueSchema.optional(),
   coverageFrom: z.string().optional(),
   notice: z.string().optional(),
   // Finalization (Lighter trades, account positions)
@@ -269,6 +275,7 @@ export const WsSubscribedSchema = z.object({
   channel: WsChannelSchema,
   coin: z.string().optional(),
   symbol: z.string().optional(),
+  version: z.string().optional(),
 });
 
 export const WsUnsubscribedSchema = z.object({
@@ -285,6 +292,8 @@ export const WsPongSchema = z.object({
 export const WsErrorSchema = z.object({
   type: z.literal('error'),
   message: z.string(),
+  error_code: z.string().optional(),
+  errorCode: z.string().optional(),
 });
 
 export const WsDataSchema = z.object({
@@ -295,8 +304,9 @@ export const WsDataSchema = z.object({
   data: z.unknown(),
 });
 
-// Live Lighter payloads (the `data` of live lighter_* messages). Replay rows
-// for the same channels keep their own shapes and are not described here.
+// Live Lighter payloads (the `data` of live lighter_* and rh_lighter_*
+// messages). Replay rows for the same channels use these shapes too; a
+// replayed trade is an array holding one leg.
 export const LighterLiveBookLevelSchema = z.object({
   px: z.string(),
   sz: z.string(),
@@ -352,9 +362,11 @@ export const WsReplayStartedSchema = z.object({
   type: z.literal('replay_started'),
   channel: WsChannelSchema,
   coin: z.string(),
+  symbol: z.string().optional(),
   start: z.number(),
   end: z.number(),
   speed: z.number(),
+  version: z.string().optional(),
 });
 
 export const WsReplayPausedSchema = z.object({
@@ -644,7 +656,8 @@ export const LiquidationVolumeArrayResponseSchema = z.object({
 
 export const LighterLiquidationSchema = z.object({
   symbol: z.string(),
-  timestamp: z.number(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
   transactionTimeUs: z.number(),
   tradeId: z.number(),
   liquidationType: z.string(),
@@ -678,7 +691,8 @@ export const LighterLiquidationSchema = z.object({
 
 export const LighterLiquidationVolumeSchema = z.object({
   symbol: z.string(),
-  timestamp: z.number(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
   totalUsd: z.number(),
   count: z.number(),
 });
@@ -888,6 +902,7 @@ export const LiquidationLevelBucketSchema = z.object({
 export const LiquidationLevelsSchema = z.object({
   midPrice: z.number(),
   snapshotTs: z.string(),
+  snapshotTsMs: z.number(),
   blockNumber: z.number(),
   totalLong: z.number(),
   totalShort: z.number(),
@@ -899,6 +914,7 @@ export const LiquidationLevelsResponseSchema = ApiResponseSchema(LiquidationLeve
 
 export const LiquidationLevelsHistoryItemSchema = z.object({
   snapshotTs: z.string(),
+  snapshotTsMs: z.number(),
   blockNumber: z.number(),
   midPrice: z.number(),
   totalLong: z.number(),
@@ -935,6 +951,7 @@ export const TriggerLevelsResponseSchema = ApiResponseSchema(TriggerLevelsSchema
 
 export const TriggerLevelsHistoryItemSchema = z.object({
   snapshotTs: z.string(),
+  snapshotTsMs: z.number(),
   midPrice: z.number(),
   totalBidSize: z.number(),
   totalAskSize: z.number(),
@@ -1041,7 +1058,8 @@ export const PriceSnapshotArrayResponseSchema = z.object({
 // =============================================================================
 
 export const CvdBucketSchema = z.object({
-  timestamp: z.number(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
   buyVolume: z.number(),
   sellVolume: z.number(),
   delta: z.number(),
@@ -1063,7 +1081,8 @@ export const Hip3OracleDiscoveryBoundsSchema = z.object({
   lowerBound: z.number(),
   upperBound: z.number(),
   blockNumber: z.number(),
-  timestamp: z.number(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
 });
 
 export const Hip3OracleExternalPriceSchema = z.object({
@@ -1071,7 +1090,8 @@ export const Hip3OracleExternalPriceSchema = z.object({
   externalPrice: z.number().nullable().optional(),
   markPrice: z.number().nullable().optional(),
   blockNumber: z.number(),
-  timestamp: z.number(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
 });
 
 export const Hip3OracleDiscoveryBoundsResponseSchema = ApiResponseSchema(Hip3OracleDiscoveryBoundsSchema);
@@ -1171,9 +1191,34 @@ export const SymbolEntrySchema = z.object({
   isActive: z.boolean().nullable().optional(),
 });
 
-export const SymbolsResponseSchema = z.object({
-  symbols: z.array(SymbolEntrySchema),
+/**
+ * `GET /v1/symbols`. With the API version the SDK sends, the list is the
+ * standard envelope's `data`; the older body carried it as `symbols`.
+ */
+export const SymbolsResponseSchema = z.union([
+  ApiResponseSchema(z.array(SymbolEntrySchema)),
+  z.object({ symbols: z.array(SymbolEntrySchema) }),
+]);
+
+// =============================================================================
+// Capabilities Schemas
+// =============================================================================
+
+export const CapabilitySchema = z.object({
+  venue: VenueSchema,
+  datatype: z.string(),
+  restRoutes: z.array(z.string()),
+  wsChannels: z.array(z.string()),
+  live: z.boolean(),
+  replay: z.boolean(),
+  availableFrom: z.string().nullable(),
+  cadence: z.string(),
+  pageLimit: z.number().nullable(),
+  intervals: z.array(z.string()),
+  notes: z.string().nullable(),
 });
+
+export const CapabilitiesResponseSchema = ApiResponseSchema(z.array(CapabilitySchema));
 
 // =============================================================================
 // Type exports (inferred from schemas)
@@ -1207,3 +1252,4 @@ export type ValidatedHip3OracleExternalPrice = z.infer<typeof Hip3OracleExternal
 export type ValidatedHip4Question = z.infer<typeof Hip4QuestionSchema>;
 export type ValidatedWalletClassification = z.infer<typeof WalletClassificationSchema>;
 export type ValidatedSymbolEntry = z.infer<typeof SymbolEntrySchema>;
+export type ValidatedCapability = z.infer<typeof CapabilitySchema>;
