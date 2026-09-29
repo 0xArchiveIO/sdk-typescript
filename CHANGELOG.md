@@ -8,6 +8,8 @@ semver in spirit.
 ## 1.12.0 (2026-09-28)
 
 ### Added
+- `client.hyperliquid.breadth` (`current()`, `history()`): core Hyperliquid breadth above the
+  UTC-session VWAP, the same shape as HIP-3 breadth.
 - Lighter on Robinhood Chain, the second deployment of Lighter, as
   `client.rhLighter` (`/v1/rh-lighter`). It has the same resources as
   `client.lighter` except the L3 order book: `instruments`, `orderbook`,

@@ -145,6 +145,9 @@ export class HyperliquidClient {
 
   private http: HttpClient;
 
+  /** Aggregate market breadth above the current UTC-session VWAP (core Hyperliquid perps). */
+  public readonly breadth: Hip3BreadthResource;
+
   constructor(http: HttpClient) {
     this.http = http;
     const basePath = '/v1/hyperliquid';
@@ -161,6 +164,7 @@ export class HyperliquidClient {
     this.positions = new HyperliquidPositionsResource(http, basePath);
     this.cvd = new CvdResource(http, basePath);
     this.wallets = new WalletsResource(http, basePath);
+    this.breadth = new Hip3BreadthResource(http, basePath);
     this.hip3 = new Hip3Client(http);
     this.hip4 = new Hip4Client(http);
   }
