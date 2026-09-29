@@ -3,6 +3,8 @@ import type {
   ApiResponse,
   CursorResponse,
   CoinFreshness,
+  Hip4ListQuestionsParams,
+  Hip4Question,
   CoinSummary,
   Hip4OpenInterest,
   PriceSnapshot,
@@ -33,6 +35,10 @@ import {
   Hip3PositionsResource,
   LighterPositionsResource,
   LighterAccountsResource,
+  CvdResource,
+  Hip3OracleResource,
+  Hip4QuestionsResource,
+  WalletsResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -112,6 +118,17 @@ export class HyperliquidClient {
   public readonly positions: HyperliquidPositionsResource;
 
   /**
+   * Cumulative volume delta: taker buy and sell notional per bucket, cursor
+   * paged
+   */
+  public readonly cvd: CvdResource;
+
+  /**
+   * Wallet classification: precomputed daily behavioral metrics per wallet
+   */
+  public readonly wallets: WalletsResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (trades from 2025-10-13)
    */
   public readonly hip3: Hip3Client;
@@ -137,6 +154,8 @@ export class HyperliquidClient {
     this.l4Orderbook = new L4OrderBookResource(http, basePath);
     this.l2Orderbook = new L2OrderBookResource(http, basePath);
     this.positions = new HyperliquidPositionsResource(http, basePath);
+    this.cvd = new CvdResource(http, basePath);
+    this.wallets = new WalletsResource(http, basePath);
     this.hip3 = new Hip3Client(http);
     this.hip4 = new Hip4Client(http);
   }
@@ -265,6 +284,20 @@ export class Hip3Client {
    */
   public readonly positions: Hip3PositionsResource;
 
+  /**
+   * Cumulative volume delta: taker buy and sell notional per bucket, cursor
+   * paged
+   */
+  public readonly cvd: CvdResource;
+
+  /** Oracle reads: deployer-pushed external price and discovery bounds. */
+  public readonly oracle: Hip3OracleResource;
+
+  /**
+   * Wallet classification: precomputed daily behavioral metrics per wallet
+   */
+  public readonly wallets: WalletsResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -284,6 +317,9 @@ export class Hip3Client {
     this.l2Orderbook = new L2OrderBookResource(http, basePath, coinTransform);
     this.breadth = new Hip3BreadthResource(http, basePath);
     this.positions = new Hip3PositionsResource(http, basePath);
+    this.cvd = new CvdResource(http, basePath, coinTransform);
+    this.oracle = new Hip3OracleResource(http, basePath);
+    this.wallets = new WalletsResource(http, basePath);
   }
 
   /**
@@ -378,6 +414,11 @@ export class Hip4Client {
   public readonly outcomes: Hip4OutcomesResource;
 
   /**
+   * HIP-4 questions: groupings of binary outcomes under one ballot.
+   */
+  public readonly questions: Hip4QuestionsResource;
+
+  /**
    * L2 orderbook snapshots.
    */
   public readonly orderbook: OrderBookResource;
@@ -429,6 +470,7 @@ export class Hip4Client {
     const coinTransform = (c: string) => encodeURIComponent(c);
     this.instruments = new Hip4InstrumentsResource(http, basePath, coinTransform);
     this.outcomes = new Hip4OutcomesResource(http, basePath);
+    this.questions = new Hip4QuestionsResource(http, basePath);
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
     this.trades = new TradesResource(http, basePath, coinTransform);
     this.openInterest = new Hip4OpenInterestResource(http, basePath, coinTransform);
@@ -464,6 +506,20 @@ export class Hip4Client {
    */
   async getOutcomeBySlug(slug: string): Promise<import('./types').Hip4OutcomeAggregate> {
     return this.outcomes.getBySlug(slug);
+  }
+
+  /**
+   * List HIP-4 questions (groupings of binary outcomes), one page at a time.
+   */
+  async listQuestions(params?: Hip4ListQuestionsParams): Promise<CursorResponse<Hip4Question[]>> {
+    return this.questions.list(params);
+  }
+
+  /**
+   * Get one HIP-4 question by id.
+   */
+  async getQuestion(questionId: number | string): Promise<Hip4Question> {
+    return this.questions.get(questionId);
   }
 
   /**

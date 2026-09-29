@@ -226,9 +226,14 @@ export class Hip4OutcomesResource {
 
   /** List per-outcome aggregates. `aggregatedOi` is omitted on list responses. */
   async list(params?: Hip4ListOutcomesParams): Promise<CursorResponse<Hip4OutcomeAggregate[]>> {
+    // The API reads the settlement filter as `is_settled`; `isSettled` alone
+    // would be ignored and return settled and live outcomes alike.
+    const { isSettled, ...rest } = params ?? {};
+    const query: Record<string, unknown> = { ...rest };
+    if (isSettled !== undefined) query.is_settled = isSettled;
     const response = await this.http.get<ApiResponse<Hip4OutcomeAggregate[]>>(
       `${this.basePath}/outcomes`,
-      params as unknown as Record<string, unknown>
+      query
     );
     return {
       data: response.data,

@@ -1,3 +1,5 @@
+import type { WebhookEvent } from './webhook-signature';
+
 /**
  * Configuration options for the 0xarchive client
  */
@@ -1710,6 +1712,288 @@ export interface PriceHistoryParams extends CursorPaginationParams {
 }
 
 // =============================================================================
+// Cumulative Volume Delta (CVD) Types
+// =============================================================================
+
+/** Bucket widths the CVD routes accept. */
+export type CvdInterval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
+
+/**
+ * Parameters for CVD history (Hyperliquid core and HIP-3).
+ *
+ * Every field is optional. Without `start` or `cursor`, the response is the
+ * newest `limit` buckets of the 24 hours before `end` (or before now), with
+ * no cursor.
+ */
+export interface CvdParams {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start?: number | string | Date;
+  /** End of the window (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: number | string | Date;
+  /** Bucket width (default `'1h'`). */
+  interval?: CvdInterval;
+  /**
+   * The previous page's `nextCursor`, passed back unchanged, with the same
+   * `start`, `end` and `interval`.
+   */
+  cursor?: number | string;
+  /** Buckets per page (default 500, max 10000). */
+  limit?: number;
+}
+
+/** One cumulative volume delta bucket. */
+export interface CvdBucket {
+  /** Bucket open time in Unix milliseconds (UTC). */
+  timestamp: number;
+  /** Taker buy notional in the bucket. */
+  buyVolume: number;
+  /** Taker sell notional in the bucket. */
+  sellVolume: number;
+  /** `buyVolume` minus `sellVolume` for this bucket. */
+  delta: number;
+  /**
+   * Running total of `delta` from the first bucket of this response. It
+   * restarts on every page, so rebuild it from `delta` when joining pages.
+   */
+  cumulativeDelta: number;
+}
+
+// =============================================================================
+// HIP-3 Oracle Types
+// =============================================================================
+
+/**
+ * Instantaneous discovery bounds for a HIP-3 market, derived from the
+ * current reference price and the market's max leverage. The full ratcheted
+ * range can be wider when deployer-specific reset configuration applies.
+ */
+export interface Hip3OracleDiscoveryBounds {
+  /** HIP-3 symbol, e.g. `km:US500`. */
+  symbol: string;
+  /** External price when available, otherwise the mark price. */
+  referencePrice: number;
+  /** Which price `referencePrice` is. */
+  referenceSource: 'external' | 'mark';
+  /** Market max leverage used for the bound fraction. */
+  maxLeverage: number;
+  /** Fraction applied on each side of `referencePrice`. */
+  boundFraction: number;
+  /** Instantaneous lower discovery bound. */
+  lowerBound: number;
+  /** Instantaneous upper discovery bound. */
+  upperBound: number;
+  /** Source block number. */
+  blockNumber: number;
+  /** Source timestamp in Unix milliseconds. */
+  timestamp: number;
+}
+
+/** Latest deployer-pushed external price and mark price for a HIP-3 market. */
+export interface Hip3OracleExternalPrice {
+  /** HIP-3 symbol, e.g. `km:US500`. */
+  symbol: string;
+  /** Externally derived reference price, when available. */
+  externalPrice?: number | null;
+  /** On-chain mark input. */
+  markPrice?: number | null;
+  /** Source block number. */
+  blockNumber: number;
+  /** Source timestamp in Unix milliseconds. */
+  timestamp: number;
+}
+
+// =============================================================================
+// HIP-4 Question Types
+// =============================================================================
+
+/**
+ * A HIP-4 question: a multi-choice resolver that groups binary outcome
+ * markets under one ballot, with one named outcome per choice plus a
+ * fallback outcome that resolves Yes when no named choice does.
+ */
+export interface Hip4Question {
+  /** Question identifier. */
+  questionId: number;
+  /** Question name as published on-chain (recurring markets use a generic name such as `Recurring`). */
+  name: string;
+  /** Pipe-delimited question metadata (class, underlying, expiry, price thresholds, period). */
+  description: string;
+  /** Outcome id that resolves Yes when no named outcome does. */
+  fallbackOutcomeId: number;
+  /** Outcome ids of the named choices grouped under this question. */
+  namedOutcomeIds: number[];
+  /** Subset of `namedOutcomeIds` that have already settled. */
+  settledNamedOutcomes: number[];
+  /** When the question was first observed (RFC 3339, UTC). */
+  firstSeenAt: string;
+  /** When the question was last updated (RFC 3339, UTC). */
+  lastUpdatedAt: string;
+  [key: string]: unknown;
+}
+
+/** Parameters for listing HIP-4 questions. */
+export interface Hip4ListQuestionsParams {
+  /** The previous page's `nextCursor` (a question id), passed back unchanged. */
+  cursor?: number | string;
+  /** Maximum results (default 100, max 1000). */
+  limit?: number;
+}
+
+// =============================================================================
+// Wallet Classification Types
+// =============================================================================
+
+/** Metrics the wallet classification can be sorted by. */
+export type WalletClassifySort =
+  | 'total_orders'
+  | 'total_fills'
+  | 'total_volume'
+  | 'total_volume_usd'
+  | 'cancel_rate'
+  | 'fill_rate'
+  | 'maker_ratio'
+  | 'avg_order_size_usd'
+  | 'avg_order_notional'
+  | 'max_order_size_usd'
+  | 'max_order_notional'
+  | 'active_hours'
+  | 'unique_coins'
+  | 'total_fees'
+  | 'total_fees_usd'
+  | 'realized_pnl'
+  | 'realized_pnl_usd'
+  | 'median_cancel_speed_ms'
+  | 'twap_fills'
+  | 'total_priority_gas'
+  | 'total_priority_gas_paid'
+  | 'total_builder_fees'
+  | 'total_builder_fees_paid';
+
+/**
+ * Parameters for wallet classification. Parameter names are sent as written,
+ * in the API's snake_case.
+ */
+export interface WalletClassifyParams {
+  /** Minimum order count (default 100). */
+  min_orders?: number;
+  /** Minimum fill volume in USD (default 0). */
+  min_volume_usd?: number;
+  /** Metric to sort by (default `total_orders`). */
+  sort?: WalletClassifySort;
+  /** Sort order (default `desc`). */
+  order?: 'asc' | 'desc';
+  /** Maximum wallets to return (default 100, 1 to 1000). */
+  limit?: number;
+  /** Pagination offset (default 0, capped at 100000). */
+  offset?: number;
+  /** Only wallets that do, or do not, use TWAP orders. */
+  uses_twap?: boolean;
+  /** Only wallets that do, or do not, pay priority gas. */
+  uses_priority_gas?: boolean;
+  /** Minimum cancel rate, 0 to 1. */
+  min_cancel_rate?: number;
+  /** Maximum cancel rate, 0 to 1. */
+  max_cancel_rate?: number;
+  /** Daily snapshot date, `YYYY-MM-DD` (defaults to yesterday). */
+  date?: string;
+}
+
+/** Precomputed behavioral metrics for one wallet. Every field is optional. */
+export interface WalletClassifyMetrics {
+  totalOrders?: number;
+  cancelRate?: number;
+  fillRate?: number;
+  orderToTradeRatio?: number;
+  iocRatio?: number;
+  postOnlyRatio?: number;
+  tpslRatio?: number;
+  triggerOrderRatio?: number;
+  uniqueCoinsTraded?: number;
+  usesTpsl?: boolean;
+  usesBuilder?: boolean;
+  topBuilder?: string | null;
+  avgOrderSizeUsd?: number;
+  maxOrderSizeUsd?: number;
+  medianCancelSpeedMs?: number;
+  activeHours?: number;
+  totalFills?: number;
+  totalVolumeUsd?: number;
+  makerRatio?: number;
+  longShortRatio?: number;
+  buyVolumeUsd?: number;
+  sellVolumeUsd?: number;
+  totalFeesUsd?: number;
+  realizedPnlUsd?: number;
+  liquidationCount?: number;
+  maxSingleFillUsd?: number;
+  uniqueFillCoins?: number;
+  usesTwap?: boolean;
+  twapFillRatio?: number;
+  usesCloid?: boolean;
+  cloidRatio?: number;
+  usesPriorityGas?: boolean;
+  totalPriorityGasPaid?: number;
+  totalBuilderFeesPaid?: number;
+}
+
+/** One wallet and its precomputed metrics. */
+export interface ClassifiedWallet {
+  /** Wallet address. */
+  address: string;
+  /** Behavioral metrics for the snapshot day. */
+  metrics: WalletClassifyMetrics;
+  /** Metric lookback period, e.g. `24h`. */
+  period: string;
+}
+
+/** A page of classified wallets. */
+export interface WalletClassification {
+  /** Wallets on this page. */
+  wallets: ClassifiedWallet[];
+  /** Total wallets matching the filters. Page with `offset`. */
+  total: number;
+  /** Daily snapshot date (`YYYY-MM-DD`). */
+  date: string;
+}
+
+// =============================================================================
+// Symbol Universe Types
+// =============================================================================
+
+/**
+ * One market in the public symbol universe (`GET /v1/symbols`).
+ *
+ * `coverageByType` and `sizePerDay` are keyed by data type exactly as the API
+ * sends them (for example `l4_orderbook`), so their keys are not camelCased.
+ */
+export interface SymbolEntry {
+  /** Symbol as used on its venue's routes (e.g. `BTC`, `xyz:XYZ100`, `HYPE-USDC`, `#0`). */
+  symbol: string;
+  /** Venue family: `hyperliquid`, `hip3`, `hip4`, `spot`, `lighter` or `rh-lighter`. */
+  exchange: string;
+  /** Earliest coverage (RFC 3339), when known. */
+  coverageFrom?: string | null;
+  /** Latest coverage (RFC 3339), when the market no longer updates. */
+  coverageTo?: string | null;
+  /** Data types available for the symbol (e.g. `l2_orderbook`, `trades`). */
+  dataTypes: string[];
+  /** Earliest coverage per data type (RFC 3339), keyed by data type. */
+  coverageByType?: Record<string, string>;
+  /** Estimated size per day per data type, keyed by data type. */
+  sizePerDay?: Record<string, number>;
+  /** HIP-4 slug, when available. */
+  slug?: string | null;
+  /** HIP-4 outcome pair (the two side coins), when available. */
+  outcomePair?: [string, string] | null;
+  /** HIP-4 display title, when available. */
+  displayTitle?: string | null;
+  /** HIP-4: whether the outcome has settled. */
+  isSettled?: boolean | null;
+  /** Whether the market is active, when reported. */
+  isActive?: boolean | null;
+}
+
+// =============================================================================
 // WebSocket Types
 // =============================================================================
 
@@ -1744,6 +2028,11 @@ export interface PriceHistoryParams extends CursorPaginationParams {
  *   replay starts with `l4_snapshot`, followed by ordered `l4_batch` pages.
  * - hip3_l4_diffs, hip3_l4_orders, hip4_l4_diffs, hip4_l4_orders,
  *   spot_l4_diffs, spot_l4_orders: real-time only
+ * - orderbook_full, hip3_orderbook_full: full-depth L2 order book (every
+ *   price level) for Hyperliquid core and HIP-3, real-time only. A
+ *   subscription starts with an `l4_snapshot` message carrying the whole
+ *   aggregated book (`WsL2FullDepthSnapshot`), then `l4_batch` messages of
+ *   level changes (`WsL2FullDepthBatch`).
  *
  * Liquidation messages share the trade wire format: each item is a fill row
  * with `is_liquidation: true`.
@@ -1761,7 +2050,14 @@ export type WsChannel =
   | 'spot_orderbook' | 'spot_trades' | 'spot_l4_diffs' | 'spot_l4_orders' | 'spot_twap'
   | 'l4_diffs' | 'l4_orders'
   | 'hip3_l4_diffs' | 'hip3_l4_orders'
-  | 'hip4_l4_diffs' | 'hip4_l4_orders';
+  | 'hip4_l4_diffs' | 'hip4_l4_orders'
+  | 'orderbook_full' | 'hip3_orderbook_full';
+
+/**
+ * Full-depth L2 order book channels (every price level, Hyperliquid core and
+ * HIP-3). These channels are live-only.
+ */
+export type FullDepthL2Channel = 'orderbook_full' | 'hip3_orderbook_full';
 
 /** Hyperliquid core L4 channels with checkpoint-anchored replay support. */
 export type HyperliquidCoreL4Channel = 'l4_diffs' | 'l4_orders';
@@ -1803,7 +2099,7 @@ export type RhLighterLiveChannel =
 export type RhLighterReplayOnlyChannel = 'rh_lighter_candles';
 
 /** Replay-capable channels, including the existing Lighter replay channels. */
-export type WsReplayableChannel = Exclude<WsChannel, HyperliquidL4LiveOnlyChannel>;
+export type WsReplayableChannel = Exclude<WsChannel, HyperliquidL4LiveOnlyChannel | FullDepthL2Channel>;
 
 /** Replay-capable channels other than the dedicated core L4 replay path. */
 export type WsStandardReplayChannel = Exclude<WsReplayableChannel, HyperliquidCoreL4Channel>;
@@ -2262,6 +2558,86 @@ export interface WsL4Batch<T extends WsL4BatchEvent = WsL4BatchEvent> {
   data: T[];
 }
 
+/** One aggregated price level in a full-depth L2 snapshot. */
+export interface WsL2FullDepthLevel {
+  /** Price. */
+  px: number;
+  /** Aggregate size resting at the price. */
+  sz: number;
+  /** Number of orders at the price. */
+  n: number;
+}
+
+/** The book sent first on `orderbook_full` and `hip3_orderbook_full`. */
+export interface WsL2FullDepthSnapshotData {
+  /** Every bid level, best (highest) first. */
+  bids: WsL2FullDepthLevel[];
+  /** Every ask level, best (lowest) first. */
+  asks: WsL2FullDepthLevel[];
+  /** Number of bid levels. */
+  bid_count: number;
+  /** Number of ask levels. */
+  ask_count: number;
+  /** Total size across all bid levels. */
+  total_bid_size: number;
+  /** Total size across all ask levels. */
+  total_ask_size: number;
+  /** Mid price; null when a side is empty. */
+  mid_price: number | null;
+  /** Best ask minus best bid; null when a side is empty. */
+  spread: number | null;
+  /** Spread in basis points of the mid; null when a side is empty. */
+  spread_bps: number | null;
+  /** True when the best bid is at or above the best ask. */
+  is_crossed: boolean;
+}
+
+/**
+ * One level change on a full-depth L2 channel. Apply changes in order: set
+ * the level at `px` on `side` to `sz` and `n`, and remove it when `sz` is 0.
+ */
+export interface WsL2FullDepthDelta {
+  /** `B` for bids, `A` for asks. */
+  side: 'B' | 'A';
+  /** Price of the level. */
+  px: number;
+  /** New aggregate size at the level (0 removes it). */
+  sz: number;
+  /** New order count at the level (0 removes it). */
+  n: number;
+  /** Block number of the change. */
+  bn: number;
+}
+
+/**
+ * First message of a live full-depth L2 subscription (`orderbook_full`,
+ * `hip3_orderbook_full`): the whole aggregated book. It shares the
+ * `l4_snapshot` message type with the L4 channels; tell them apart by
+ * `channel`.
+ */
+export interface WsL2FullDepthSnapshot {
+  type: 'l4_snapshot';
+  channel: FullDepthL2Channel;
+  coin: string;
+  symbol: string;
+  /** Block the book is current to. */
+  last_block_number: number;
+  timestamp: number;
+  data: WsL2FullDepthSnapshotData;
+}
+
+/**
+ * Level changes on a live full-depth L2 subscription, in order. It shares the
+ * `l4_batch` message type with the L4 channels; tell them apart by `channel`.
+ */
+export interface WsL2FullDepthBatch {
+  type: 'l4_batch';
+  channel: FullDepthL2Channel;
+  coin: string;
+  symbol: string;
+  data: WsL2FullDepthDelta[];
+}
+
 // -----------------------------------------------------------------------------
 // Live Lighter payloads
 //
@@ -2417,6 +2793,8 @@ export type WsServerMessage =
   | WsGapDetected
   | WsL4Snapshot
   | WsL4Batch
+  | WsL2FullDepthSnapshot
+  | WsL2FullDepthBatch
   | WsOutcomeSettled;
 
 /**
@@ -2540,11 +2918,16 @@ export interface Web3SubscribeResult {
 // =============================================================================
 
 /**
- * API error response
+ * API error response.
+ *
+ * Error responses have no `meta`: the request id sits at the top level,
+ * beside the code and the message.
  */
 export interface ApiError {
   code: number;
   error: string;
+  /** Request id to quote to support. Surfaced as `OxArchiveError.requestId`. */
+  requestId?: string;
   /**
    * Stable application error code when the API sends one, for example
    * `snapshot_advanced` (409: restart pagination without a cursor),
@@ -2901,4 +3284,643 @@ export interface SlaParams {
   year?: number;
   /** Month 1-12 (defaults to current month) */
   month?: number;
+}
+
+// =============================================================================
+// Webhooks
+// =============================================================================
+
+/**
+ * A subscription's configuration: which occurrences of an event type should
+ * be delivered.
+ *
+ * Unlike most types in this file, the keys here are **wire keys**. This
+ * object is stored and returned by the API verbatim, so the SDK sends it and
+ * returns it exactly as written. Use `min_notional_usd`, not
+ * `minNotionalUsd`.
+ *
+ * Every key is optional and every key is validated against the event type's
+ * declaration from `client.webhooks.eventTypes()`. An empty config means
+ * "every occurrence of this event that is in scope for me". The stored form
+ * is normalised: venues and addresses lowercased, declared parameters filled
+ * in at their defaults, and operators in their canonical spelling.
+ */
+export interface WebhookSubscriptionConfig {
+  /**
+   * Venue or venues to match, from the event type's `venues`. A single
+   * string, a pipe-separated string, or a list. Omit to match every covered
+   * venue.
+   */
+  venue?: string | string[];
+  /** Instrument symbols to match, in each venue's own form. Omit to match every symbol. */
+  symbols?: string[];
+  /** Wallets to match, for an address-scoped event type. Each must already be on your watched list. */
+  addresses?: string[];
+  /**
+   * Declared parameters for the event type, such as `window_s` or
+   * `threshold_usd`. A declared parameter left out is stored at its default;
+   * one may also be written at the top level of this object.
+   */
+  params?: Record<string, unknown>;
+  /** Conditions on the event type's declared metrics, all of which must hold. At most 16. */
+  conditions?: WebhookCondition[];
+  /**
+   * Shorthand for a `notional_usd` at-or-above condition. It is stored as a
+   * condition and mirrored back here as the loosest notional lower bound.
+   */
+  min_notional_usd?: number;
+  /** Declared parameters written at the top level. */
+  [key: string]: unknown;
+}
+
+/** Canonical condition operators, as the API stores them. */
+export type WebhookConditionCanonicalOperator =
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal'
+  | 'equal'
+  | 'not_equal'
+  | 'between'
+  | 'not_between'
+  | 'in'
+  | 'not_in'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'before'
+  | 'after'
+  | 'is_empty'
+  | 'is_not_empty';
+
+/**
+ * Operators accepted in a {@link WebhookCondition}.
+ *
+ * Which ones apply depends on the metric's type, and the event type's
+ * `operators` lists them per type. Symbol spellings such as `>=` are
+ * accepted and stored in their canonical form, so a condition sent as `>=`
+ * reads back as `greater_than_or_equal`.
+ */
+export type WebhookConditionOperator =
+  | WebhookConditionCanonicalOperator
+  | '>'
+  | '>='
+  | '<'
+  | '<='
+  | '=='
+  | '!=';
+
+/** One condition on a declared metric. */
+export interface WebhookCondition {
+  /** A metric declared by the event type. */
+  metric: string;
+  /** Comparison to apply. */
+  op: WebhookConditionOperator;
+  /**
+   * What to compare against: a number, a string, a boolean, an RFC 3339
+   * timestamp, a `[low, high]` pair for `between` and `not_between`, or a
+   * non-empty list for `in` and `not_in`. Omitted for `is_empty` and
+   * `is_not_empty`.
+   */
+  value?: unknown;
+}
+
+/** A tunable parameter an event type declares. */
+export interface WebhookParamDeclaration {
+  /** Value type: `integer`, `number`, `string` or `array_of_number`. */
+  type: 'integer' | 'number' | 'string' | 'array_of_number';
+  /** Unit the value is expressed in, when it has one. */
+  unit?: string;
+  /** Value used when the parameter is not supplied. */
+  default?: unknown;
+  /** Lowest accepted value, when bounded below. */
+  min?: number;
+  /** Highest accepted value, when bounded above. */
+  max?: number;
+  /** Accepted values, when the parameter is a fixed choice. */
+  enum?: unknown[];
+  /** What the parameter changes. */
+  description?: string;
+}
+
+/** A metric an event carries, which conditions may be written against. */
+export interface WebhookMetricDeclaration {
+  /** Value type. It decides which operators a condition on this metric may use. */
+  type: 'number' | 'integer' | 'string' | 'boolean' | 'timestamp';
+  /** Unit the metric is expressed in, when it has one. */
+  unit?: string;
+  /** Accepted values, when the metric is a fixed choice. */
+  values?: string[];
+  /** What the metric measures, including when it is null. */
+  description?: string;
+}
+
+/** The smallest occurrence an event type reports at all. */
+export interface WebhookCostFloor {
+  /** Metric the floor applies to, e.g. `notional_usd`. */
+  metric: string;
+  /** Lowest value still reported. */
+  min: number;
+}
+
+/**
+ * One entry in the event catalog: an event type and everything a
+ * subscription to it may say.
+ *
+ * This is the authority on filters, parameters, metrics and operators. Read
+ * it rather than hardcoding a catalog. `params`, `metrics`, `operators` and
+ * `filtersExample` keep their keys exactly as the API sends them.
+ */
+export interface WebhookEventTypeDeclaration {
+  /** Event type, e.g. `market.liquidation`. Send it as `eventType` when subscribing. */
+  type: string;
+  /** Version of the delivered payload shape. */
+  schemaVersion: number;
+  /** Whether subscriptions are accepted. `false` means published but not yet live. */
+  live: boolean;
+  /**
+   * `public` for market-wide events, `user` for your own account and
+   * platform activity, `addresses` for events about your watched wallets.
+   */
+  scope: 'public' | 'user' | 'addresses';
+  /** Venues the type covers. Empty when the type is not venue scoped. */
+  venues: string[];
+  /** Filter keys the configuration accepts. Anything else is refused. */
+  filters: string[];
+  /** Tunable parameters, keyed by parameter name. */
+  params: Record<string, WebhookParamDeclaration>;
+  /** Metrics carried by the event, keyed by metric name. */
+  metrics: Record<string, WebhookMetricDeclaration>;
+  /** Smallest occurrence reported at all, or null when the type has no floor. */
+  costFloor: WebhookCostFloor | null;
+  /** Rough delivery latency, from the occurrence to the first delivery attempt. */
+  latencyClass: 'seconds' | 'minutes';
+  /** What the event reports and what one occurrence means. */
+  description: string;
+  /** A worked example configuration for this type. */
+  filtersExample?: WebhookSubscriptionConfig;
+  /**
+   * Operator vocabulary grouped by metric type, plus the `any` group that
+   * applies to every metric.
+   */
+  operators?: Record<string, WebhookConditionCanonicalOperator[]>;
+}
+
+/** Endpoint status. `auto_disabled` means a long run of failed deliveries switched it off. */
+export type WebhookEndpointStatus = 'active' | 'disabled' | 'auto_disabled';
+
+/** A delivery destination. The signing secret is never part of this shape. */
+export interface WebhookEndpoint {
+  /** Endpoint id. */
+  id: string;
+  /** HTTPS destination that receives deliveries. */
+  url: string;
+  /** Your own label for the endpoint. */
+  description: string;
+  /**
+   * `active` is serving, `disabled` means you switched it off, and
+   * `auto_disabled` means a long run of failed deliveries switched it off
+   * for you. `enableEndpoint()` brings it back.
+   */
+  status: WebhookEndpointStatus;
+  /** Failed attempts since the last success. Resets to 0 on a delivery that lands. */
+  consecutiveFailures: number;
+  /** When the endpoint was created (RFC 3339). */
+  createdAt: string;
+}
+
+/** A newly created endpoint. This and a rotation are the only responses that carry the secret. */
+export interface CreatedWebhookEndpoint extends WebhookEndpoint {
+  /** Signing secret. Store it now: it is not shown again. */
+  secret: string;
+}
+
+/** Parameters for creating an endpoint. */
+export interface CreateWebhookEndpointParams {
+  /** HTTPS URL to deliver to. Destinations that resolve to a private or internal address are refused. */
+  url: string;
+  /** Optional label. */
+  description?: string;
+}
+
+/** A freshly rotated signing secret. */
+export interface RotatedWebhookSecret {
+  /** The new signing secret. The previous one keeps verifying for 24 hours. */
+  secret: string;
+}
+
+/** Why a subscription is paused: the daily delivery limit, or a plan without webhook delivery. */
+export type WebhookPauseReason = 'deliveries_per_day_cap' | 'plan_no_webhooks';
+
+/**
+ * A rule: one event type, one configuration, delivered to one endpoint.
+ *
+ * When the account passes its daily delivery limit, or its plan stops
+ * including webhook delivery, the rule pauses and says so here rather than
+ * dropping events in silence. Nothing is buffered while it is paused; the
+ * `suppressed*` fields describe what was missed, and the same window can be
+ * re-read from the REST routes.
+ */
+export interface WebhookSubscription {
+  /** Subscription id. */
+  id: string;
+  /** Endpoint that receives this rule's deliveries. */
+  endpointId: string;
+  /** Event type this rule subscribes to. */
+  eventType: string;
+  /** The stored configuration, normalised. Wire keys, returned verbatim. */
+  filters: WebhookSubscriptionConfig;
+  /** Your own on and off switch. Resuming a paused rule never changes it. */
+  enabled: boolean;
+  /** When the rule was created (RFC 3339). */
+  createdAt: string;
+  /** `active` is serving; `auto_paused` means delivery is paused until you resume it. */
+  status: 'active' | 'auto_paused';
+  /** Why the rule is paused and what clears it, in plain words. Present only while paused. */
+  pauseMessage?: string;
+  /** Start of the current gap. Null while serving. */
+  pausedAt?: string | null;
+  /** Machine-readable cause of the current pause. Null while serving. Show `pauseMessage` to people. */
+  pauseReason?: WebhookPauseReason | null;
+  /** Matches observed but not delivered since the pause began. A lower bound, not a total. */
+  suppressedCount: number;
+  /** First suppressed match of the current pause. */
+  suppressedFirstAt?: string | null;
+  /** Most recent suppressed match of the current pause. */
+  suppressedLastAt?: string | null;
+  /** Start of the last pause that has already ended. */
+  lastPausedAt?: string | null;
+  /** When that pause ended. */
+  lastResumedAt?: string | null;
+  /** Cause of the last pause that has already ended. */
+  lastPauseReason?: WebhookPauseReason | null;
+  /** Matches suppressed during the last pause that has already ended. */
+  lastSuppressedCount: number;
+  /** First suppressed match of that pause. */
+  lastSuppressedFirstAt?: string | null;
+  /** Most recent suppressed match of that pause. */
+  lastSuppressedLastAt?: string | null;
+}
+
+/** Parameters for creating a subscription. */
+export interface CreateWebhookSubscriptionParams {
+  /** Endpoint to deliver matches to. It must be one of yours. */
+  endpointId: string;
+  /** Event type to subscribe to. It must be `live` in the catalog. */
+  eventType: string;
+  /** Configuration. Omit for every in-scope occurrence. */
+  filters?: WebhookSubscriptionConfig;
+}
+
+/** Parameters for editing a subscription in place. A field left out is left alone. */
+export interface UpdateWebhookSubscriptionParams {
+  /** Replacement configuration. It replaces the stored one wholesale. */
+  filters?: WebhookSubscriptionConfig;
+  /** Switch the rule on or off without touching its configuration. */
+  enabled?: boolean;
+}
+
+/** The window re-read to cover a pause, as start and end. */
+export interface WebhookReplayWindow {
+  /** Window start (RFC 3339). */
+  start: string | null;
+  /** Window end (RFC 3339). */
+  end: string | null;
+}
+
+/**
+ * The window a resume just closed. Nothing is buffered while a rule is
+ * paused, so this describes what was missed rather than replaying it.
+ */
+export interface WebhookResumeGap {
+  /** Start of the gap. */
+  pausedAt: string | null;
+  /** End of the gap. */
+  resumedAt: string | null;
+  /** The gap as a window to re-read from the REST routes. */
+  replayWindow: WebhookReplayWindow;
+  /** Cause of the pause that was cleared. Null on a bulk resume with more than one cause. */
+  reason?: WebhookPauseReason | null;
+  /** Distinct causes across the resumed rules. Bulk resume only. */
+  reasons?: WebhookPauseReason[];
+  /** The cause in plain words. */
+  pauseMessage?: string | null;
+  /**
+   * Matches suppressed inside the window. Null when the rules were address
+   * scoped, because their occurrences were not looked at.
+   */
+  suppressedCount?: number | null;
+  /** Whether anything inside the window was counted. False means the count is null because nothing was looked at. */
+  counted: boolean;
+  /** First suppressed match inside the window. */
+  suppressedFirstAt?: string | null;
+  /** Most recent suppressed match inside the window. */
+  suppressedLastAt?: string | null;
+  /** How many of the resumed rules were address scoped, and so not counted. Bulk resume only. */
+  uncountedSubscriptions?: number;
+  /** What can and cannot be recovered for the window, and how. */
+  note: string;
+}
+
+/** Result of resuming one subscription. */
+export interface WebhookSubscriptionResumeResult {
+  /** The subscription after the resume. */
+  subscription: WebhookSubscription;
+  /** The window the resume closed. Null when the rule was already serving and nothing changed. */
+  gap: WebhookResumeGap | null;
+  /** Present only when nothing changed, to say why. */
+  note?: string;
+}
+
+/** Result of resuming every paused subscription on the account. */
+export interface WebhookSubscriptionResumeAllResult {
+  /** The subscriptions that were put back into service. */
+  subscriptions: WebhookSubscription[];
+  /** How many rules were resumed. */
+  resumedCount: number;
+  /** The window the resume closed, across the rules it cleared. Null when nothing was paused. */
+  gap: WebhookResumeGap | null;
+  /** Present only when nothing changed, to say why. */
+  note?: string;
+}
+
+/** Delivery state. `exhausted` means the retry window closed without success. */
+export type WebhookDeliveryState = 'pending' | 'delivered' | 'failed' | 'exhausted';
+
+/**
+ * One delivery record for one event to one endpoint. An event and an
+ * endpoint share a single record for their whole life, so a repeat delivery
+ * rewrites this record rather than adding another.
+ */
+export interface WebhookDelivery {
+  /** Delivery id. Pass it to `redeliver()`. */
+  id: string;
+  /** Event id, stable across retries and repeat deliveries. Deduplicate on it. */
+  eventId: string;
+  /** Event type delivered. */
+  eventType: string;
+  /** `pending`, `delivered`, `failed` or `exhausted`. */
+  state: WebhookDeliveryState;
+  /** Attempts made so far. */
+  attempts: number;
+  /** HTTP status your receiver returned on the last attempt. */
+  lastStatusCode?: number | null;
+  /** Why the last attempt failed. Null when it succeeded. */
+  lastError?: string | null;
+  /** How long the last attempt took, in milliseconds. */
+  lastLatencyMs?: number | null;
+  /** When the next attempt is due (RFC 3339). */
+  nextAttemptAt: string;
+  /** When the delivery landed (RFC 3339). Null until it does. */
+  deliveredAt?: string | null;
+  /** When the delivery was queued (RFC 3339). A repeat delivery resets it. */
+  createdAt: string;
+  /** The event body as sent. Wire keys, exactly as signed. */
+  payload: WebhookEvent;
+}
+
+/** Parameters for listing deliveries. */
+export interface ListWebhookDeliveriesParams {
+  /** Deliveries to return, newest first. Default 50, clamped to 1 to 200. */
+  limit?: number;
+}
+
+/** A delivery that has just been queued by a test. */
+export interface WebhookTestFireResult {
+  /** Delivery id. Read it back from the endpoint's delivery log. */
+  deliveryId: string;
+  /** Event id carried in the delivered payload. */
+  eventId: string;
+}
+
+/** A past delivery queued for another attempt. The ids are unchanged. */
+export interface WebhookRedeliveryResult {
+  /** Delivery id, the same one that was asked for. */
+  deliveryId: string;
+  /** Event id, unchanged, so a receiver that already processed it can deduplicate. */
+  eventId: string;
+  /** Event type being delivered again. */
+  eventType: string;
+  /** Always `pending` right after a repeat delivery is queued. */
+  state: 'pending';
+  /** Attempt counter, restarted from zero. */
+  attempts: number;
+  /** When the attempt is due, which is immediately (RFC 3339). */
+  nextAttemptAt: string;
+}
+
+/** A wallet on your watched list. Address-scoped event types report only on these. */
+export interface WebhookWatchedAddress {
+  /** Watched-address id. */
+  id: string;
+  /** The wallet, stored lowercase. */
+  address: string;
+  /** Your own label, at most 64 characters. */
+  label: string;
+  /** When it was added (RFC 3339). */
+  createdAt: string;
+}
+
+/** The watched list, with the number of wallets the plan allows. */
+export interface WebhookWatchedAddressList {
+  /** Every wallet on the list. */
+  addresses: WebhookWatchedAddress[];
+  /** Watched wallets the plan allows. */
+  limit: number;
+}
+
+/** Parameters for watching a wallet. */
+export interface AddWebhookAddressParams {
+  /** A 0x-prefixed, 40 hex character wallet address. Stored lowercase. */
+  address: string;
+  /** Optional label, at most 64 characters. */
+  label?: string;
+}
+
+/** One plan cap: what the plan allows, what is in use, and what is left. */
+export interface WebhookLimitUsage {
+  /** In use now. */
+  used: number;
+  /** What the plan allows. Zero on a plan without webhook delivery. */
+  limit: number;
+  /** What is left, never below zero. */
+  remaining: number;
+}
+
+/** Today's delivery budget. The budget resets on its own; a paused rule does not. */
+export interface WebhookDeliveryBudget {
+  /** Deliveries today. */
+  used: number;
+  /** Deliveries a day the plan allows. Null when the plan has no ceiling. */
+  limit: number | null;
+  /** Deliveries left today. Null when the plan has no ceiling. */
+  remaining: number | null;
+  /** True when the plan has no daily ceiling. */
+  unlimited: boolean;
+  /** When the budget resets (RFC 3339). */
+  resetsAt: string;
+  /** Present only while something is paused, to say the reset time is the budget's, not the pause's. */
+  resetsAtNote?: string;
+}
+
+/** Paused rules on the account. */
+export interface WebhookPausedSubscriptions {
+  /** How many rules are paused and delivering nothing. */
+  count: number;
+  /** Start of the oldest pause still in force. */
+  earliestPausedAt?: string | null;
+  /** Distinct causes across the paused rules. */
+  reasons: WebhookPauseReason[];
+  /** What is paused and what clears it, in plain words. Present only when something is paused. */
+  message?: string;
+}
+
+/** What the plan allows for webhooks and what is in use. */
+export interface WebhookLimits {
+  /** The plan webhook decisions are priced at. */
+  plan: string;
+  /** The plan's display name, when known. */
+  planLabel?: string | null;
+  /** Whether the plan has webhook delivery at all. False on Free, where every cap is zero. */
+  included: boolean;
+  /** Whether the estimate and the dry-run are available. True on every plan. */
+  previewIncluded: boolean;
+  /** Endpoint cap and usage. */
+  endpoints: WebhookLimitUsage;
+  /** Subscription cap and usage. */
+  subscriptions: WebhookLimitUsage;
+  /** Watched wallet cap and usage. */
+  watchedAddresses: WebhookLimitUsage;
+  /** Today's delivery budget. */
+  deliveriesPerDay: WebhookDeliveryBudget;
+  /** Paused rules on the account. */
+  pausedSubscriptions: WebhookPausedSubscriptions;
+  /** Why the caps are zero and what to do about it. Present only on a plan without webhook delivery. */
+  notice?: string;
+}
+
+/** The window a preview answer covers. */
+export interface WebhookWindow {
+  /** Start (RFC 3339). Later than requested when a scan reached its row cap. */
+  from: string;
+  /** End (RFC 3339): the moment of the request. */
+  to: string;
+}
+
+/** One occurrence a rule would have delivered. */
+export interface WebhookOccurrence {
+  /**
+   * The occurrence's own timestamp. A real delivery's `observed_at` is this
+   * plus the time it takes to see the occurrence.
+   */
+  observedAtEstimate: string;
+  /** The `data` a delivery would carry. Wire keys. */
+  data: Record<string, unknown>;
+}
+
+/** Parameters for a dry run. */
+export interface WebhookDryRunParams {
+  /** Event type to evaluate. */
+  eventType: string;
+  /** The configuration you would create, validated exactly as a create. */
+  config?: WebhookSubscriptionConfig;
+  /** Seconds of history to scan, ending now (60 to 86400, default 3600). */
+  lookbackS?: number;
+  /** Occurrences to return, newest first (1 to 200, default 100). */
+  limit?: number;
+}
+
+/** Which occurrences a rule would have delivered over a recent window. */
+export interface WebhookDryRunResult {
+  /** Event type evaluated. */
+  eventType: string;
+  /** The window actually covered. */
+  window: WebhookWindow;
+  /** Occurrences that matched inside the window, before `limit`. */
+  matched: number;
+  /** True when fewer occurrences are returned than matched, or a scan cap narrowed the window. */
+  truncated: boolean;
+  /** Newest first, at most `limit`. */
+  occurrences: WebhookOccurrence[];
+}
+
+/** Parameters for an estimate. */
+export interface WebhookEstimateParams {
+  /** Event type to evaluate. */
+  eventType: string;
+  /** The configuration you would create, validated exactly as a create. */
+  config?: WebhookSubscriptionConfig;
+  /** Days of history to evaluate, ending now (1 to 30, default 7). */
+  lookbackDays?: number;
+}
+
+/** Matches in one 24 hour bin of the estimate window. */
+export interface WebhookDayCount {
+  /** UTC date the bin ends on. */
+  date: string;
+  /** Occurrences that would have been delivered in the bin. */
+  count: number;
+}
+
+/** The daily rate the same configuration would have had at a different threshold. */
+export interface WebhookEstimateRung {
+  /** Threshold on the primary metric. */
+  value: number;
+  /** Deliveries a day at that threshold, everything else unchanged. */
+  perDay: number;
+}
+
+/** Quantiles of the primary metric over the matched occurrences. */
+export interface WebhookEstimateDistribution {
+  /** Occurrences the quantiles are computed over. */
+  n: number;
+  /** Median. */
+  p50: number;
+  /** 90th percentile. */
+  p90: number;
+  /** 99th percentile. */
+  p99: number;
+  /** Largest value seen. */
+  max: number;
+}
+
+/** How an estimate was produced. */
+export interface WebhookEstimateBasis {
+  /**
+   * `exact` counted every occurrence in the window, `sampled` scaled the
+   * counts from a capped scan, and `replayed` re-ran a windowed rule over
+   * history at your parameters.
+   */
+  mode: 'exact' | 'sampled' | 'replayed';
+  /** What qualifies the numbers, when anything does. */
+  note: string | null;
+}
+
+/** How often a rule would have fired over the window, and how that varies with its threshold. */
+export interface WebhookEstimateResult {
+  /** Event type evaluated. */
+  eventType: string;
+  /** The window actually covered. */
+  window: WebhookWindow;
+  /** Days the answer covers. Shorter than requested when the event type has a shorter cap. */
+  days: number;
+  /** Occurrences that would have been delivered across the window. */
+  total: number;
+  /** One entry per day, oldest first, zero filled. */
+  perDay: WebhookDayCount[];
+  /** Median deliveries a day. */
+  perDayP50: number;
+  /** Busiest day. */
+  perDayMax: number;
+  /** The metric the ladder and the distribution are about. Null when the type has none. */
+  primaryMetric: string | null;
+  /** Ascending thresholds and the daily rate at each. Empty when there is no primary metric. */
+  ladder: WebhookEstimateRung[];
+  /** Quantiles of the primary metric. Null when there is none or nothing matched. */
+  distribution: WebhookEstimateDistribution | null;
+  /** Newest matches first, in the same shape the dry run returns. */
+  sample: WebhookOccurrence[];
+  /** How the answer was produced. */
+  basis: WebhookEstimateBasis;
 }

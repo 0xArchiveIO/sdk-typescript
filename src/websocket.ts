@@ -53,6 +53,7 @@ import type {
   WsCoreL4ReplayOptions,
   HyperliquidCoreL4Channel,
   HyperliquidL4LiveOnlyChannel,
+  FullDepthL2Channel,
   LighterLiveChannel,
   LighterReplayOnlyChannel,
   RhLighterLiveChannel,
@@ -184,6 +185,20 @@ export const HYPERLIQUID_L4_LIVE_ONLY_CHANNELS: ReadonlySet<HyperliquidL4LiveOnl
   'spot_l4_orders',
 ]);
 
+export const FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR =
+  'orderbook_full and hip3_orderbook_full are live-only; replay is unavailable. For full-depth ' +
+  'history use the REST L2 history and diffs routes (l2Orderbook.history() and l2Orderbook.diffs()).';
+
+/**
+ * Full-depth L2 order book channels (every price level). Live subscriptions
+ * start with an `l4_snapshot` message holding the whole aggregated book,
+ * followed by `l4_batch` messages of level changes. Replay is unavailable.
+ */
+export const FULL_DEPTH_L2_CHANNELS: ReadonlySet<FullDepthL2Channel> = new Set([
+  'orderbook_full',
+  'hip3_orderbook_full',
+]);
+
 function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptions): void {
   if (LIGHTER_REPLAY_ONLY_CHANNELS.has(channel as LighterReplayOnlyChannel)) {
     throw new Error(LIGHTER_SUBSCRIPTION_ERROR);
@@ -244,6 +259,9 @@ function rhLighterLiveChannel(channel: RhLighterLiveChannelInput): RhLighterLive
 function validateReplayChannel(channel: WsChannel, end?: number): void {
   if (HYPERLIQUID_L4_LIVE_ONLY_CHANNELS.has(channel as HyperliquidL4LiveOnlyChannel)) {
     throw new Error(HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR);
+  }
+  if (FULL_DEPTH_L2_CHANNELS.has(channel as FullDepthL2Channel)) {
+    throw new Error(FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR);
   }
   if (HYPERLIQUID_CORE_L4_REPLAY_CHANNELS.has(channel as HyperliquidCoreL4Channel) && end === undefined) {
     throw new Error('Hyperliquid core L4 replay requires an explicit end timestamp.');
@@ -542,6 +560,11 @@ export class OxArchiveWs {
    * `lighter_candles`, `lighter_l3_orderbook` and `rh_lighter_candles` are
    * replay-only and throw here; use REST for current data or a bounded replay
    * for stored history.
+   *
+   * `orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3)
+   * stream the full-depth L2 book: an `l4_snapshot` message with every price
+   * level, then `l4_batch` messages of level changes. Read them with
+   * `onMessage`; see `WsL2FullDepthSnapshot` and `WsL2FullDepthBatch`.
    *
    * @param channel - Channel to subscribe to
    * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive
