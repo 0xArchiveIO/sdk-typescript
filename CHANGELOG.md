@@ -109,7 +109,8 @@ semver in spirit.
 - Documentation links point at docs.0xarchive.io.
 
 ### Development
-- vitest 4.1 (was 2.x). Tests run on Node 20 or newer.
+- vitest 3.2 (was 2.x), the patched line. It installs cleanly with the npm
+  bundled with Node 20 and 22.
 
 ## 1.11.0 (2026-09-25)
 
