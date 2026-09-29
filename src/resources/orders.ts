@@ -10,6 +10,10 @@ import type {
 } from '../types';
 import { TriggerLevelsHistoryResponseSchema, TriggerLevelsResponseSchema } from '../schemas';
 
+/**
+ * Order history filters, sent in the API's parameter names. Hyperliquid core,
+ * HIP-3 and HIP-4 only: Spot order history takes no filters.
+ */
 export interface OrderHistoryParams extends CursorPaginationParams {
   user?: string;
   status?: string;
@@ -36,53 +40,48 @@ export interface TpslParams extends CursorPaginationParams {
 }
 
 /**
- * Orders API resource
+ * Order lifecycle history, the order route Hyperliquid Spot serves
+ * (`client.spot.orders`). Spot order history takes the time range and
+ * cursor only.
  *
  * @example
  * ```typescript
- * // Get order history
- * const result = await client.hyperliquid.orders.history('BTC', {
- *   start: Date.now() - 86400000,
+ * const result = await client.spot.orders.history('HYPE-USDC', {
+ *   start: Date.now() - 3600000,
  *   end: Date.now(),
  *   limit: 1000
  * });
- *
- * // Get order flow
- * const flow = await client.hyperliquid.orders.flow('BTC', {
- *   start: Date.now() - 86400000,
- *   end: Date.now(),
- *   interval: '1h'
- * });
- *
- * // Get TP/SL orders
- * const tpsl = await client.hyperliquid.orders.tpsl('BTC', {
- *   start: Date.now() - 86400000,
- *   end: Date.now()
- * });
  * ```
  */
-export class OrdersResource {
+export class OrderHistoryResource<P extends CursorPaginationParams = CursorPaginationParams> {
   constructor(
-    private http: HttpClient,
-    private basePath: string = '/v1',
-    private coinTransform: (s: string) => string = (c) => c.toUpperCase()
+    protected http: HttpClient,
+    protected basePath: string = '/v1',
+    protected coinTransform: (s: string) => string = (c) => c.toUpperCase()
   ) {}
 
   /**
    * Get order history for a symbol with cursor-based pagination
    *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
-   * @param params - Time range, cursor pagination, and filter parameters
+   * @param params - Time range, cursor pagination, and filter parameters where the family supports them
    * @returns CursorResponse with order records and nextCursor for pagination
    */
-  async history(symbol: string, params: OrderHistoryParams): Promise<CursorResponse<any[]>> {
+  async history(symbol: string, params: P): Promise<CursorResponse<any[]>> {
     const response = await this.http.get<ApiResponse<any[]>>(
       `${this.basePath}/orders/${this.coinTransform(symbol)}/history`,
       params as unknown as Record<string, unknown>
     );
     return { data: response.data, nextCursor: response.meta.nextCursor };
   }
+}
 
+/**
+ * Order history with filters, order flow and TP/SL orders, the order routes
+ * HIP-4 serves (`client.hyperliquid.hip4.orders`). Trigger levels are on
+ * Hyperliquid core and HIP-3 only.
+ */
+export class OrderFlowResource extends OrderHistoryResource<OrderHistoryParams> {
   /**
    * Get order flow for a symbol, one page of time buckets
    *
@@ -117,7 +116,36 @@ export class OrdersResource {
     );
     return { data: response.data, nextCursor: response.meta.nextCursor };
   }
+}
 
+/**
+ * Orders API resource: history, flow, TP/SL and trigger levels, the order
+ * routes Hyperliquid core and HIP-3 serve.
+ *
+ * @example
+ * ```typescript
+ * // Get order history
+ * const result = await client.hyperliquid.orders.history('BTC', {
+ *   start: Date.now() - 86400000,
+ *   end: Date.now(),
+ *   limit: 1000
+ * });
+ *
+ * // Get order flow
+ * const flow = await client.hyperliquid.orders.flow('BTC', {
+ *   start: Date.now() - 86400000,
+ *   end: Date.now(),
+ *   interval: '1h'
+ * });
+ *
+ * // Get TP/SL orders
+ * const tpsl = await client.hyperliquid.orders.tpsl('BTC', {
+ *   start: Date.now() - 86400000,
+ *   end: Date.now()
+ * });
+ * ```
+ */
+export class OrdersResource extends OrderFlowResource {
   /**
    * Get the pending trigger-order map for a symbol
    *

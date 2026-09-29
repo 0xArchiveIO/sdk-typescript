@@ -87,6 +87,7 @@ export {
 
 // L2 Full-Depth Orderbook resource
 export { L2OrderBookResource, type L2OrderBookParams } from './resources/l2-orderbook';
+export type { L3OrderBookParams, L3OrderBookHistoryParams } from './resources/l3-orderbook';
 export { Hip3BreadthResource } from './resources/hip3-breadth';
 
 // CVD, HIP-3 oracle, HIP-4 questions, wallet classification and symbol resources
@@ -216,6 +217,8 @@ export {
   DataTypeFreshnessInfoSchema,
   CoinFreshnessSchema,
   CoinFreshnessResponseSchema,
+  SpotFreshnessSchema,
+  SpotFreshnessResponseSchema,
   // Coin Summary schemas
   CoinSummarySchema,
   CoinSummaryResponseSchema,
@@ -413,6 +416,7 @@ export type {
   // Coin Freshness
   DataTypeFreshnessInfo,
   CoinFreshness,
+  SpotFreshness,
   // Coin Summary
   CoinSummary,
   // Price History

@@ -20,7 +20,9 @@ import {
 } from '../schemas';
 
 /**
- * Liquidations API resource
+ * Liquidations by market: events, volume and levels. This is what HIP-3
+ * serves (`client.hyperliquid.hip3.liquidations`); Hyperliquid core adds the
+ * lookup by user ({@link LiquidationsResource}).
  *
  * Retrieve historical liquidation events from Hyperliquid.
  *
@@ -46,19 +48,13 @@ import {
  *   });
  *   allLiquidations.push(...result.data);
  * }
- *
- * // Get liquidations for a specific user
- * const userLiquidations = await client.hyperliquid.liquidations.byUser('0x1234...', {
- *   start: Date.now() - 86400000 * 7,
- *   end: Date.now()
- * });
  * ```
  */
-export class LiquidationsResource {
+export class MarketLiquidationsResource {
   constructor(
-    private http: HttpClient,
-    private basePath: string = '/v1',
-    private coinTransform: (coin: string) => string = (c) => c.toUpperCase()
+    protected http: HttpClient,
+    protected basePath: string = '/v1',
+    protected coinTransform: (coin: string) => string = (c) => c.toUpperCase()
   ) {}
 
   /**
@@ -71,29 +67,6 @@ export class LiquidationsResource {
   async history(symbol: string, params: LiquidationHistoryParams): Promise<CursorResponse<Liquidation[]>> {
     const response = await this.http.get<ApiResponse<Liquidation[]>>(
       `${this.basePath}/liquidations/${this.coinTransform(symbol)}`,
-      params as unknown as Record<string, unknown>,
-      this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
-    );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
-  }
-
-  /**
-   * Get liquidation history for a specific user
-   *
-   * This returns liquidations where the user was either:
-   * - The liquidated party (their position was liquidated)
-   * - The liquidator (they executed the liquidation)
-   *
-   * @param userAddress - User's wallet address (e.g., '0x1234...')
-   * @param params - Time range and cursor pagination parameters (start and end are required)
-   * @returns CursorResponse with liquidation records and nextCursor for pagination
-   */
-  async byUser(userAddress: string, params: LiquidationsByUserParams): Promise<CursorResponse<Liquidation[]>> {
-    const response = await this.http.get<ApiResponse<Liquidation[]>>(
-      `${this.basePath}/liquidations/user/${userAddress}`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
     );
@@ -166,6 +139,44 @@ export class LiquidationsResource {
       `${this.basePath}/liquidations/${this.coinTransform(symbol)}/levels/history`,
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? LiquidationLevelsHistoryResponseSchema : undefined
+    );
+    return {
+      data: response.data,
+      nextCursor: response.meta.nextCursor,
+    };
+  }
+}
+
+/**
+ * Hyperliquid core liquidations (`client.hyperliquid.liquidations`): every
+ * market route plus the lookup by user.
+ *
+ * @example
+ * ```typescript
+ * // Get liquidations for a specific user
+ * const userLiquidations = await client.hyperliquid.liquidations.byUser('0x1234...', {
+ *   start: Date.now() - 86400000 * 7,
+ *   end: Date.now()
+ * });
+ * ```
+ */
+export class LiquidationsResource extends MarketLiquidationsResource {
+  /**
+   * Get liquidation history for a specific user
+   *
+   * This returns liquidations where the user was either:
+   * - The liquidated party (their position was liquidated)
+   * - The liquidator (they executed the liquidation)
+   *
+   * @param userAddress - User's wallet address (e.g., '0x1234...')
+   * @param params - Time range and cursor pagination parameters (start and end are required)
+   * @returns CursorResponse with liquidation records and nextCursor for pagination
+   */
+  async byUser(userAddress: string, params: LiquidationsByUserParams): Promise<CursorResponse<Liquidation[]>> {
+    const response = await this.http.get<ApiResponse<Liquidation[]>>(
+      `${this.basePath}/liquidations/user/${userAddress}`,
+      params as unknown as Record<string, unknown>,
+      this.http.validationEnabled ? LiquidationArrayResponseSchema : undefined
     );
     return {
       data: response.data,

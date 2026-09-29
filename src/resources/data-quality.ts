@@ -35,8 +35,8 @@ import { PositionsFreshnessArrayResponseSchema } from '../schemas';
  *
  * // Get symbol-specific coverage with gap detection
  * const btc = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC');
- * console.log(`BTC OI completeness: ${btc.dataTypes.open_interest.completeness}%`);
- * for (const gap of btc.dataTypes.open_interest.gaps.slice(0, 5)) {
+ * console.log(`BTC OI completeness: ${btc.dataTypes.openInterest.completeness}%`);
+ * for (const gap of btc.dataTypes.openInterest.gaps.slice(0, 5)) {
  *   console.log(`Gap: ${gap.start} - ${gap.end} (${gap.durationMinutes} min)`);
  * }
  * ```
@@ -118,14 +118,15 @@ export class DataQualityResource {
    *
    * @param exchange - Venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot', 'lighter'
    *   or 'rh-lighter' (Lighter on Robinhood Chain)
-   * @param symbol - Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
+   * @param symbol - Symbol exactly as the venue names it (e.g. 'BTC', HIP-3 'km:US500',
+   *   Spot 'HYPE-USDC', HIP-4 '#0'); sent case-sensitive and URL-encoded
    * @param options - Optional time bounds for gap detection window
    * @returns SymbolCoverageResponse with per-data-type coverage including gaps, cadence, and historical coverage
    *
    * @example
    * ```typescript
    * const btc = await client.dataQuality.symbolCoverage('hyperliquid', 'BTC');
-   * const oi = btc.dataTypes.open_interest;
+   * const oi = btc.dataTypes.openInterest;
    * console.log(`OI completeness: ${oi.completeness}%`);
    * console.log(`Gaps found: ${oi.gaps.length}`);
    * for (const gap of oi.gaps.slice(0, 3)) {
@@ -151,7 +152,10 @@ export class DataQualityResource {
     options?: SymbolCoverageOptions,
   ): Promise<SymbolCoverageResponse> {
     return this.http.get<SymbolCoverageResponse>(
-      `${this.basePath}/coverage/${exchange.toLowerCase()}/${symbol}`,
+      // Symbols are case-sensitive (HIP-3 `km:US500`) and can carry `#` (HIP-4
+      // `#0`), which would otherwise end the URL path, so the symbol is
+      // percent-encoded and never case-folded.
+      `${this.basePath}/coverage/${exchange.toLowerCase()}/${encodeURIComponent(symbol)}`,
       options as unknown as Record<string, unknown>
     );
   }

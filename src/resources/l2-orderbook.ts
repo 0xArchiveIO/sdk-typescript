@@ -51,10 +51,13 @@ export class L2OrderBookResource {
     return resp.data;
   }
 
-  /** Get paginated L2 full-depth history. */
+  /**
+   * Get paginated L2 full-depth history. Every snapshot carries the full
+   * book; the route takes no `depth`.
+   */
   async history(
     symbol: string,
-    params: CursorPaginationParams & { depth?: number },
+    params: CursorPaginationParams,
   ): Promise<CursorResponse<any[]>> {
     const coin = this.coinTransform(symbol);
     const resp: ApiResponse<any[]> = await this.http.get(

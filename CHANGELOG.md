@@ -118,6 +118,9 @@ semver in spirit.
   `WsServerMessageSchema`. The API does not replay these channels, so
   `replay()` and `multiReplay()` refuse them before sending.
 - Types and Zod schemas for every new response.
+- `account` on `lighter.l3Orderbook.get()` and `history()`: only the orders
+  owned by one Lighter account index. Typed as `L3OrderBookParams` and
+  `L3OrderBookHistoryParams`.
 
 ### Changed
 - `trades.list()` now also returns `meta`, so Lighter callers (both
@@ -142,8 +145,35 @@ semver in spirit.
   and `filtersExample`, and the symbol list's `coverageByType` and
   `sizePerDay` keep their keys, because those keys are data. Every other
   response is converted as before.
+- Parameters the API ignores are no longer offered: `side` on trade history
+  (`GetTradesCursorParams`), `user`, `status` and `order_type` on Spot order
+  history (`client.spot.orders.history()`), and `depth` on full-depth L2
+  history (`l2Orderbook.history()`). The routes returned the same rows with
+  or without them. Hyperliquid core, HIP-3 and HIP-4 order history keep
+  their filters.
+
+### Removed
+- Methods that called routes the API does not serve, so they always failed
+  with a 404: `hyperliquid.hip4.l2Orderbook` (`get()`, `history()` and
+  `diffs()`), `hyperliquid.hip4.orders.triggerLevels()` and
+  `triggerLevelsHistory()`, `spot.orders.flow()`, `tpsl()`,
+  `triggerLevels()` and `triggerLevelsHistory()`, and
+  `hyperliquid.hip3.liquidations.byUser()`. The same methods remain where
+  the API serves them: full-depth L2 on Hyperliquid core and HIP-3, trigger
+  levels on core and HIP-3, order flow and TP/SL on core, HIP-3 and HIP-4,
+  and liquidations by user on core.
 
 ### Fixed
+- `spot.freshness()` returns `SpotFreshness`, the buckets Spot reports: order
+  book, trades, L4 checkpoints and diffs, order lifecycle and TWAP. It was
+  typed as `CoinFreshness`, whose funding and open interest Spot never
+  sends, so it failed with `validate: true`.
+- `CoinFreshness.funding` is optional, because HIP-4 has no funding;
+  `hyperliquid.hip4.getFreshness()` failed with `validate: true`.
+  `CoinFreshness.symbol` is typed and kept under validation.
+- `dataQuality.symbolCoverage()` URL-encodes the symbol, so HIP-4 sides such
+  as `#0` reach the API; symbols keep their case (`km:US500`, `HYPE-USDC`).
+  Its examples read `dataTypes.openInterest`, the key the SDK returns.
 - `OxArchiveError.requestId` is set on failed requests. An error response
   carries `request_id` at the top level rather than under `meta`, so it was
   undefined on every error before.

@@ -2,8 +2,17 @@ import type { HttpClient } from '../http';
 import type { ApiResponse, CursorResponse, CursorPaginationParams } from '../types';
 
 export interface L3OrderBookParams {
-  timestamp?: number | string;
+  /** Snapshot time (Unix ms, ISO 8601 string or `Date`); latest when omitted. */
+  timestamp?: number | string | Date;
+  /** Maximum resting orders per side (1 to 250). */
   depth?: number;
+  /** Only orders owned by this Lighter account index. */
+  account?: number | string;
+}
+
+export interface L3OrderBookHistoryParams extends CursorPaginationParams {
+  /** Only orders owned by this Lighter account index. */
+  account?: number | string;
 }
 
 /**
@@ -36,7 +45,7 @@ export class L3OrderBookResource {
    * Get L3 order book snapshot for a symbol
    *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
-   * @param params - Optional parameters (timestamp, depth; maximum 250 orders per side)
+   * @param params - Optional timestamp, depth (maximum 250 orders per side) and account filter
    * @returns L3 order book snapshot
    */
   async get(symbol: string, params?: L3OrderBookParams): Promise<any> {
@@ -50,11 +59,14 @@ export class L3OrderBookResource {
   /**
    * Get L3 order book history with cursor-based pagination
    *
+   * Each snapshot holds up to 250 resting orders per side, at checkpoint
+   * resolution; the route takes no `depth`.
+   *
    * @param symbol - The symbol (e.g., 'BTC', 'ETH')
-   * @param params - Time range and cursor pagination parameters
+   * @param params - Time range, cursor pagination and account filter
    * @returns CursorResponse with L3 orderbook snapshots and nextCursor for pagination
    */
-  async history(symbol: string, params: CursorPaginationParams): Promise<CursorResponse<any[]>> {
+  async history(symbol: string, params: L3OrderBookHistoryParams): Promise<CursorResponse<any[]>> {
     const response = await this.http.get<ApiResponse<any[]>>(
       `${this.basePath}/l3orderbook/${this.coinTransform(symbol)}/history`,
       params as unknown as Record<string, unknown>

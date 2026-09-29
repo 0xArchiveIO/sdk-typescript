@@ -955,12 +955,14 @@ export const DataTypeFreshnessInfoSchema = z.object({
 });
 
 export const CoinFreshnessSchema = z.object({
+  symbol: z.string().optional(),
   coin: z.string(),
   exchange: z.string(),
   measuredAt: z.string(),
   orderbook: DataTypeFreshnessInfoSchema,
   trades: DataTypeFreshnessInfoSchema,
-  funding: DataTypeFreshnessInfoSchema,
+  // HIP-4 has no funding, so its freshness leaves the bucket out.
+  funding: DataTypeFreshnessInfoSchema.optional(),
   openInterest: DataTypeFreshnessInfoSchema,
   liquidations: DataTypeFreshnessInfoSchema.optional(),
 });
@@ -968,6 +970,27 @@ export const CoinFreshnessSchema = z.object({
 export const CoinFreshnessResponseSchema = z.object({
   success: z.boolean().optional(),
   data: CoinFreshnessSchema,
+  meta: ApiMetaSchema.optional(),
+});
+
+export const SpotFreshnessSchema = z
+  .object({
+    symbol: z.string(),
+    coin: z.string(),
+    exchange: z.string(),
+    measuredAt: z.string(),
+    orderbook: DataTypeFreshnessInfoSchema.optional(),
+    trades: DataTypeFreshnessInfoSchema.optional(),
+    l4Checkpoints: DataTypeFreshnessInfoSchema.optional(),
+    l4Diffs: DataTypeFreshnessInfoSchema.optional(),
+    orders: DataTypeFreshnessInfoSchema.optional(),
+    twap: DataTypeFreshnessInfoSchema.optional(),
+  })
+  .passthrough();
+
+export const SpotFreshnessResponseSchema = z.object({
+  success: z.boolean().optional(),
+  data: SpotFreshnessSchema,
   meta: ApiMetaSchema.optional(),
 });
 
