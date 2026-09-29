@@ -70,9 +70,9 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 
 | Need | Link |
 | --- | --- |
-| First authenticated route | [Quick Start](https://www.0xarchive.io/docs/quick-start) |
-| SDK install and route docs | [SDK docs](https://www.0xarchive.io/docs/sdks) |
-| Claude Code, ChatGPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
+| First authenticated route | [Quick Start](https://docs.0xarchive.io/quickstart) |
+| SDK install and route docs | [SDK docs](https://docs.0xarchive.io/sdks) |
+| Claude Code, ChatGPT Codex, and coding-agent workflows | [AI Clients](https://docs.0xarchive.io/ai-clients) |
 | Example notebooks | [Examples](https://github.com/0xArchiveIO/examples) |
 | File-based historical pulls | [Data Catalog](https://www.0xarchive.io/data) |
 | Route contract and machine context | [OpenAPI](https://www.0xarchive.io/openapi.json), [llms.txt](https://www.0xarchive.io/llms.txt) |
@@ -82,7 +82,7 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 | Venue | Coverage | Notes |
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Core perpetual markets; coverage varies by schema and route. |
-| Hyperliquid HIP-3 | February 2026+ for served history | Builder perps with family-specific schema coverage; funding and trade history begin in February 2026. Candle history accepts up to 10,000 rows per request. |
+| Hyperliquid HIP-3 | Trades and oracle prices from 2025-10-13; candles and liquidations from 2025-12-22; order book, funding, and OI from 2026-02-16; L4 and order history from 2026-03-10 | Builder perps; funding and OI update at roughly 10 seconds. Candle history accepts up to 10,000 rows per request. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side open interest are served from 2026-05-02; OI updates at ~10s. No funding. |
 | Hyperliquid Spot | Candles from 2025-03-22T10:50:22Z; trades from March 2025; orderbook, L4, TWAP from May 2026 | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and numeric-string cursors passed through unchanged. No funding, OI, or liquidations. |
 | Lighter.xyz (mainnet) | Candles served from 2025-08-01; observed global fill floor January 17, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
@@ -334,11 +334,7 @@ const us500 = await client.hyperliquid.hip3.instruments.get('km:US500');
 console.log(`Mark price: ${us500.markPrice}`);
 ```
 
-**Available HIP-3 Coins:**
-| Builder | Coins |
-|---------|-------|
-| xyz (Hyperliquid) | `xyz:XYZ100` |
-| km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
+**HIP-3 coins:** builders list and delist markets over time, so this README does not pin a list. Call `client.hyperliquid.hip3.instruments.list()` for the current set. Coin names are case-sensitive and carry the builder prefix (`xyz:XYZ100`, `km:US500`).
 
 #### HIP-3 Market Breadth
 
@@ -579,7 +575,7 @@ Open-interest cadence is family-specific. HIP-4 outcome-side OI is served from
 
 ### Liquidations
 
-Get historical liquidation events. Data available from May 2025 onwards for Hyperliquid, and from February 2026 for HIP-3.
+Get historical liquidation events. Data is available from 2025-12-22 for Hyperliquid and HIP-3.
 
 ```typescript
 // Get liquidation history for a coin (Hyperliquid)
@@ -1489,7 +1485,7 @@ const ws = new OxArchiveWs({
 | `orderbook` | L2 order book updates | Yes | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | No | Yes |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Yes | Yes |
+| `liquidations` | Liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `open_interest` | Open interest snapshots | Yes | Yes | Yes |
 | `funding` | Funding rate snapshots | Yes | Yes | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
@@ -1514,7 +1510,7 @@ HIP-4, and Hyperliquid Spot L4 channels remain live-only.
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes | Yes |
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | No | Yes |
 | `hip3_funding` | HIP-3 funding rate snapshots | Yes | No | Yes |
-| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes | Yes |
+| `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
 
@@ -1952,11 +1948,11 @@ For large-scale data exports (historical order books, trades, and other datasets
 
 ## Links
 
-- [API Docs](https://www.0xarchive.io/docs)
+- [API Docs](https://docs.0xarchive.io)
 - [Python SDK](https://pypi.org/project/oxarchive/)
 - [Rust SDK](https://crates.io/crates/oxarchive)
 - [CLI](https://npmjs.com/package/@0xarchive/cli)
-- [MCP Server](https://mcp.0xarchive.io)
+- [MCP Server](https://docs.0xarchive.io/mcp-server)
 - [0xArchive Skill](https://github.com/0xArchiveIO/0xarchive-skill)
 - [Examples](https://github.com/0xArchiveIO/examples)
 

@@ -84,7 +84,7 @@ export class HyperliquidClient {
   public readonly candles: CandlesResource;
 
   /**
-   * Liquidation events (May 2025+)
+   * Liquidation events (2025-12-22+)
    */
   public readonly liquidations: LiquidationsResource;
 
@@ -112,7 +112,7 @@ export class HyperliquidClient {
   public readonly positions: HyperliquidPositionsResource;
 
   /**
-   * HIP-3 builder-deployed perpetuals (February 2026+)
+   * HIP-3 builder-deployed perpetuals (trades from 2025-10-13)
    */
   public readonly hip3: Hip3Client;
 
@@ -212,7 +212,7 @@ export class Hip3Client {
   public readonly instruments: Hip3InstrumentsResource;
 
   /**
-   * Order book snapshots (February 2026+)
+   * Order book snapshots (2026-02-16+)
    */
   public readonly orderbook: OrderBookResource;
 
