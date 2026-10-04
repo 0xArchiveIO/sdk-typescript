@@ -96,6 +96,84 @@ const DEFAULT_RECONNECT_DELAY = 1000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
 
 // =============================================================================
+// WebSocket implementation
+// =============================================================================
+
+/** `readyState` of an open socket; the same value in every implementation. */
+const SOCKET_OPEN = 1;
+
+/**
+ * The part of the WebSocket API the client uses. The runtime's global
+ * `WebSocket` and the `ws` package both provide it.
+ */
+interface SocketLike {
+  readonly readyState: number;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  onopen: ((event: unknown) => void) | null;
+  onclose: ((event: { code: number; reason: string }) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onmessage: ((event: { data: unknown }) => void) | null;
+}
+
+type SocketConstructor = new (url: string) => SocketLike;
+
+/** The runtime's global `WebSocket`, if it has one. */
+function globalSocket(): SocketConstructor | undefined {
+  const candidate = (globalThis as { WebSocket?: unknown }).WebSocket;
+  return typeof candidate === 'function' ? (candidate as SocketConstructor) : undefined;
+}
+
+/** The global `WebSocket` as it was when the SDK loaded: the runtime's own. */
+const BUILT_IN_SOCKET = globalSocket();
+
+/** True in Node.js, and in runtimes that present a Node.js version. */
+const IS_NODE = typeof process !== 'undefined' && typeof process.versions?.node === 'string';
+
+/**
+ * Whether to use the `ws` package rather than the global `WebSocket`. In
+ * Node.js the client uses `ws`: Node.js 18 and 20 have no built-in
+ * WebSocket, and the built-in one in some Node.js 24 releases closes the
+ * connection when a compressed message is larger than about 4 MB once
+ * decompressed, which an L4 snapshot of a large book is. A `WebSocket` the
+ * caller assigned to `globalThis` is used as is, and so is the browser's.
+ */
+function prefersWsPackage(current: SocketConstructor | undefined): boolean {
+  return current === undefined || (IS_NODE && current === BUILT_IN_SOCKET);
+}
+
+let wsPackage: Promise<SocketConstructor> | undefined;
+
+/**
+ * The `ws` package, a dependency of this SDK. It is loaded on first use
+ * only, so browsers never load it. Where dynamic `import()` is unavailable
+ * (some CommonJS test runners), it is loaded with `require`.
+ */
+function loadWsPackage(): Promise<SocketConstructor> {
+  wsPackage ??= (import('ws') as Promise<unknown>)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    .catch(() => require('ws') as unknown)
+    .then(
+      (mod) => ((mod as { default?: unknown }).default ?? mod) as SocketConstructor,
+      (error: unknown) => {
+        wsPackage = undefined;
+        throw error;
+      },
+    );
+  return wsPackage;
+}
+
+/** The refusal when no WebSocket implementation can be found. */
+export const NO_WEBSOCKET_ERROR =
+  'This runtime has no global WebSocket and the "ws" package could not be loaded. ' +
+  'Install "ws" (a dependency of @0xarchive/sdk).';
+
+/** The refusal for a message sent while the client is not connected. */
+export function notConnectedError(op: string): string {
+  return `Cannot send "${op}": the WebSocket is not connected. Call connect() and wait for it to resolve first.`;
+}
+
+// =============================================================================
 // Channel capabilities
 // =============================================================================
 
@@ -565,6 +643,18 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * (the default URL). `WS_CHANNEL_CAPABILITIES` lists what every channel
  * offers.
  *
+ * Call `connect()` and wait for it to resolve before sending. A replay or
+ * other request made while the client is connecting or reconnecting is
+ * queued and sent once the socket opens; one made while it is disconnected
+ * throws. Subscriptions are kept by the client and sent on every (re)connect.
+ *
+ * In Node.js the client connects with the `ws` package, a dependency of
+ * this SDK: Node.js 18 and 20 have no built-in WebSocket, and the built-in
+ * one in some Node.js 24 releases closes the connection on a compressed
+ * message larger than about 4 MB once decompressed, which an L4 snapshot of
+ * a large book is. In browsers it uses the built-in `WebSocket`. A
+ * `WebSocket` assigned to `globalThis` by the caller is used as is.
+ *
  * Server errors arrive as `{"type":"error"}` messages with a stable
  * `errorCode` (`onServerError()`). `slow_consumer` means the connection fell
  * behind a stream and messages were dropped: re-subscribe, or restart the
@@ -578,10 +668,12 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * server ping frames.
  */
 export class OxArchiveWs {
-  private ws: WebSocket | null = null;
+  private ws: SocketLike | null = null;
   private options: Required<WsOptions>;
   private handlers: WsEventHandlers = {};
   private subscriptions: Map<string, StoredSubscription> = new Map();
+  /** Requests made while connecting or reconnecting, sent once the socket opens. */
+  private pending: WsClientMessage[] = [];
   private state: WsConnectionState = 'disconnected';
   private reconnectAttempts = 0;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -622,7 +714,14 @@ export class OxArchiveWs {
   }
 
   /**
-   * Connect to the WebSocket server
+   * Connect to the WebSocket server.
+   *
+   * Wait for the returned promise before calling `replay()`, `multiReplay()`
+   * or the replay controls. A request made before the socket opens is queued
+   * and sent when it opens, and discarded if the connection fails.
+   *
+   * In Node.js it connects with the `ws` package, a dependency of this SDK;
+   * in browsers, with the built-in `WebSocket`.
    *
    * @returns Promise that resolves when connected
    * @example
@@ -638,23 +737,46 @@ export class OxArchiveWs {
 
     this.setState('connecting');
 
+    const current = globalSocket();
+    if (current && !prefersWsPackage(current)) {
+      return this.open(current);
+    }
+    const openWith = (Socket: SocketConstructor): Promise<void> => {
+      if (this.state === 'disconnected') {
+        // disconnect() was called while the package loaded.
+        return Promise.reject(new Error('WebSocket was disconnected before it connected'));
+      }
+      return this.open(Socket);
+    };
+    return loadWsPackage().then(openWith, () => {
+      // Without the package, the runtime's own WebSocket is the fallback.
+      if (current) return openWith(current);
+      this.setState('disconnected');
+      this.pending = [];
+      throw new Error(NO_WEBSOCKET_ERROR);
+    });
+  }
+
+  private open(Socket: SocketConstructor): Promise<void> {
     return new Promise((resolve, reject) => {
       const separator = this.options.wsUrl.includes('?') ? '&' : '?';
       const url =
         `${this.options.wsUrl}${separator}apiKey=${encodeURIComponent(this.options.apiKey)}` +
         `&version=${API_VERSION}`;
-      this.ws = new WebSocket(url);
+      const socket = new Socket(url);
+      this.ws = socket;
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
         this.reconnectAttempts = 0;
         this.setState('connected');
         this.startPing();
         this.resubscribe();
+        this.flushPending();
         this.handlers.onOpen?.();
         resolve();
       };
 
-      this.ws.onclose = (event) => {
+      socket.onclose = (event) => {
         this.stopPing();
         const wasConnecting = this.state === 'connecting';
         this.handlers.onClose?.(event.code, event.reason);
@@ -662,6 +784,11 @@ export class OxArchiveWs {
         // If initial connection failed, reject and don't auto-reconnect
         if (wasConnecting) {
           this.setState('disconnected');
+          // A failed first connect drops what was queued for it; a failed
+          // reconnect attempt keeps it for the next attempt.
+          if (this.reconnectAttempts === 0) {
+            this.pending = [];
+          }
           reject(new Error(`WebSocket closed before connecting (code: ${event.code})`));
           return;
         }
@@ -671,18 +798,20 @@ export class OxArchiveWs {
           this.scheduleReconnect();
         } else {
           this.setState('disconnected');
+          this.pending = [];
         }
       };
 
-      this.ws.onerror = () => {
+      socket.onerror = () => {
         const error = new Error('WebSocket connection error');
         this.handlers.onError?.(error);
         // Note: onerror is usually followed by onclose, which will reject the promise
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data) as WsServerMessage;
+          const text = typeof event.data === 'string' ? event.data : String(event.data);
+          const message = JSON.parse(text) as WsServerMessage;
           this.handleMessage(message);
         } catch {
           // Ignore parse errors for malformed messages
@@ -698,6 +827,7 @@ export class OxArchiveWs {
     this.setState('disconnected');
     this.stopPing();
     this.clearReconnectTimer();
+    this.pending = [];
 
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect');
@@ -1364,7 +1494,7 @@ export class OxArchiveWs {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.ws?.readyState === SOCKET_OPEN;
   }
 
   /**
@@ -1534,9 +1664,39 @@ export class OxArchiveWs {
 
   // Private methods
 
+  /**
+   * Send a request. While connecting or reconnecting it is queued and sent
+   * once the socket opens. While disconnected it throws, except a stop
+   * request, which has nothing to stop.
+   */
   private send(message: WsClientMessage): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+    if (this.sendNow(message)) {
+      return;
+    }
+    if (this.state !== 'disconnected') {
+      this.pending.push(message);
+      return;
+    }
+    if (message.op === 'replay.stop' || message.op === 'stream.stop') {
+      return;
+    }
+    throw new Error(notConnectedError(message.op));
+  }
+
+  /** Send now if the socket is open; false when it is not. */
+  private sendNow(message: WsClientMessage): boolean {
+    if (this.ws?.readyState !== SOCKET_OPEN) {
+      return false;
+    }
+    this.ws.send(JSON.stringify(message));
+    return true;
+  }
+
+  private flushPending(): void {
+    const queued = this.pending;
+    this.pending = [];
+    for (const message of queued) {
+      this.sendNow(message);
     }
   }
 
@@ -1548,7 +1708,7 @@ export class OxArchiveWs {
   private startPing(): void {
     this.stopPing();
     this.pingTimer = setInterval(() => {
-      this.send({ op: 'ping' });
+      this.sendNow({ op: 'ping' });
     }, this.options.pingInterval);
   }
 
@@ -1589,6 +1749,7 @@ export class OxArchiveWs {
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts) {
       this.setState('disconnected');
+      this.pending = [];
       return;
     }
 
@@ -1599,11 +1760,9 @@ export class OxArchiveWs {
 
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch(() => {
-        // Reconnect attempt failed, schedule another attempt
-        // (reconnectAttempts is already incremented, so this will eventually stop)
-        if (this.reconnectAttempts < this.options.maxReconnectAttempts) {
-          this.scheduleReconnect();
-        }
+        // Reconnect attempt failed: schedule another one, or give up once
+        // reconnectAttempts reaches the limit (scheduleReconnect checks it).
+        this.scheduleReconnect();
       });
     }, delay);
   }
