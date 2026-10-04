@@ -527,6 +527,7 @@ export type {
   L4Channel,
   WsBulkReplayChannel,
   WsLiveOnlyChannel,
+  WsRestOnlyChannel,
   FullDepthL2Channel,
   LighterLiveChannel,
   LighterReplayOnlyChannel,

@@ -2230,20 +2230,21 @@ export interface Capability {
  *
  * - Live and replay: `orderbook`, `trades`, `liquidations`, `open_interest`,
  *   `funding`; `hip3_orderbook`, `hip3_trades`, `hip3_open_interest`,
- *   `hip3_funding`, `hip3_liquidations`; `hip4_orderbook`, `hip4_trades`,
- *   `hip4_open_interest`; `lighter_orderbook`, `lighter_trades`,
- *   `lighter_open_interest`, `lighter_funding`; and the Robinhood Chain
- *   `rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`,
- *   `rh_lighter_funding`.
+ *   `hip3_funding`, `hip3_liquidations`; `hip4_trades`; `lighter_orderbook`,
+ *   `lighter_trades`, `lighter_open_interest`, `lighter_funding`; and the
+ *   Robinhood Chain `rh_lighter_orderbook`, `rh_lighter_trades`,
+ *   `rh_lighter_open_interest`, `rh_lighter_funding`.
  * - Live and bulk replay: the L4 channels of every product (`l4_diffs`,
  *   `l4_orders`, `hip3_l4_*`, `hip4_l4_*`, `spot_l4_*`) and the full-depth
  *   L2 channels (`orderbook_full`, `hip3_orderbook_full`). A bulk replay is
  *   single-channel, needs an explicit `end`, ignores `speed`, and starts with
  *   an `l4_snapshot` followed by ordered `l4_batch` messages.
- * - Replay only: `candles`, `hip3_candles`, `lighter_candles`,
- *   `lighter_l3_orderbook`, `rh_lighter_candles`.
- * - Live only: `ticker`, `all_tickers`, `spot_orderbook`, `spot_trades`,
- *   `spot_twap`.
+ * - Replay only: `candles`, `hip3_candles`, `hip4_orderbook`,
+ *   `hip4_open_interest`, `lighter_candles`, `lighter_l3_orderbook`,
+ *   `rh_lighter_candles`.
+ * - Live only: `ticker`, `all_tickers`, `spot_orderbook`, `spot_trades`.
+ * - Neither: `spot_twap`. Spot TWAP statuses are served over REST only
+ *   (`client.spot.twap`); the channel name is kept so existing code compiles.
  *
  * Liquidation messages share the trade wire format: each item is a fill row
  * with `is_liquidation: true`. Lighter and Robinhood Chain replay rows use the
@@ -2305,7 +2306,13 @@ export type HyperliquidL4LiveOnlyChannel = Hip3L4Channel | Hip4L4Channel | SpotL
 export type WsBulkReplayChannel = L4Channel | FullDepthL2Channel;
 
 /** Channels that stream live only; the API does not replay them. */
-export type WsLiveOnlyChannel = 'ticker' | 'all_tickers' | 'spot_orderbook' | 'spot_trades' | 'spot_twap';
+export type WsLiveOnlyChannel = 'ticker' | 'all_tickers' | 'spot_orderbook' | 'spot_trades';
+
+/**
+ * Channels whose data is served over REST only: the API neither streams nor
+ * replays them, and the client refuses both before sending.
+ */
+export type WsRestOnlyChannel = 'spot_twap';
 
 /** Lighter channels that accept live subscriptions as well as replay. */
 export type LighterLiveChannel =
@@ -2332,7 +2339,7 @@ export type RhLighterLiveChannel =
 export type RhLighterReplayOnlyChannel = 'rh_lighter_candles';
 
 /** Every channel the API replays. */
-export type WsReplayableChannel = Exclude<WsChannel, WsLiveOnlyChannel>;
+export type WsReplayableChannel = Exclude<WsChannel, WsLiveOnlyChannel | WsRestOnlyChannel>;
 
 /** Channels replayed with timing preserved (`speed`), alone or in a multi-channel replay. */
 export type WsStandardReplayChannel = Exclude<WsReplayableChannel, WsBulkReplayChannel>;

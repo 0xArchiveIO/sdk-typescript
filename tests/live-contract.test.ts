@@ -20,12 +20,26 @@ const HOUR = 3_600_000;
 describe.skipIf(!apiKey)('live API contract', () => {
   it('capabilities agree with the SDK channel table', async () => {
     const rows = await client().capabilities();
-    const channels = new Map<string, { live: boolean; replay: boolean }>();
+    const rowOf = new Map<string, (typeof rows)[number]>();
     for (const row of rows) {
-      for (const channel of row.wsChannels) channels.set(channel, { live: row.live, replay: row.replay });
+      for (const channel of row.wsChannels) rowOf.set(channel, row);
     }
+    // Every channel the API lists is in the table, with its venue, datatype and modes.
+    for (const [channel, row] of rowOf) {
+      expect(WS_CHANNEL_CAPABILITIES[channel as WsChannel], channel).toMatchObject({
+        venue: row.venue,
+        datatype: row.datatype,
+        live: row.live,
+        replay: row.replay,
+      });
+    }
+    // A table channel the API lists on no row is REST only: its datatype's
+    // row exists, and the channel neither streams nor replays.
     for (const [channel, capability] of Object.entries(WS_CHANNEL_CAPABILITIES)) {
-      expect(channels.get(channel), channel).toEqual({ live: capability.live, replay: capability.replay });
+      if (rowOf.has(channel)) continue;
+      const row = rows.find((r) => r.venue === capability.venue && r.datatype === capability.datatype);
+      expect(row, channel).toBeDefined();
+      expect({ live: capability.live, replay: capability.replay }, channel).toEqual({ live: false, replay: false });
     }
     expect(rows.find((r) => r.venue === 'hip3' && r.datatype === 'trades')?.availableFrom).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });

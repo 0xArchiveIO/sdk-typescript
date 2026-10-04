@@ -183,7 +183,7 @@ export interface WsChannelCapability {
   venue: Venue;
   /** The datatype the channel carries (`/v1/capabilities` `datatype`). */
   datatype: CapabilityDatatype;
-  /** True when the channel accepts live subscriptions. */
+  /** True when the channel streams live data (`/v1/capabilities` `live`). */
   live: boolean;
   /** True when the channel replays history. */
   replay: boolean;
@@ -211,12 +211,15 @@ const LIVE_AND_REPLAY = { live: true, replay: true } as const;
 const LIVE_AND_BULK = { live: true, bulk: true } as const;
 const LIVE_ONLY = { live: true } as const;
 const REPLAY_ONLY = { replay: true } as const;
+/** A channel the API accepts but neither streams nor replays: the data is REST only. */
+const REST_ONLY = {} as const;
 
 /**
  * Every WebSocket channel with the modes it offers. This one table mirrors
  * `GET /v1/capabilities` (`client.capabilities()`); the client's live and
- * replay checks read it, so a channel is refused before sending exactly when
- * the API would refuse it.
+ * replay checks read it, so a live subscription or replay the API does not
+ * serve is refused before sending. `spot_twap` is listed with neither mode:
+ * Spot TWAP statuses are served over REST only (`client.spot.twap`).
  */
 export const WS_CHANNEL_CAPABILITIES: Readonly<Record<WsChannel, WsChannelCapability>> = Object.freeze({
   // Hyperliquid core
@@ -242,17 +245,17 @@ export const WS_CHANNEL_CAPABILITIES: Readonly<Record<WsChannel, WsChannelCapabi
   hip3_open_interest: offer('hip3', 'oi', LIVE_AND_REPLAY),
   hip3_liquidations: offer('hip3', 'liquidations', LIVE_AND_REPLAY),
   // HIP-4
-  hip4_orderbook: offer('hip4', 'l2_orderbook', LIVE_AND_REPLAY),
+  hip4_orderbook: offer('hip4', 'l2_orderbook', REPLAY_ONLY),
   hip4_l4_diffs: offer('hip4', 'l4_diffs', LIVE_AND_BULK),
   hip4_l4_orders: offer('hip4', 'l4_orders', LIVE_AND_BULK),
   hip4_trades: offer('hip4', 'trades', LIVE_AND_REPLAY),
-  hip4_open_interest: offer('hip4', 'oi', LIVE_AND_REPLAY),
+  hip4_open_interest: offer('hip4', 'oi', REPLAY_ONLY),
   // Hyperliquid Spot
   spot_orderbook: offer('spot', 'l2_orderbook', LIVE_ONLY),
   spot_l4_diffs: offer('spot', 'l4_diffs', LIVE_AND_BULK),
   spot_l4_orders: offer('spot', 'l4_orders', LIVE_AND_BULK),
   spot_trades: offer('spot', 'trades', LIVE_ONLY),
-  spot_twap: offer('spot', 'twap', LIVE_ONLY),
+  spot_twap: offer('spot', 'twap', REST_ONLY),
   // Lighter
   lighter_orderbook: offer('lighter', 'l2_orderbook', LIVE_AND_REPLAY),
   lighter_l3_orderbook: offer('lighter', 'l3_orderbook', REPLAY_ONLY),
@@ -400,6 +403,11 @@ export function liveOnlyError(channel: WsChannel): string {
   return `${channel} is live only; the API does not replay it. Subscribe for live data or use REST for history.`;
 }
 
+/** The refusal for a live subscription or replay of a channel served over REST only. */
+export function restOnlyError(channel: WsChannel): string {
+  return `${channel} is served over REST only; the API neither streams nor replays it over WebSocket.`;
+}
+
 /** The refusal for a bulk replay without `end`. */
 export function bulkReplayEndError(channel: WsChannel): string {
   return `${channel} replay requires an explicit end timestamp.`;
@@ -413,7 +421,7 @@ export function bulkReplayMultiError(channel: WsChannel): string {
 function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptions): void {
   const capability = capabilityOf(channel);
   if (capability && !capability.live) {
-    throw new Error(replayOnlyError(channel));
+    throw new Error(capability.replay ? replayOnlyError(channel) : restOnlyError(channel));
   }
   const intervalMs = options?.intervalMs;
   // `== null` also treats an explicit null from JavaScript callers as omitted.
@@ -472,7 +480,7 @@ function validateReplayChannel(channel: WsChannel, end: number | undefined, mult
     return;
   }
   if (!capability.replay) {
-    throw new Error(liveOnlyError(channel));
+    throw new Error(capability.live ? liveOnlyError(channel) : restOnlyError(channel));
   }
   if (capability.bulkReplay) {
     if (multiChannel) {
@@ -637,11 +645,12 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * Lighter deployment: mainnet (`lighter_orderbook`, `lighter_trades`,
  * `lighter_open_interest`, `lighter_funding`) and Robinhood Chain
  * (`rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`,
- * `rh_lighter_funding`). `candles`, `hip3_candles`, `lighter_candles`,
- * `lighter_l3_orderbook` and `rh_lighter_candles` are replay-only. Live
- * Lighter data, on either deployment, is served on `wss://api.0xarchive.io/ws`
- * (the default URL). `WS_CHANNEL_CAPABILITIES` lists what every channel
- * offers.
+ * `rh_lighter_funding`). `candles`, `hip3_candles`, `hip4_orderbook`,
+ * `hip4_open_interest`, `lighter_candles`, `lighter_l3_orderbook` and
+ * `rh_lighter_candles` are replay-only, and `spot_twap` is served over REST
+ * only. Live Lighter data, on either deployment, is served on
+ * `wss://api.0xarchive.io/ws` (the default URL). `WS_CHANNEL_CAPABILITIES`
+ * lists what every channel offers.
  *
  * Call `connect()` and wait for it to resolve before sending. A replay or
  * other request made while the client is connecting or reconnecting is
@@ -842,9 +851,10 @@ export class OxArchiveWs {
    * `lighter_trades`, `lighter_open_interest` and `lighter_funding`, and on
    * the Robinhood Chain deployment's `rh_lighter_orderbook`,
    * `rh_lighter_trades`, `rh_lighter_open_interest` and `rh_lighter_funding`.
-   * Replay-only channels (`candles`, `hip3_candles`, `lighter_candles`,
-   * `lighter_l3_orderbook`, `rh_lighter_candles`) throw here; use REST for
-   * current data or a bounded replay for stored history.
+   * Replay-only channels (`candles`, `hip3_candles`, `hip4_orderbook`,
+   * `hip4_open_interest`, `lighter_candles`, `lighter_l3_orderbook`,
+   * `rh_lighter_candles`) and the REST-only `spot_twap` throw here; use REST
+   * for current data or a bounded replay for stored history.
    *
    * `orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3)
    * stream the full-depth L2 book: an `l4_snapshot` message with every price
@@ -855,8 +865,8 @@ export class OxArchiveWs {
    * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive
    * @param options - `intervalMs` sets the book rate for `lighter_orderbook`
    *   and `rh_lighter_orderbook` only (100 to 5000 ms, default one book a second)
-   * @throws Error for a replay-only channel, or an `intervalMs` on another
-   *   channel or outside 100 to 5000
+   * @throws Error for a replay-only or REST-only channel, or an `intervalMs`
+   *   on another channel or outside 100 to 5000
    */
   subscribe(channel: WsChannel, coin?: string, options?: WsSubscribeOptions): void {
     validateLiveSubscription(channel, options);
@@ -974,8 +984,10 @@ export class OxArchiveWs {
    * Subscribe to a Hyperliquid Spot channel for a given dashed pair.
    *
    * @param channel One of `spot_orderbook`, `spot_trades`, `spot_l4_diffs`,
-   *   `spot_l4_orders`, `spot_twap`. The short form (e.g. `'orderbook'`) is
-   *   also accepted and the `spot_` prefix is added automatically.
+   *   `spot_l4_orders`. The short form (e.g. `'orderbook'`) is also accepted
+   *   and the `spot_` prefix is added automatically. `spot_twap` is accepted
+   *   for compatibility but throws: TWAP statuses are served over REST only
+   *   (`client.spot.twap.history()`).
    * @param coin Spot dashed canonical symbol (e.g. `'HYPE-USDC'`).
    */
   subscribeSpot(
@@ -1070,8 +1082,10 @@ export class OxArchiveWs {
   /**
    * Subscribe to a HIP-4 channel for a given outcome coin.
    *
-   * @param channel One of `hip4_orderbook`, `hip4_trades`, `hip4_open_interest`,
-   *   `hip4_l4_diffs`, `hip4_l4_orders`.
+   * @param channel One of `hip4_trades`, `hip4_l4_diffs`, `hip4_l4_orders`
+   *   (the channels that stream live). `hip4_orderbook` and
+   *   `hip4_open_interest` replay only, so a live subscription to them
+   *   throws; use REST for the current book and open interest.
    * @param coin HIP-4 coin (e.g. `'#0'` or `'0'`). The bare numeric form is
    *   recommended; both are accepted by the backend.
    */

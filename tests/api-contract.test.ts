@@ -17,7 +17,13 @@ import {
 } from '../src';
 import type { Capability, WsChannel, WsError, WsServerMessage } from '../src';
 import { cursorPage, unwrapEnvelope } from '../src/http';
-import { bulkReplayEndError, bulkReplayMultiError, liveOnlyError, replayOnlyError } from '../src/websocket';
+import {
+  bulkReplayEndError,
+  bulkReplayMultiError,
+  liveOnlyError,
+  replayOnlyError,
+  restOnlyError,
+} from '../src/websocket';
 import { CapabilitiesResponseSchema, WsServerMessageSchema } from '../src/schemas';
 
 const BASE = 'https://api.example.test';
@@ -871,8 +877,10 @@ describe('order history triggered and depth', () => {
 // 7. WebSocket replay availability mirrors /v1/capabilities
 // =============================================================================
 
-// Every WebSocket row of `GET /v1/capabilities` on 2026-09-29:
-// [venue, datatype, ws_channels, live, replay].
+// Every WebSocket row of `GET /v1/capabilities` on 2026-10-04:
+// [venue, datatype, ws_channels, live, replay]. The Spot TWAP row lists no
+// channel: `spot_twap` is accepted on subscribe but neither streams nor
+// replays, so its data is REST only.
 const WS_CAPABILITY_ROWS: Array<[string, string, WsChannel[], boolean, boolean]> = [
   ['hyperliquid', 'l2_orderbook', ['orderbook'], true, true],
   ['hyperliquid', 'l2_full_depth', ['orderbook_full'], true, true],
@@ -893,16 +901,16 @@ const WS_CAPABILITY_ROWS: Array<[string, string, WsChannel[], boolean, boolean]>
   ['hip3', 'funding', ['hip3_funding'], true, true],
   ['hip3', 'oi', ['hip3_open_interest'], true, true],
   ['hip3', 'liquidations', ['hip3_liquidations'], true, true],
-  ['hip4', 'l2_orderbook', ['hip4_orderbook'], true, true],
+  ['hip4', 'l2_orderbook', ['hip4_orderbook'], false, true],
   ['hip4', 'l4_diffs', ['hip4_l4_diffs'], true, true],
   ['hip4', 'l4_orders', ['hip4_l4_orders'], true, true],
   ['hip4', 'trades', ['hip4_trades'], true, true],
-  ['hip4', 'oi', ['hip4_open_interest'], true, true],
+  ['hip4', 'oi', ['hip4_open_interest'], false, true],
   ['spot', 'l2_orderbook', ['spot_orderbook'], true, false],
   ['spot', 'l4_diffs', ['spot_l4_diffs'], true, true],
   ['spot', 'l4_orders', ['spot_l4_orders'], true, true],
   ['spot', 'trades', ['spot_trades'], true, false],
-  ['spot', 'twap', ['spot_twap'], true, false],
+  ['spot', 'twap', [], false, false],
   ['lighter', 'l2_orderbook', ['lighter_orderbook'], true, true],
   ['lighter', 'l3_orderbook', ['lighter_l3_orderbook'], false, true],
   ['lighter', 'trades', ['lighter_trades'], true, true],
@@ -916,6 +924,10 @@ const WS_CAPABILITY_ROWS: Array<[string, string, WsChannel[], boolean, boolean]>
   ['rh-lighter', 'oi', ['rh_lighter_open_interest'], true, true],
 ];
 
+// Channel names the SDK keeps for compatibility whose capabilities row lists
+// no channel: [channel, venue, datatype].
+const REST_ONLY_CHANNELS: Array<[WsChannel, string, string]> = [['spot_twap', 'spot', 'twap']];
+
 describe('WebSocket channel capabilities', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -923,9 +935,16 @@ describe('WebSocket channel capabilities', () => {
     const fromRows = WS_CAPABILITY_ROWS.flatMap(([venue, datatype, channels, live, replay]) =>
       channels.map((channel) => [channel, { venue, datatype, live, replay }] as const),
     );
-    expect(Object.keys(WS_CHANNEL_CAPABILITIES).sort()).toEqual(fromRows.map(([c]) => c).sort());
-    for (const [channel, expected] of fromRows) {
-      expect(WS_CHANNEL_CAPABILITIES[channel], channel).toMatchObject(expected);
+    const restOnly = REST_ONLY_CHANNELS.map(([channel, venue, datatype]) => {
+      const row = WS_CAPABILITY_ROWS.find(([v, d]) => v === venue && d === datatype);
+      expect(row, channel).toBeDefined();
+      expect([row![3], row![4]], channel).toEqual([false, false]);
+      return [channel, { venue, datatype, live: false, replay: false }] as const;
+    });
+    const expected = [...fromRows, ...restOnly];
+    expect(Object.keys(WS_CHANNEL_CAPABILITIES).sort()).toEqual(expected.map(([c]) => c).sort());
+    for (const [channel, capability] of expected) {
+      expect(WS_CHANNEL_CAPABILITIES[channel], channel).toMatchObject(capability);
     }
   });
 
@@ -945,7 +964,15 @@ describe('WebSocket channel capabilities', () => {
       ].sort(),
     );
     expect([...WS_REPLAY_CHANNELS].filter((c) => !WS_LIVE_CHANNELS.has(c)).sort()).toEqual(
-      ['candles', 'hip3_candles', 'lighter_candles', 'lighter_l3_orderbook', 'rh_lighter_candles'].sort(),
+      [
+        'candles',
+        'hip3_candles',
+        'hip4_open_interest',
+        'hip4_orderbook',
+        'lighter_candles',
+        'lighter_l3_orderbook',
+        'rh_lighter_candles',
+      ].sort(),
     );
   });
 
@@ -961,7 +988,7 @@ describe('WebSocket channel capabilities', () => {
     },
   );
 
-  it.each(['ticker', 'all_tickers', 'spot_orderbook', 'spot_trades', 'spot_twap'] as const)(
+  it.each(['ticker', 'all_tickers', 'spot_orderbook', 'spot_trades'] as const)(
     'refuses a %s replay before sending',
     (channel) => {
       const { ws, sent } = openClient();
@@ -971,9 +998,32 @@ describe('WebSocket channel capabilities', () => {
     },
   );
 
-  it.each(['candles', 'hip3_candles'] as const)('refuses a live %s subscription before sending', (channel) => {
+  it.each(['candles', 'hip3_candles', 'hip4_orderbook', 'hip4_open_interest'] as const)(
+    'refuses a live %s subscription before sending',
+    (channel) => {
+      const { ws, sent } = openClient();
+      expect(() => ws.subscribe(channel, 'BTC')).toThrow(replayOnlyError(channel));
+      expect(sent()).toEqual([]);
+    },
+  );
+
+  it('refuses live HIP-4 book and open interest through subscribeHip4, and keeps trades and L4', () => {
     const { ws, sent } = openClient();
-    expect(() => ws.subscribe(channel, 'BTC')).toThrow(replayOnlyError(channel));
+    expect(() => ws.subscribeHip4('orderbook', '#1')).toThrow(replayOnlyError('hip4_orderbook'));
+    expect(() => ws.subscribeHip4('hip4_open_interest', '#1')).toThrow(replayOnlyError('hip4_open_interest'));
+    ws.subscribeHip4('trades', '#1');
+    ws.subscribeHip4('l4_diffs', '#1');
+    expect(sent().map((m) => m.channel)).toEqual(['hip4_trades', 'hip4_l4_diffs']);
+  });
+
+  it('refuses spot_twap live and in replay: Spot TWAP is REST only', () => {
+    const { ws, sent } = openClient();
+    expect(() => ws.subscribe('spot_twap', 'HYPE-USDC')).toThrow(restOnlyError('spot_twap'));
+    expect(() => ws.subscribeSpot('twap', 'HYPE-USDC')).toThrow(restOnlyError('spot_twap'));
+    expect(() => (ws.replay as any)('spot_twap', 'HYPE-USDC', { start: 1, end: 2 })).toThrow(restOnlyError('spot_twap'));
+    expect(() => (ws.multiReplay as any)(['spot_twap'], 'HYPE-USDC', { start: 1, end: 2 })).toThrow(
+      restOnlyError('spot_twap'),
+    );
     expect(sent()).toEqual([]);
   });
 
