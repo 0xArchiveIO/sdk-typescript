@@ -139,7 +139,7 @@ export class HyperliquidClient {
   public readonly hip3: Hip3Client;
 
   /**
-   * HIP-4 outcome markets (binary YES/NO; May 2026+)
+   * HIP-4 outcome markets (binary YES/NO; from 2026-05-02)
    */
   public readonly hip4: Hip4Client;
 
@@ -309,7 +309,7 @@ export class Hip3Client {
   constructor(http: HttpClient) {
     this.http = http;
     const basePath = '/v1/hyperliquid/hip3';
-    // HIP-3 coins use case-sensitive symbols like 'xyz:XYZ100' — do not uppercase
+    // HIP-3 coins use case-sensitive symbols like 'xyz:XYZ100'; do not uppercase
     const coinTransform = (c: string) => c;
     this.instruments = new Hip3InstrumentsResource(http, basePath, coinTransform);
     this.orderbook = new OrderBookResource(http, basePath, coinTransform);
@@ -460,7 +460,7 @@ export class Hip4Client {
     // HIP-4 coins like `#0` contain `#`, which `fetch` (and the WHATWG URL
     // parser underneath it) treats as a URL fragment delimiter. Without
     // encoding, the path `/v1/.../trades/#0/recent` arrives at the server as
-    // `/v1/.../trades/` and the rest is silently dropped — the user gets a
+    // `/v1/.../trades/` and the rest is silently dropped: the user gets a
     // 404 with an empty body and a confusing `Unexpected end of JSON input`
     // from the JSON parser. Encoding `#` to `%23` makes both the bare form
     // (`'0'`) and the canonical `#`-prefixed form (`'#0'`, the form the API
@@ -680,11 +680,12 @@ export class Hip4Client {
  * funding, open-interest, or liquidation resources on the spot client.
  *
  * Coverage:
- * - Candles: from 2025-03-22T10:50:22Z; intervals 1m, 5m, 15m, 30m, 1h,
+ * - Candles: from 2025-03-22 10:50 UTC; intervals 1m, 5m, 15m, 30m, 1h,
  *   4h, 1d, and 1w; maximum limit 1000. The API returns numeric-string
  *   cursors; preserve and resend them unchanged.
- * - Trades: from 2025-03-22 (HL S3 backfill).
- * - Orderbook, L4 diffs, L4 orders, TWAP statuses: live from 2026-05-05.
+ * - Trades: from 2025-03-22 10:50:22 UTC.
+ * - Order book, L4 diffs, L4 orders, TWAP statuses: from 2026-05-05.
+ *   TWAP statuses are served over REST only.
  *
  * @example
  * ```typescript
@@ -706,14 +707,14 @@ export class SpotClient {
   /** Spot pair metadata (one row per dashed symbol). */
   public readonly pairs: SpotPairsResource;
 
-  /** L2 order book snapshots (live from 2026-05-05). */
+  /** L2 order book snapshots (from 2026-05-05). */
   public readonly orderbook: OrderBookResource;
 
-  /** Trade history (S3 backfill from 2025-03-22, live since). */
+  /** Trade history (from 2025-03-22 10:50:22 UTC, live since). */
   public readonly trades: TradesResource;
 
   /**
-   * OHLCV candle history (served from 2025-03-22T10:50:22Z).
+   * OHLCV candle history (served from 2025-03-22 10:50 UTC).
    * Spot accepts the shared candle intervals, up to 1000 rows per request,
    * and returns numeric-string pagination cursors that callers should pass
    * through unchanged.

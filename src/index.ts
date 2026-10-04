@@ -5,7 +5,7 @@
  * - Hyperliquid (perpetuals data from April 2023)
  * - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
  * - Hyperliquid HIP-4 outcome markets at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
- * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (candles from 2025-03-22T10:50:22Z; trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
+ * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (candles from 2025-03-22 10:50 UTC; trades from 2025-03-22 10:50:22 UTC; order book, L4 and TWAP from 2026-05-05)
  * - Lighter, with two deployments: mainnet at /v1/lighter and client.lighter,
  *   and Robinhood Chain at /v1/rh-lighter and client.rhLighter
  * - Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
@@ -90,7 +90,7 @@ export {
 export type { OrderHistoryParams, OrderFlowParams, TpslParams } from './resources/orders';
 export type { L4OrderBookParams } from './resources/l4-orderbook';
 
-// Orderbook Reconstructor — Lighter tick-level
+// Orderbook Reconstructor: Lighter tick-level
 export {
   OrderBookReconstructor,
   reconstructOrderBook,
@@ -100,7 +100,7 @@ export {
   type ReconstructOptions,
 } from './orderbook-reconstructor';
 
-// L4 Orderbook Reconstructor — Hyperliquid / HIP-3
+// L4 Orderbook Reconstructor: Hyperliquid / HIP-3
 export {
   L4OrderBookReconstructor,
   type L4Order,

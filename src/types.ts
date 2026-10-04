@@ -286,7 +286,7 @@ export interface Trade {
   builderFee?: string;
   /** HIP-3 deployer fee share on this fill (in quote currency). Negative for the maker side (rebate), positive for the taker side. Present only on HIP-3 fills. */
   deployerFee?: string;
-  /** Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builderFee and deployerFee — paid to the network, not to a builder or deployer. Present only when the order paid for priority. */
+  /** Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builderFee and deployerFee: paid to the network, not to a builder or deployer. Present only when the order paid for priority. */
   priorityGas?: number;
   /** Client order ID */
   cloid?: string;
@@ -663,7 +663,7 @@ export interface Hip4OutcomeSideSpec {
  *
  * Spot has no funding, no open interest, and no liquidations. Candle history
  * is served separately through `SpotClient.candles` at
- * `/v1/hyperliquid/spot/candles/{symbol}` from 2025-03-22T10:50:22Z.
+ * `/v1/hyperliquid/spot/candles/{symbol}` from 2025-03-22 10:50 UTC.
  */
 export interface SpotPair {
   /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). `coin` is an alias. */
@@ -3027,10 +3027,10 @@ export interface LighterLiveStats {
 /**
  * HIP-4 outcome settlement notification.
  *
- * Pushed once per `(outcome_id, side)` when `hip4_outcome_metadata.is_settled`
- * flips to true. After delivering this message the server proactively
- * unsubscribes the client from every hip4_* subscription on the settled coin —
- * treat this as a terminal signal for the coin.
+ * Pushed once per `(outcome_id, side)` when the outcome settles. After
+ * delivering this message the server proactively unsubscribes the client
+ * from every hip4_* subscription on the settled coin; treat this as a
+ * terminal signal for the coin.
  */
 export interface WsOutcomeSettled {
   type: 'outcome_settled';

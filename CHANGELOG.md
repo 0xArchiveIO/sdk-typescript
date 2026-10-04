@@ -2,8 +2,8 @@
 
 All notable changes to `@0xarchive/sdk` are documented in this file.
 
-The format is loosely based on Keep a Changelog and the project follows
-semver in spirit.
+The format is loosely based on Keep a Changelog, and the project follows
+semantic versioning.
 
 ## 1.12.0 (2026-09-28)
 
@@ -214,15 +214,30 @@ version. The changes this brings are listed under Added and Changed.
     and funding. A tick-granularity replay's checkpoint is converted to an
     `OrderBook` before `onHistoricalTickData()` handlers run.
 - The WebSocket client's live and replay checks follow
-  `WS_CHANNEL_CAPABILITIES`. Replay is refused before sending only for the
-  live-only `ticker`, `all_tickers`, `spot_orderbook`, `spot_trades` and
-  `spot_twap`; a live subscription only for the replay-only `candles`,
-  `hip3_candles`, `lighter_candles`, `lighter_l3_orderbook` and
-  `rh_lighter_candles`. Bulk channels need an explicit `end` and are refused
-  in `multiReplay()`. `WsReplayableChannel` and `WsStandardReplayChannel`
-  follow the same table; `WsCoreL4ReplayOptions` and `WsCoreL4Replay` are
-  aliases of the bulk types, and `HyperliquidL4LiveOnlyChannel` is kept for
-  compatibility.
+  `WS_CHANNEL_CAPABILITIES`. Replay is refused before sending for the
+  live-only `ticker`, `all_tickers`, `spot_orderbook` and `spot_trades`; a
+  live subscription for the replay-only `candles`, `hip3_candles`,
+  `hip4_orderbook`, `hip4_open_interest`, `lighter_candles`,
+  `lighter_l3_orderbook` and `rh_lighter_candles`; and both for `spot_twap`,
+  whose data is served over REST only (`client.spot.twap`). The API accepts
+  a live subscription to `hip4_orderbook`, `hip4_open_interest` and
+  `spot_twap` but sends nothing on it, so `subscribe()`, `subscribeHip4()`
+  and `subscribeSpot()` now throw for them instead of waiting on a channel
+  that never streams; read the current HIP-4 book and open interest over
+  REST. Bulk channels need an explicit `end` and are refused in
+  `multiReplay()`. `WsReplayableChannel` and `WsStandardReplayChannel`
+  follow the same table, `WsLiveOnlyChannel` lists the live-only channels
+  and `WsRestOnlyChannel` the REST-only one; `WsCoreL4ReplayOptions` and
+  `WsCoreL4Replay` are aliases of the bulk types, and
+  `HyperliquidL4LiveOnlyChannel` is kept for compatibility.
+- Requests sent over the WebSocket before it is open are no longer dropped
+  without notice. While the client is connecting or reconnecting,
+  `replay()`, `multiReplay()` and the replay controls are queued and sent
+  once the socket opens (and discarded if the first connect fails). While it
+  is disconnected they throw an error that says to call and await
+  `connect()`; `replayStop()` and `streamStop()` do nothing then, since
+  nothing is running. Subscriptions are unchanged: they are kept and sent on
+  every connect.
 - `trades.recent()` on Hyperliquid core, which has no recent route, throws
   with `errorCode` `route_not_found`, the code the API would send.
 - `LiquidationLevelsParams.at` also takes an ISO 8601 string, converted like
@@ -266,6 +281,25 @@ version. The changes this brings are listed under Added and Changed.
   and liquidations by user on core.
 
 ### Fixed
+- The WebSocket client works on every Node.js version. It used the global
+  `WebSocket`, which Node.js 18 and 20 do not have, so `connect()` failed
+  there with `WebSocket is not defined`; and the built-in `WebSocket` of
+  some Node.js 24 releases closes the connection on a compressed message
+  larger than about 4 MB once decompressed, which a BTC L4 snapshot is. In
+  Node.js the client now connects with the `ws` package, already a
+  dependency of the SDK, and falls back to the built-in `WebSocket` only if
+  `ws` cannot be loaded. Browsers keep the built-in `WebSocket`, and a
+  `WebSocket` assigned to `globalThis` by the caller is used as is.
+- Type declarations per module format: the `exports` map now points
+  `import` at `index.d.mts` and `require` at `index.d.ts`. TypeScript
+  projects that compile as ES modules with `moduleResolution` `node16` or
+  `nodenext` failed to type-check `import OxArchive from '@0xarchive/sdk'`,
+  because the declarations were read as CommonJS. The JavaScript entry
+  points are unchanged.
+- `side` on trade history takes `'buy'` or `'sell'` (`TradeSideFilter`),
+  the values the API accepts. Up to 1.11.0 `GetTradesCursorParams.side` was
+  typed `TradeSide` (`'A' | 'B'`), which the API refuses with
+  `invalid_parameter`.
 - `hip4.outcomes.getBySlug()` URL-encodes the slug. Slugs with spaces,
   colons, `#` or `/` reached the wrong route before.
 - `spot.freshness()` returns `SpotFreshness`, the buckets Spot reports: order
@@ -308,11 +342,24 @@ version. The changes this brings are listed under Added and Changed.
   verifying a delivery with test vectors, secret rotation, deliveries,
   watched wallets), CVD, the HIP-3 oracle, HIP-4 questions, wallet
   classification, the symbol universe and the full-depth WebSocket channels.
-- The README's HIP-3 coverage row lists each dataset's first date, replacing
-  "February 2026+": trades and oracle prices from 2025-10-13, candles and
-  liquidations from 2025-12-22, order book, funding and open interest from
-  2026-02-16, L4 and order history from 2026-03-10. Hyperliquid liquidations
-  are listed from 2025-12-22 (was "May 2025+").
+- The README's coverage table lists each dataset's first served instant as
+  `/v1/capabilities` reports it, replacing month-level dates such as
+  "February 2026+" and "April 2023+". For example, HIP-3 trades are served
+  from 2025-10-13 12:24 UTC, HIP-3 L4 and order history from 2026-03-11
+  01:03 UTC, and Hyperliquid liquidations from 2025-12-22 (was "May
+  2025+"). Robinhood Chain candles are listed as served from 2026-06-26
+  20:10 UTC.
+- The README no longer pins market counts for Spot and Robinhood Chain;
+  `client.spot.pairs.list()` and `client.rhLighter.instruments.list()`
+  return the current set.
+- README examples use windows relative to now, so they run on every plan,
+  including Free's 30-day history window. HIP-4 examples look up a current
+  outcome before reading its market data, and HIP-3 examples use markets
+  that are trading (`xyz:SP500`, `xyz:TSLA`). Every WebSocket example awaits
+  `connect()` before a replay. The note on Hyperliquid core trades no
+  longer describes how they are collected; it points to `history()` over a
+  recent window and to the live `trades` channel, since core has no
+  recent-trades route. Spot TWAP is documented as REST only.
 - The HIP-3 coin table is removed, since builders list and delist markets;
   call `client.hyperliquid.hip3.instruments.list()` for the current set.
 - Documentation links point at docs.0xarchive.io.
@@ -517,7 +564,7 @@ Python and Rust SDKs on one version.
   - `spot_orderbook` data routes through the existing `onOrderbook` handler;
     `spot_trades` data routes through the existing `onTrades` handler.
   - New types: `SpotPair`, `SpotTwapStatus`. New exported class: `SpotClient`.
-  - Coverage: trades from 2025-03-22 (S3 backfill); orderbook, L4, and TWAP
+  - Coverage: trades from 2025-03-22; orderbook, L4, and TWAP
     statuses live from 2026-05-05.
 
 ### Notes
@@ -528,7 +575,7 @@ Python and Rust SDKs on one version.
 - Spot pre-2025-03-22 trade history is unrecoverable from any free public
   archive (Hyperliquid did not publish spot fills before that date).
 
-## 1.6.0 — 2026-05-04
+## 1.6.0 (2026-05-04)
 
 ### Added
 - **Real-time WebSocket support for liquidations**. The `liquidations` and
@@ -550,7 +597,7 @@ Python and Rust SDKs on one version.
   the discriminated union `WsServerMessage`. Pushed once per
   `(outcome_id, side)` when an outcome settles. After delivery the server
   unsubscribes the client from every `hip4_*` subscription on the settled
-  coin — treat it as a terminal signal.
+  coin; treat it as a terminal signal.
   - New typed event handler: `onOutcomeSettled((coin, outcomeId, side, value, at) => ...)`.
   - New type: `WsOutcomeSettled`.
   - New schema: `WsOutcomeSettledSchema`.
@@ -577,10 +624,10 @@ Python and Rust SDKs on one version.
   and the flat `getSummary` / `getFreshness` / `getPrices` methods). Both
   the bare numeric form (`'0'`) and the `#`-prefixed form (`'#0'`) now work
   uniformly. (Reverts the 1.5.0 behavior change that "passed `#` through
-  verbatim" — it broke the canonical form.)
+  verbatim", which broke the canonical form.)
 - **`client.hyperliquid.trades.recent()` no longer surfaces an opaque JSON
   parse error.** Hyperliquid's REST API has no `/trades/{symbol}/recent`
-  endpoint (only HIP-3, HIP-4, and Lighter do — the others have real-time
+  endpoint (only HIP-3, HIP-4, and Lighter do; the others have real-time
   ingestion). Calling it on `client.hyperliquid.trades` (or the legacy
   `client.trades`) now throws a structured `OxArchiveError` directing the
   caller to `trades.list(symbol, { start, end })` or to one of the venues

@@ -43,8 +43,8 @@ console.log(`${wallet.positions.length} positions as of ${meta.asOf}`);
 
 // Hyperliquid HIP-3 builder perps stay under client.hyperliquid.hip3
 const hip3Instruments = await client.hyperliquid.hip3.instruments.list();
-const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('km:US500');
-const hip3Trades = await client.hyperliquid.hip3.trades.recent('km:US500');
+const hip3Orderbook = await client.hyperliquid.hip3.orderbook.get('xyz:SP500');
+const hip3Trades = await client.hyperliquid.hip3.trades.recent('xyz:SP500');
 const hip3Funding = await client.hyperliquid.hip3.funding.current('xyz:XYZ100');
 const hip3Oi = await client.hyperliquid.hip3.openInterest.current('xyz:XYZ100');
 
@@ -53,7 +53,7 @@ const spotPairs = await client.spot.pairs.list();
 const spotOrderbook = await client.spot.orderbook.get('HYPE-USDC');
 const spotTrades = await client.spot.trades.recent('HYPE-USDC');
 const spotCandles = await client.spot.candles.history('HYPE-USDC', {
-  start: Date.parse('2025-03-22T10:50:22Z'),
+  start: Date.now() - 7 * 86400000, // the last 7 days
   end: Date.now(),
   interval: '1h',
 });
@@ -79,14 +79,16 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 
 ## Data Coverage
 
+Dates are the first served instant of each dataset, as `client.capabilities()` reports it (UTC). Starts can be later for individual markets.
+
 | Venue | Coverage | Notes |
 | --- | --- | --- |
-| Hyperliquid | April 2023+ | Core perpetual markets; coverage varies by schema and route. |
-| Hyperliquid HIP-3 | Trades and oracle prices from 2025-10-13; candles and liquidations from 2025-12-22; order book, funding, and OI from 2026-02-16; L4 and order history from 2026-03-10 | Builder perps; funding and OI update at roughly 10 seconds. Candle history accepts up to 10,000 rows per request. |
-| Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side open interest are served from 2026-05-02; OI updates at ~10s. No funding. |
-| Hyperliquid Spot | Candles from 2025-03-22T10:50:22Z; trades from March 2025; orderbook, L4, TWAP from May 2026 | 326 authenticated inventory rows using dashed symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and numeric-string cursors passed through unchanged. No funding, OI, or liquidations. |
-| Lighter (mainnet) | Candles served from 2025-08-01; observed global fill floor January 17, 2025; exact starts vary by market. L3 orderbooks from March 5, 2026+ | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
-| Lighter (Robinhood Chain) | Trades and liquidations from 2026-06-26 20:10:26 UTC (launch); order book, open interest, and funding from 2026-08-22 18:43 UTC; candles from 2026-06-26 20:10 UTC | The second Lighter deployment: 84 USDG-quoted markets (57 perpetuals such as `BTC`, 27 spot markets such as `AAPL-USDG`). No L3 order book. Funding and OI are perpetuals only. |
+| Hyperliquid | Order book from 2023-04-15; trades from 2023-04-15 03:31; funding, open interest, and prices from 2023-05-20 02:50; candles from 2025-03-22 12:00; liquidations from 2025-12-22; L4, full-depth L2, and order history from 2026-03-11 01:03 | Core perpetual markets. |
+| Hyperliquid HIP-3 | Trades from 2025-10-13 12:24; oracle prices from 2025-10-13 12:12; candles and liquidations from 2025-12-22; order book from 2026-02-16 16:57; funding and OI from 2026-02-16 17:03; L4, full-depth L2, and order history from 2026-03-11 01:03 | Builder perps; funding and OI update at roughly 10 seconds. Candle history accepts up to 10,000 rows per request. |
+| Hyperliquid HIP-4 | L4 and order history from 2026-05-02 07:47; trades and candles from 2026-05-02 08:00; order book, open interest, and prices from 2026-05-02 16:51 | Outcome markets. OI updates at about 10 seconds. No funding or liquidations. |
+| Hyperliquid Spot | Candles from 2025-03-22 10:50; trades from 2025-03-22 10:50:22; TWAP from 2026-05-05 13:05; order book from 2026-05-05 19:56; L4 from 2026-05-05 22:57 (PURR-USDC from 2026-03-11 01:03), with REST order history reaching back further | Pairs use dashed symbols (`HYPE-USDC`, `PURR-USDC`); `client.spot.pairs.list()` returns the current set. Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with max `limit` 1000 and numeric-string cursors passed through unchanged. No funding, OI, or liquidations. |
+| Lighter (mainnet) | Trades from 2025-01-17 08:43; candles from 2025-08-01; funding, OI, and prices from 2025-08-25 15:28; order book from 2026-01-29 02:13; L3 order book from 2026-03-05 03:33; liquidations from 2026-06-10 | Perpetuals. Fills carry maker/taker context where served; L3 is capped at 250 orders per side and funding/OI update at approximately 10s. |
+| Lighter (Robinhood Chain) | Trades and liquidations from 2026-06-26 20:10:26 (launch); candles from 2026-06-26 20:10; order book, open interest, and funding from 2026-08-22 18:43 | The second Lighter deployment, quoted in USDG: perpetuals such as `BTC` and spot markets such as `AAPL-USDG`; `client.rhLighter.instruments.list()` returns the current set. No L3 order book. Funding and OI are perpetuals only. |
 
 **Account positions** coverage: Hyperliquid core position changes from 2025-05-25 and HIP-3 from 2025-10-13, hourly snapshots from 2026-06-07, and a live snapshot about every 5 minutes. Lighter mainnet from 2025-01-17 and Lighter on Robinhood Chain from 2026-06-26, with hourly snapshots over the whole history and a live snapshot about every 2 minutes.
 
@@ -169,7 +171,7 @@ const lighterOb = await client.lighter.orderbook.get('BTC');
 
 // Get order book at specific timestamp with custom depth
 const historical = await client.hyperliquid.orderbook.get('BTC', {
-  timestamp: 1704067200000,
+  timestamp: Date.now() - 3600000, // one hour ago
   depth: 20  // Number of levels per side
 });
 
@@ -192,7 +194,7 @@ const top5 = await client.hyperliquid.hip3.orderbook.history('xyz:SP500', {
 
 The `depth` parameter controls how many price levels are returned per side, on current and historical snapshots on every venue (Hyperliquid core, HIP-3, HIP-4, Spot and Lighter) and on full-depth L2 history. Depth limits are route-specific.
 
-**Note:** Hyperliquid native L2 source data contains ~20 levels. Dedicated L2 routes derived from L4 can return all available levels where supported. Lighter L3 is individual order-level data capped at 250 orders per side, not an unlimited full-depth book. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
+**Note:** Hyperliquid native L2 source data contains ~20 levels. Dedicated L2 routes derived from L4 can return all available levels where supported. Lighter L3 is individual order-level data capped at 250 orders per side, not an unlimited full-depth book. Depth limits apply to L2 snapshot endpoints only; L4 and L2 diff endpoints return full data.
 
 #### Lighter Orderbook Granularity
 
@@ -326,7 +328,7 @@ const recentSells = await client.hyperliquid.hip3.trades.recent('xyz:SP500', { l
 
 `side` filters on the server, so a full page still holds `limit` matching trades and the cursor pages the filtered tape; send the same `side` on every page. `'buy'` keeps trades whose taker bought (`side: 'B'`), `'sell'` those whose taker sold (`side: 'A'`).
 
-**Note:** The `recent()` method is available for Lighter (`client.lighter.trades.recent()`, `client.rhLighter.trades.recent()`), HIP-3 (`client.hyperliquid.hip3.trades.recent()`), HIP-4 (`client.hyperliquid.hip4.trades.recent()` / `getTradesRecent()`), and Spot (`client.spot.trades.recent()`), which have real-time ingestion. Hyperliquid core does not have a recent trades endpoint (it uses hourly S3 backfill); calling `client.hyperliquid.trades.recent()` throws an `OxArchiveError` with `errorCode` `route_not_found`, directing you to use `history()` with a time range instead.
+**Note:** The `recent()` method is available for Lighter (`client.lighter.trades.recent()`, `client.rhLighter.trades.recent()`), HIP-3 (`client.hyperliquid.hip3.trades.recent()`), HIP-4 (`client.hyperliquid.hip4.trades.recent()` / `getTradesRecent()`), and Spot (`client.spot.trades.recent()`). Hyperliquid core has no recent-trades route: read its latest trades with `history()` over a recent window, or stream them live on the `trades` WebSocket channel. Calling `client.hyperliquid.trades.recent()` throws an `OxArchiveError` with `errorCode` `route_not_found`.
 
 Lighter trades are fill-grain: describe the returned records as **per fill · maker + taker** where that context is served. Do not describe them as every order, a complete order history, or an unlimited trade archive.
 
@@ -388,11 +390,11 @@ for (const inst of hip3Instruments) {
 }
 
 // Get specific HIP-3 instrument (case-sensitive)
-const us500 = await client.hyperliquid.hip3.instruments.get('km:US500');
-console.log(`Mark price: ${us500.markPrice}`);
+const sp500 = await client.hyperliquid.hip3.instruments.get('xyz:SP500');
+console.log(`Mark price: ${sp500.markPrice}`);
 ```
 
-**HIP-3 coins:** builders list and delist markets over time, so this README does not pin a list. Call `client.hyperliquid.hip3.instruments.list()` for the current set. Coin names are case-sensitive and carry the builder prefix (`xyz:XYZ100`, `km:US500`).
+**HIP-3 coins:** builders list and delist markets over time, so this README does not pin a list. Call `client.hyperliquid.hip3.instruments.list()` for the current set. Coin names are case-sensitive and carry the builder prefix (`xyz:XYZ100`, `xyz:SP500`).
 
 #### HIP-3 Market Breadth
 
@@ -407,7 +409,7 @@ snapshots; `interval` uses the last snapshot in each bucket.
 const breadthNow = await client.hyperliquid.hip3.breadth.current();
 const coreBreadthNow = await client.hyperliquid.breadth.current(); // core perps, same shape
 const breadthHistory = await client.hyperliquid.hip3.breadth.history({
-  start: Date.parse('2026-08-28T00:00:00Z'),
+  start: Date.now() - 86400000, // the last 24 hours
   end: Date.now(),
   interval: '5m',
 });
@@ -418,49 +420,49 @@ console.log(breadthNow.valuePct, breadthHistory.nextCursor);
 
 #### HIP-3 Oracle
 
-`client.hyperliquid.hip3.oracle` reads a builder market's oracle state. `externalPrice()` returns the latest deployer-pushed external reference price with the mark price; either can be `null` when not available. `discoveryBounds()` returns the instantaneous discovery bounds: the reference price (the external price when available, otherwise the mark price, named in `referenceSource`), the market's max leverage, the fraction applied on each side, and the resulting lower and upper bounds. The full ratcheted range can be wider when deployer-specific reset configuration applies. Both carry the source `blockNumber` and `timestamp` (Unix milliseconds).
+`client.hyperliquid.hip3.oracle` reads a builder market's oracle state. `externalPrice()` returns the latest deployer-pushed external reference price with the mark price; either can be `null` when not available. `discoveryBounds()` returns the instantaneous discovery bounds: the reference price (the external price when available, otherwise the mark price, named in `referenceSource`), the market's max leverage, the fraction applied on each side, and the resulting lower and upper bounds. The full ratcheted range can be wider when deployer-specific reset configuration applies. Both carry the source `blockNumber`, `timestamp` (RFC 3339 UTC) and `timestampMs` (Unix milliseconds).
 
 ```typescript
-const px = await client.hyperliquid.hip3.oracle.externalPrice('km:US500');
+const px = await client.hyperliquid.hip3.oracle.externalPrice('xyz:SP500');
 console.log(px.externalPrice, px.markPrice, px.blockNumber);
 
-const bounds = await client.hyperliquid.hip3.oracle.discoveryBounds('km:US500');
+const bounds = await client.hyperliquid.hip3.oracle.discoveryBounds('xyz:SP500');
 console.log(`${bounds.lowerBound} to ${bounds.upperBound} around ${bounds.referencePrice} (${bounds.referenceSource})`);
 ```
 
 #### HIP-4 Outcome Markets
 
-HIP-4 is Hyperliquid's binary outcome-market namespace. Each outcome has 2 sides (`#0` = Yes / side 0, `#1` = No / side 1, etc.). Markets are fully collateralized so there are no funding rates or liquidations. Candle history and outcome-side open interest are served from **2026-05-02**; OI updates at **~10s**. `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
+HIP-4 is Hyperliquid's binary outcome-market namespace. Each outcome has 2 sides, and each side is its own coin: `#` followed by 10 times the outcome id plus the side, so outcome 8226 trades as `#82260` (Yes, side 0) and `#82261` (No, side 1). Markets are fully collateralized so there are no funding rates or liquidations. Candle history is served from **2026-05-02 08:00 UTC** and outcome-side open interest from **2026-05-02 16:51 UTC**; OI updates at about 10 seconds. `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
 
-**Path encoding:** the backend accepts both the bare numeric form (`'0'`, `'1'`, ...) and the legacy on-chain `#`-prefixed form (`'#0'`, `'#1'`, ...). The bare numeric form is the documented primary path. The SDK URL-encodes the legacy value on the wire (`#` becomes `%23`) so it survives `fetch` parsing; both forms remain accepted.
+Outcomes settle and new ones are listed every day, so look up a current coin before reading market data; a settled outcome no longer has a live book.
+
+**Path encoding:** the backend accepts both the bare numeric form (`'82260'`) and the on-chain `#`-prefixed form (`'#82260'`). The bare numeric form is the documented primary path. The SDK URL-encodes the `#` form on the wire (`#` becomes `%23`) so it survives `fetch` parsing; both forms remain accepted.
 
 ```typescript
-// Per-side instruments (one row per #N coin)
+// Per-side instruments (one row per side coin, settled ones included)
 const sides = await client.hyperliquid.hip4.instruments.list();
-for (const s of sides) {
-  console.log(`${s.symbol} (outcome ${s.outcomeId}/${s.side}): ${s.displayTitle}`);
-  console.log(`  slug: ${s.slug}, settled: ${s.isSettled}`);
-}
 
-// Per-outcome aggregates (one row per outcome)
+// An open daily BTC price outcome, Yes side
+const yes = sides.find((s) => !s.isSettled && s.side === 0 && s.slug?.startsWith('btc-above-'));
+if (!yes) throw new Error('no open BTC outcome right now');
+console.log(`${yes.symbol} (outcome ${yes.outcomeId}): ${yes.displayTitle}`);
+const coin = yes.symbol.replace('#', ''); // bare numeric form, e.g. '82260'
+
+// Per-outcome aggregates (one row per outcome), cursor paged
 const outcomes = await client.hyperliquid.hip4.listOutcomes({ isSettled: false, limit: 50 });
 for (const o of outcomes.data) {
-  console.log(`outcome ${o.outcomeId}: ${o.displayTitle}`);
-  console.log(`  pair: ${o.outcomePair?.[0]} / ${o.outcomePair?.[1]}`);
-  console.log(`  expiry: ${o.expiry}, target: ${o.targetPrice}`);
+  console.log(`outcome ${o.outcomeId}: ${o.displayTitle}, sides ${o.sideSpecs?.map((s) => s.coin).join(' / ')}`);
 }
 
 // Detail (includes aggregatedOi)
-const detail = await client.hyperliquid.hip4.getOutcome(0);
+const detail = await client.hyperliquid.hip4.getOutcome(yes.outcomeId);
 console.log(detail.aggregatedOi?.outcomeDisplayOpenInterestContracts);
 
 // Slug-based lookup (per-outcome OR per-side slug)
-const bySlug = await client.hyperliquid.hip4.getOutcomeBySlug('btc-above-78213-may-04-0600');
+const bySlug = await client.hyperliquid.hip4.getOutcomeBySlug(yes.slug!);
 
-// Slug-filter on listOutcomes
-const filtered = await client.hyperliquid.hip4.listOutcomes({
-  slug: 'btc-above-78213-may-04-0600',
-});
+// Slug filter on listOutcomes
+const filtered = await client.hyperliquid.hip4.listOutcomes({ slug: yes.slug });
 
 // Questions: a question groups binary outcomes under one ballot, with one
 // named outcome per choice plus a fallback outcome that resolves Yes when no
@@ -470,31 +472,31 @@ const question = await client.hyperliquid.hip4.questions.get(questions.data[0].q
 console.log(question.namedOutcomeIds, question.fallbackOutcomeId, question.settledNamedOutcomes);
 
 // Orderbook. Bare numeric form is recommended.
-const ob = await client.hyperliquid.hip4.getOrderbook('0');
-// ob.midPrice is a probability ∈ [0, 1] — implied YES probability for #0.
+const ob = await client.hyperliquid.hip4.getOrderbook(coin);
+// ob.midPrice is a probability in [0, 1]: the implied probability of Yes.
 
 // Trades, OI, and prices
-const trades = await client.hyperliquid.hip4.getTradesRecent('0', 50);
-const oiNow = await client.hyperliquid.hip4.getOpenInterestCurrent('0');
-const prices = await client.hyperliquid.hip4.getPrices('0', {
-  start: Date.now() - 86400000,
+const trades = await client.hyperliquid.hip4.getTradesRecent(coin, 50);
+const oiNow = await client.hyperliquid.hip4.getOpenInterestCurrent(coin);
+const prices = await client.hyperliquid.hip4.getPrices(coin, {
+  start: Date.now() - 3600000,
   end: Date.now(),
 });
 
-// Candle history (served from 2026-05-02; OHLC values are probabilities)
-const candles = await client.hyperliquid.hip4.candles.history('0', {
-  start: Date.now() - 86400000,
+// Candle history (OHLC values are probabilities)
+const candles = await client.hyperliquid.hip4.candles.history(coin, {
+  start: Date.now() - 3600000,
   end: Date.now(),
   interval: '1m',
 });
 
 // Convenience
-const summary = await client.hyperliquid.hip4.getSummary('0');
-const fresh = await client.hyperliquid.hip4.getFreshness('0');
+const summary = await client.hyperliquid.hip4.getSummary(coin);
+const fresh = await client.hyperliquid.hip4.getFreshness(coin);
 
 // L4
-const l4 = await client.hyperliquid.hip4.getL4Orderbook('0');
-const orders = await client.hyperliquid.hip4.getOrderHistory('0', {
+const l4 = await client.hyperliquid.hip4.getL4Orderbook(coin);
+const orders = await client.hyperliquid.hip4.getOrderHistory(coin, {
   start: Date.now() - 3600000,
   end: Date.now(),
 });
@@ -508,7 +510,7 @@ Spot pairs live at `/v1/hyperliquid/spot` and `client.spot`. Symbols are dashed 
 
 Spot has no funding, open interest, or liquidations. Candle history is served
 through `GET /v1/hyperliquid/spot/candles/{symbol}` and
-`client.spot.candles.history()`, with coverage from **2025-03-22T10:50:22Z**.
+`client.spot.candles.history()`, with coverage from **2025-03-22 10:50 UTC**.
 The candle route accepts `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`,
 with a maximum `limit` of 1000 and numeric-string pagination cursors that
 callers should pass through unchanged.
@@ -519,7 +521,7 @@ const pairs = await client.spot.pairs.list();
 const hype = await client.spot.pairs.get('HYPE-USDC');
 console.log(`${hype.symbol}: mark=${hype.markPrice}, mid=${hype.midPrice}`);
 
-// Orderbook (live from 2026-05-05)
+// Orderbook (history from 2026-05-05 19:56 UTC)
 const ob = await client.spot.orderbook.get('HYPE-USDC');
 console.log(`${ob.coin} mid: ${ob.midPrice}`);
 
@@ -530,7 +532,7 @@ const obHistory = await client.spot.orderbook.history('HYPE-USDC', {
   limit: 100,
 });
 
-// Trade history (S3 backfill from 2025-03-22)
+// Trade history (from 2025-03-22 10:50:22 UTC)
 const trades = await client.spot.trades.list('HYPE-USDC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -540,15 +542,15 @@ const trades = await client.spot.trades.list('HYPE-USDC', {
 // Recent trades (real-time)
 const recent = await client.spot.trades.recent('HYPE-USDC', 100);
 
-// Candle history (served from 2025-03-22T10:50:22Z)
+// Candle history (served from 2025-03-22 10:50 UTC)
 const candles = await client.spot.candles.history('HYPE-USDC', {
-  start: Date.parse('2025-03-22T10:50:22Z'),
+  start: Date.now() - 7 * 86400000,
   end: Date.now(),
   interval: '1h',
   limit: 1000,
 });
 
-// L4 reconstruction (live from 2026-05-05)
+// L4 reconstruction (from 2026-05-05 22:57 UTC; PURR-USDC from 2026-03-11 01:03 UTC)
 const l4 = await client.spot.l4Orderbook.get('HYPE-USDC');
 const diffs = await client.spot.l4Orderbook.diffs('HYPE-USDC', {
   start: Date.now() - 3600000,
@@ -576,7 +578,7 @@ const fresh = await client.spot.freshness('HYPE-USDC');
 console.log(`Orderbook last updated: ${fresh.orderbook.lastUpdated}`);
 ```
 
-> **Coverage caveats.** Spot candle history is served from 2025-03-22T10:50:22Z through `GET /v1/hyperliquid/spot/candles/{symbol}`. The route supports 1m, 5m, 15m, 30m, 1h, 4h, 1d, and 1w intervals, up to 1000 rows per request; numeric-string cursors should be passed back unchanged. Spot trades go back to 2025-03-22 (the earliest date Hyperliquid published S3 spot fills). Pre-March 2025 spot history is unrecoverable from any free public archive. Spot orderbook, L4, and TWAP data are live-only from 2026-05-05; Hyperliquid does not publish historical spot orderbook data.
+> **Coverage.** Spot candle history is served from 2025-03-22 10:50 UTC through `GET /v1/hyperliquid/spot/candles/{symbol}`. The route supports 1m, 5m, 15m, 30m, 1h, 4h, 1d, and 1w intervals, up to 1000 rows per request; numeric-string cursors should be passed back unchanged. Spot trades are served from 2025-03-22 10:50:22 UTC, the earliest spot fills Hyperliquid has published; the archive has no earlier spot trades. Hyperliquid does not publish historical spot order books, so Spot order book, L4, and TWAP history starts when capture began: TWAP from 2026-05-05 13:05 UTC, order book from 2026-05-05 19:56 UTC, and L4 from 2026-05-05 22:57 UTC (PURR-USDC from 2026-03-11 01:03 UTC). REST order history reaches back further for every pair. Spot TWAP statuses are served over REST only (`client.spot.twap`).
 
 ### Funding Rates
 
@@ -675,7 +677,7 @@ const userLiquidations = await client.hyperliquid.liquidations.byUser('0x1234...
 });
 
 // HIP-3 liquidations (case-sensitive coins)
-const hip3Liquidations = await client.hyperliquid.hip3.liquidations.history('km:US500', {
+const hip3Liquidations = await client.hyperliquid.hip3.liquidations.history('xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 100
@@ -699,7 +701,7 @@ for (const bucket of volume.data) {
 }
 
 // HIP-3 liquidation volume (case-sensitive coins)
-const hip3Volume = await client.hyperliquid.hip3.liquidations.volume('km:US500', {
+const hip3Volume = await client.hyperliquid.hip3.liquidations.volume('xyz:SP500', {
   start: Date.now() - 86400000 * 7,
   end: Date.now(),
   interval: '1h'
@@ -781,19 +783,19 @@ const tpsl = await client.hyperliquid.orders.tpsl('BTC', {
 });
 
 // HIP-3 orders (case-sensitive coins)
-const hip3Orders = await client.hyperliquid.hip3.orders.history('km:US500', {
+const hip3Orders = await client.hyperliquid.hip3.orders.history('xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 1000
 });
 
-const hip3Flow = await client.hyperliquid.hip3.orders.flow('km:US500', {
+const hip3Flow = await client.hyperliquid.hip3.orders.flow('xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now(),
   interval: '1h'
 });
 
-const hip3Tpsl = await client.hyperliquid.hip3.orders.tpsl('km:US500', {
+const hip3Tpsl = await client.hyperliquid.hip3.orders.tpsl('xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now()
 });
@@ -812,7 +814,7 @@ console.log(l4Ob.bids[0]?.userAddress, l4Ob.bids[0]?.timestamp, l4Ob.bids[0]?.ti
 
 // Get L4 orderbook at a specific timestamp with custom depth
 const l4Historical = await client.hyperliquid.l4Orderbook.get('BTC', {
-  timestamp: '2026-09-01T00:00:00Z',
+  timestamp: Date.now() - 3600000, // one hour ago
   depth: 20
 });
 
@@ -835,15 +837,15 @@ const l4History = await client.hyperliquid.l4Orderbook.history('BTC', {
 });
 
 // HIP-3 L4 orderbook (case-sensitive coins)
-const hip3L4 = await client.hyperliquid.hip3.l4Orderbook.get('km:US500');
+const hip3L4 = await client.hyperliquid.hip3.l4Orderbook.get('xyz:SP500');
 
-const hip3L4Diffs = await client.hyperliquid.hip3.l4Orderbook.diffs('km:US500', {
+const hip3L4Diffs = await client.hyperliquid.hip3.l4Orderbook.diffs('xyz:SP500', {
   start: Date.now() - 3600000,
   end: Date.now(),
   limit: 1000
 });
 
-const hip3L4History = await client.hyperliquid.hip3.l4Orderbook.history('km:US500', {
+const hip3L4History = await client.hyperliquid.hip3.l4Orderbook.history('xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now(),
   limit: 1000
@@ -860,7 +862,7 @@ const l3Ob = await client.lighter.l3Orderbook.get('BTC');
 
 // Get L3 orderbook at a specific timestamp with custom depth
 const l3Historical = await client.lighter.l3Orderbook.get('BTC', {
-  timestamp: '2026-03-05T00:00:00Z',
+  timestamp: Date.now() - 3600000, // one hour ago
   depth: 250
 });
 
@@ -889,7 +891,7 @@ const l2 = await client.hyperliquid.l2Orderbook.get('BTC');
 
 // L2 orderbook at a specific timestamp with depth
 const l2Historical = await client.hyperliquid.l2Orderbook.get('BTC', {
-  timestamp: '2026-09-01T00:00:00Z',
+  timestamp: Date.now() - 3600000, // one hour ago
   depth: 50
 });
 
@@ -909,7 +911,7 @@ const l2Diffs = await client.hyperliquid.l2Orderbook.diffs('BTC', {
 });
 
 // HIP-3 L2 orderbook
-const hip3L2 = await client.hyperliquid.hip3.l2Orderbook.get('km:US500');
+const hip3L2 = await client.hyperliquid.hip3.l2Orderbook.get('xyz:SP500');
 ```
 
 ### Freshness
@@ -928,7 +930,7 @@ console.log(`OI last updated: ${freshness.openInterest.lastUpdated}`);
 const lighterFreshness = await client.lighter.freshness('BTC');
 
 // HIP-3 (case-sensitive coins)
-const hip3Freshness = await client.hyperliquid.hip3.freshness('km:US500');
+const hip3Freshness = await client.hyperliquid.hip3.freshness('xyz:SP500');
 
 // HIP-4 has no funding or liquidations, so those buckets are absent
 const hip4Freshness = await client.hyperliquid.hip4.getFreshness('0');
@@ -958,8 +960,8 @@ console.log(`  Short: $${summary.shortLiquidationVolume24h}`);
 // Lighter (price, funding, OI; no volume or liquidation data)
 const lighterSummary = await client.lighter.summary('BTC');
 
-// HIP-3 (includes mid_price — case-sensitive coins)
-const hip3Summary = await client.hyperliquid.hip3.summary('km:US500');
+// HIP-3 (includes mid_price; coins are case-sensitive)
+const hip3Summary = await client.hyperliquid.hip3.summary('xyz:SP500');
 console.log(`Mid price: ${hip3Summary.midPrice}`);
 ```
 
@@ -968,7 +970,7 @@ console.log(`Mid price: ${hip3Summary.midPrice}`);
 Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records.
 
 ```typescript
-// Hyperliquid: available from April 2023
+// Hyperliquid: available from 2023-05-20 02:50 UTC
 const prices = await client.hyperliquid.priceHistory('BTC', {
   start: Date.now() - 86400000,
   end: Date.now(),
@@ -987,7 +989,7 @@ const lighterPrices = await client.lighter.priceHistory('BTC', {
 });
 
 // HIP-3 (case-sensitive coins)
-const hip3Prices = await client.hyperliquid.hip3.priceHistory('km:US500', {
+const hip3Prices = await client.hyperliquid.hip3.priceHistory('xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now(),
   interval: '1d'
@@ -1035,9 +1037,9 @@ const lighterCandles = await client.lighter.candles.history('BTC', {
   interval: '15m'
 });
 
-// Hyperliquid Spot candles (served from 2025-03-22T10:50:22Z)
+// Hyperliquid Spot candles (served from 2025-03-22 10:50 UTC)
 const spotCandles = await client.spot.candles.history('HYPE-USDC', {
-  start: '2025-03-22T10:50:22Z',
+  start: new Date(Date.now() - 7 * 86400000).toISOString(),
   end: new Date().toISOString(),
   interval: '1h',
   limit: 1000,
@@ -1060,12 +1062,13 @@ const spotCandles = await client.spot.candles.history('HYPE-USDC', {
 `nextCursor` values are returned as numeric strings. Treat each as an opaque
 client value and pass it back unchanged as `cursor` when requesting the next
 page. Core Hyperliquid, HIP-3, and Lighter candle routes accept up to 10,000
-rows per request; HIP-4 and Spot routes accept up to 1,000. Hyperliquid Spot
-candle history starts at **2025-03-22T10:50:22Z**.
+rows per request; HIP-4 and Spot routes accept up to 1,000. Hyperliquid
+candle history starts at **2025-03-22 12:00 UTC** (earlier bars are not
+served), and Hyperliquid Spot candle history at **2025-03-22 10:50 UTC**.
 
 ### Cumulative Volume Delta (CVD)
 
-`client.hyperliquid.cvd` and `client.hyperliquid.hip3.cvd` return taker buy and sell notional per time bucket (`buyVolume`, `sellVolume`), their difference (`delta`), and a running total (`cumulativeDelta`). Intervals are `1m`, `5m`, `15m`, `30m`, `1h` (the default), `4h`, `1d` and `1w`. Buckets are labelled by their open time in UTC (`timestamp`, Unix milliseconds) and are omitted when they hold no trades; `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so weekly buckets open on Thursdays.
+`client.hyperliquid.cvd` and `client.hyperliquid.hip3.cvd` return taker buy and sell notional per time bucket (`buyVolume`, `sellVolume`), their difference (`delta`), and a running total (`cumulativeDelta`). Intervals are `1m`, `5m`, `15m`, `30m`, `1h` (the default), `4h`, `1d` and `1w`. Buckets are labelled by their open time in UTC (`timestamp`, an RFC 3339 string, and `timestampMs`, Unix milliseconds) and are omitted when they hold no trades; `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so weekly buckets open on Thursdays.
 
 A page holds up to `limit` buckets (default 500, max 10,000). While `hasMore` is true, pass `nextCursor` back unchanged as `cursor` with the same `start`, `end` and `interval`, and stop when `hasMore` is false. Below `1h` a page can hold fewer than `limit` buckets and still have more to follow, so stop on `hasMore`, not on a short page. Without `start` or `cursor`, the response is the newest `limit` buckets of the 24 hours before `end` (or before now), with no cursor.
 
@@ -1086,20 +1089,20 @@ let running = 0;
 const cvd = buckets.map((b) => ({ timestamp: b.timestamp, cvd: (running += b.delta) }));
 
 // Latest hourly buckets for a HIP-3 market (symbols keep their prefix and case)
-const hip3Cvd = await client.hyperliquid.hip3.cvd.history('km:US500');
+const hip3Cvd = await client.hyperliquid.hip3.cvd.history('xyz:SP500');
 ```
 
 ### Lighter on Robinhood Chain
 
 Lighter has two deployments: mainnet (`client.lighter`, `/v1/lighter`) and Robinhood Chain (`client.rhLighter`, `/v1/rh-lighter`). The Robinhood Chain client has the same resources and methods as the mainnet client except the L3 order book, which is not captured on this deployment, and the L1 account lookup: `instruments`, `orderbook` (including `granularity` history), `trades`, `candles`, `openInterest`, `funding`, `liquidations`, `positions`, `freshness()`, `summary()`, and `priceHistory()`.
 
-Markets are quoted in USDG: 84 markets, 57 perpetuals with uppercase symbols (`BTC`) and 27 spot markets with dashed symbols (`AAPL-USDG`). Symbols are case-insensitive; the SDK sends them uppercase. Funding and open interest are perpetuals only.
+Markets are quoted in USDG: perpetuals have uppercase symbols (`BTC`) and spot markets dashed symbols (`AAPL-USDG`). `client.rhLighter.instruments.list()` returns the current set, with `marketType` on each. Symbols are case-insensitive; the SDK sends them uppercase. Funding and open interest are perpetuals only.
 
 | Data | Served from |
 | --- | --- |
 | Trades, liquidations | 2026-06-26 20:10:26 UTC (venue launch) |
+| Candles | 2026-06-26 20:10 UTC |
 | Order book, open interest, funding | 2026-08-22 18:43 UTC |
-| Candles | 2026-06-26, once candles are enabled for this deployment; until then the candles route returns an error |
 | L3 order book | Not available |
 
 Trades follow the same two tiers as mainnet: `trades.history()` (also `trades.list()`) returns reconciled trades up to `meta.finalizedThrough`, about a day behind, and `trades.recent()` serves the preliminary tier.
@@ -1111,15 +1114,21 @@ const perps = instruments.filter((i) => i.marketType === 'perp');
 const book = await client.rhLighter.orderbook.get('BTC');
 const oi = await client.rhLighter.openInterest.current('BTC');
 const funding = await client.rhLighter.funding.history('BTC', {
-  start: Date.parse('2026-08-22T18:43:00Z'),
+  start: Date.now() - 7 * 86400000,
   end: Date.now(),
   interval: '1h'
 });
 
+// Reconciled trades; the window is clamped to meta.finalizedThrough
 const spotTrades = await client.rhLighter.trades.list('AAPL-USDG', {
-  start: Date.parse('2026-06-26T20:10:26Z'),
+  start: Date.now() - 7 * 86400000,
   end: Date.now(),
   limit: 1000
+});
+const candles = await client.rhLighter.candles.history('BTC', {
+  start: Date.now() - 86400000,
+  end: Date.now(),
+  interval: '1h'
 });
 const freshness = await client.rhLighter.freshness('BTC');
 ```
@@ -1163,7 +1172,7 @@ console.log(`as of ${meta.asOf} (${meta.source}, quality ${meta.quality}, stale 
 if (data.positions.length === 0) console.log(`no positions: ${data.accountSeen}`);
 
 // State as of an instant between snapshots is reconstructed from the change log
-const asOf = await client.hyperliquid.positions.get('0x1234...', { timestamp: '2026-07-01T10:30:00Z' });
+const asOf = await client.hyperliquid.positions.get('0x1234...', { timestamp: Date.now() - 90 * 60000 });
 
 // Every change of one HIP-3 position over a week
 for await (const leg of client.hyperliquid.hip3.positions.iterateChanges('0x1234...', {
@@ -1180,11 +1189,12 @@ const lighterPositions = await client.lighter.positions.get(owned.data.accounts[
 
 // Lighter account summary (position aggregates): now, and one row per hour
 const summary = await client.rhLighter.positions.account(4521);
-const hourly = await client.lighter.positions.accountHistory(4521, { start: '2026-09-01', end: '2026-09-02' });
+const hourly = await client.lighter.positions.accountHistory(4521, { start: Date.now() - 86400000, end: Date.now() });
 
 // Largest BTC longs on Robinhood Chain at one hour, with totals for the whole market
+const lastFullHour = Math.floor(Date.now() / 3600000) * 3600000 - 3600000;
 const longs = await client.rhLighter.positions.market('BTC', {
-  hour: Date.UTC(2026, 8, 25, 12),
+  hour: lastFullHour,
   side: 'long',
   minValue: 10000,
 });
@@ -1258,7 +1268,7 @@ for (const gap of oi.gaps.slice(0, 5)) {
 }
 
 // Symbols are sent exactly as the venue names them (case-sensitive, URL-encoded)
-const us500 = await client.dataQuality.symbolCoverage('hip3', 'km:US500');
+const sp500 = await client.dataQuality.symbolCoverage('hip3', 'xyz:SP500');
 const hip4Side = await client.dataQuality.symbolCoverage('hip4', '#0');
 
 // Check empirical data cadence (when available)
@@ -1714,6 +1724,10 @@ See the [webhooks guide](https://docs.0xarchive.io/webhooks) for the event catal
 
 The WebSocket client supports live subscriptions for supported Hyperliquid and Lighter channels (on both Lighter deployments), and historical replay. It connects with `version=2026-10-01` (see [API version](#api-version)). Which channels stream live and which replay is `WS_CHANNEL_CAPABILITIES`, a table that mirrors [`client.capabilities()`](#capabilities); a subscription or replay the API does not offer is refused before it is sent. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
 
+Wait for `connect()` before sending: `await ws.connect()`. A replay or replay control called while the client is still connecting (or reconnecting) is queued and sent once the socket opens; one called while it is disconnected throws. Subscriptions are kept by the client and sent again after every reconnect.
+
+In Node.js the client connects with the [`ws`](https://www.npmjs.com/package/ws) package, which is installed with the SDK, on every Node.js version: Node.js 18 and 20 have no built-in WebSocket, and the built-in one in some Node.js 24 releases closes the connection on a compressed message larger than about 4 MB, which a BTC L4 snapshot is. In browsers the client uses the built-in `WebSocket`. A `WebSocket` you assign to `globalThis` yourself is used as is.
+
 > Bulk streaming over WebSocket has been discontinued. `ws.stream()`, `ws.multiStream()`, and `ws.streamStop()` remain for compatibility but are deprecated: the server answers them with an error message and sends no data. For large downloads, use the S3 Parquet bulk export from the [Data Catalog](https://www.0xarchive.io/data).
 
 > Lighter `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` support live subscriptions and replay. `lighter_candles` and `lighter_l3_orderbook` are replay-only. See [Live Lighter Channels](#live-lighter-channels).
@@ -1731,7 +1745,7 @@ const ws = new OxArchiveWs({ apiKey: '0xa_your_api_key' });
 Subscribe to live market data from Hyperliquid. Live Lighter data uses the same client; see [Live Lighter Channels](#live-lighter-channels).
 
 ```typescript
-ws.connect({
+await ws.connect({
   onOpen: () => console.log('Connected'),
   onClose: (code, reason) => console.log(`Disconnected: ${code}`),
   onError: (error) => console.error('Error:', error),
@@ -1767,8 +1781,7 @@ Replay historical data with original timing preserved. Perfect for backtesting.
 > The real-time callbacks only receive live market data from subscriptions.
 
 ```typescript
-const ws = new OxArchiveWs({ apiKey: 'ox_...' });
-ws.connect();
+const ws = new OxArchiveWs({ apiKey: '0xa_your_api_key' });
 
 // Handle replay data - this is where historical records arrive
 ws.onHistoricalData((coin, timestamp, data) => {
@@ -1783,6 +1796,9 @@ ws.onReplayStart((channel, coin, start, end, speed) => {
 ws.onReplayComplete((channel, coin, recordsSent) => {
   console.log(`Replay complete: ${recordsSent} records`);
 });
+
+// Connect first, then start the replay
+await ws.connect();
 
 // Start replay at 10x speed
 ws.replay('orderbook', 'BTC', {
@@ -1810,7 +1826,7 @@ ws.onHistoricalTickData((coin, checkpoint, deltas) => {
 // Control playback
 ws.replayPause();
 ws.replayResume();
-ws.replaySeek(1704067200000);  // Jump to timestamp
+ws.replaySeek(Date.now() - 3600000);  // Jump to a timestamp inside the replay window
 ws.replayStop();
 ```
 
@@ -1825,12 +1841,13 @@ ws.on('onMessage', (message) => {
   if (message.type === 'replay_completed') console.log('done');
 });
 
-const t0 = Date.parse('2026-09-28T12:00:00Z');
+await ws.connect();
+const t0 = Date.now() - 2 * 3_600_000; // two hours ago
 ws.replay('hip3_l4_diffs', 'xyz:SP500', { start: t0, end: t0 + 3_600_000 });
 // Also: ws.replay('spot_l4_orders', 'HYPE-USDC', ...), ws.replay('orderbook_full', 'BTC', ...)
 ```
 
-`ticker`, `all_tickers`, `spot_orderbook`, `spot_trades` and `spot_twap` stream live only; the SDK refuses a replay of them before sending.
+`ticker`, `all_tickers`, `spot_orderbook` and `spot_trades` stream live only, and `hip4_orderbook`, `hip4_open_interest`, `lighter_l3_orderbook` and the candle channels replay only; the SDK refuses the mode a channel does not offer before sending. `spot_twap` neither streams nor replays: Spot TWAP statuses are served over REST only (`client.spot.twap`).
 
 ### WebSocket errors
 
@@ -1911,7 +1928,7 @@ const ws = new OxArchiveWs({
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes (bulk) |
 | `orderbook_full` | Full-depth L2 order book (every price level) | Yes | Yes | Yes (bulk) |
 
-Each `liquidations` data message is a fill row with `is_liquidation: true` — the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
+Each `liquidations` data message is a fill row with `is_liquidation: true`; the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
 
 L4 channels on every product support bounded replay as an `l4_snapshot`
 followed by ordered `l4_batch` events. The batches are ordered by
@@ -1954,29 +1971,30 @@ ws.subscribe('orderbook_full', 'BTC');
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | Yes (bulk) |
 | `hip3_orderbook_full` | HIP-3 full-depth L2 order book (every price level) | Yes | Yes | Yes (bulk) |
 
-> **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
+> **Note:** HIP-3 coins are case-sensitive (e.g., `xyz:SP500`, `xyz:XYZ100`). Do not uppercase them.
 
 #### HIP-4 Outcome-Market Channels
 
 | Channel | Description | Requires Coin | Live Subscription | Historical Replay |
 |---------|-------------|---------------|-------------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Yes | Yes |
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | No | Yes |
 | `hip4_trades` | HIP-4 trade/fill updates | Yes | Yes | Yes |
-| `hip4_open_interest` | HIP-4 open interest (per side) | Yes | Yes | Yes |
+| `hip4_open_interest` | HIP-4 open interest (per side) | Yes | No | Yes |
 | `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Yes | Yes (bulk) |
 | `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Yes | Yes (bulk) |
 
-HIP-4 has no funding or liquidation channel. Candle history and current outcome-side OI are available through REST from 2026-05-02; OI updates at ~10s. HIP-4 L4 replay starts at the first HIP-4 L4 checkpoint (2026-05-02). HIP-4 `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
+`hip4_orderbook` and `hip4_open_interest` replay history but do not stream live yet, so the SDK refuses a live subscription to them; read the current book and open interest over REST (`client.hyperliquid.hip4.getOrderbook()`, `getOpenInterestCurrent()`). HIP-4 has no funding or liquidation channel, and candle history is REST only. Replay starts at each dataset's first served instant: L4 from 2026-05-02 07:47 UTC, trades from 2026-05-02 08:00 UTC, order book and open interest from 2026-05-02 16:51 UTC. HIP-4 `mark_price`, `midPrice`, and candle OHLC values are implied probabilities in `[0, 1]`, not USD prices.
 
-HIP-4 coins can be passed in either the bare numeric form (`'0'`, `'1'`) or the canonical `#`-prefixed form (`'#0'`, `'#1'`). The SDK URL-encodes `#` to `%23` on the wire so the path survives `fetch` parsing — pass whichever form is convenient.
+HIP-4 coins can be passed in either the bare numeric form (`'82260'`) or the `#`-prefixed form (`'#82260'`); see [HIP-4 Outcome Markets](#hip-4-outcome-markets) to look up a current coin. Pass whichever form is convenient.
 
 ```typescript
 ws.onTrades((coin, trades) => {
   console.log(`${coin}: ${trades.length} HIP-4 fills`);
 });
-ws.subscribeHip4('hip4_trades', '#1');
+await ws.connect();
+ws.subscribeHip4('hip4_trades', coin); // a current side coin, e.g. '82260'
 
-// Settlement signal — terminal for the coin
+// Settlement signal, terminal for the coin
 ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
   console.log(`${coin} (outcome ${outcomeId} side ${side}) settled: ${value} at ${at}`);
 });
@@ -1990,7 +2008,7 @@ ws.onOutcomeSettled((coin, outcomeId, side, value, at) => {
 | `spot_trades` | Spot trade/fill updates | Yes | Yes | No |
 | `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Yes | Yes (bulk) |
 | `spot_l4_orders` | Spot order lifecycle events | Yes | Yes | Yes (bulk) |
-| `spot_twap` | Spot TWAP statuses | Yes | Yes | No |
+| `spot_twap` | Spot TWAP statuses: REST only (`client.spot.twap`) | Yes | No | No |
 
 Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`). The server resolves the dashed form to wire format internally. Spot has no funding, open interest, or liquidations; candle history is REST-only through `client.spot.candles` and has no `spot_candles` WebSocket channel.
 
@@ -2010,8 +2028,8 @@ ws.subscribeSpot('trades', 'HYPE-USDC');
 ws.subscribeSpot('l4_diffs', 'HYPE-USDC');
 ws.subscribeSpot('l4_orders', 'HYPE-USDC');
 
-// TWAP statuses
-ws.subscribeSpot('twap', 'HYPE-USDC');
+// TWAP statuses are REST only
+const twaps = await client.spot.twap.history('HYPE-USDC', { start: Date.now() - 86400000, end: Date.now() });
 ```
 
 #### Live Liquidations
@@ -2028,7 +2046,7 @@ ws.onLiquidations((channel, coin, fills) => {
 await ws.connect();
 
 ws.subscribeLiquidations('BTC');
-ws.subscribeHip3Liquidations('hyna:BTC');
+ws.subscribeHip3Liquidations('xyz:TSLA');
 ```
 
 #### Lighter Channels
@@ -2165,8 +2183,8 @@ ws.subscribeRhLighter('trades', 'AAPL-USDG');
 ws.subscribeRhLighter('open_interest', 'BTC');
 ws.subscribe('rh_lighter_funding', 'BTC'); // generic form
 
-// Replay
-ws.replay('rh_lighter_trades', 'BTC', { start: Date.parse('2026-06-26T20:10:26Z'), end: Date.now(), speed: 10 });
+// Replay the last hour of trades
+ws.replay('rh_lighter_trades', 'BTC', { start: Date.now() - 3600000, end: Date.now(), speed: 10 });
 ```
 
 While an `onRhLighterOrderbook` or `onRhLighterTrades` handler is registered, Robinhood Chain books or trades go only to that handler. Without one, `onOrderbook` and `onTrades` receive them converted to `OrderBook` and `Trade`, exactly as for mainnet Lighter. `intervalMs` is accepted on `rh_lighter_orderbook` only, and the SDK throws before sending when it is used on another channel or is out of range. `rh_lighter_candles` is replay-only and throws on `subscribe()`. Live trades are preliminary; the reconciled record is `client.rhLighter.trades.history()`. A multi-channel replay cannot mix Robinhood Chain channels with mainnet Lighter channels.
@@ -2195,14 +2213,14 @@ ws.replay('lighter_candles', 'BTC', {
 
 ```typescript
 // Replay HIP-3 orderbook at 50x speed
-ws.replay('hip3_orderbook', 'km:US500', {
+ws.replay('hip3_orderbook', 'xyz:SP500', {
   start: Date.now() - 3600000,
   end: Date.now(),
   speed: 50,
 });
 
 // HIP-3 candles
-ws.replay('hip3_candles', 'km:US500', {
+ws.replay('hip3_candles', 'xyz:SP500', {
   start: Date.now() - 86400000,
   end: Date.now(),
   speed: 100,
@@ -2251,7 +2269,7 @@ ws.multiReplay(['orderbook', 'trades', 'funding'], 'BTC', {
 // Playback controls work the same as single-channel
 ws.replayPause();
 ws.replayResume();
-ws.replaySeek(1704067200000);
+ws.replaySeek(Date.now() - 3600000);
 ws.replayStop();
 ```
 
@@ -2266,7 +2284,7 @@ ws.isConnected(); // boolean
 
 ## Timestamp Formats
 
-The SDK accepts timestamps as Unix milliseconds, ISO 8601 strings, or Date objects, and sends them as Unix milliseconds. A time without a time zone is UTC: `'2024-01-01'` is midnight UTC and `'2024-01-01T12:00:00'` is noon UTC on every machine, whatever its local time zone (`Date.parse` alone would read the second as local time). A `Z` or `+hh:mm` offset is honored.
+The SDK accepts timestamps as Unix milliseconds, ISO 8601 strings, or Date objects, and sends them as Unix milliseconds. A time without a time zone is UTC: `'2026-10-01'` is midnight UTC and `'2026-10-01T12:00:00'` is noon UTC on every machine, whatever its local time zone (`Date.parse` alone would read the second as local time). A `Z` or `+hh:mm` offset is honored.
 
 ```typescript
 // Unix milliseconds (recommended)
@@ -2276,15 +2294,16 @@ client.hyperliquid.orderbook.history('BTC', {
 });
 
 // ISO 8601 strings (a time without an offset is UTC)
+const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10); // 'YYYY-MM-DD'
 client.hyperliquid.orderbook.history('BTC', {
-  start: '2024-01-01',
-  end: '2024-01-01T12:00:00'
+  start: yesterday,              // midnight UTC
+  end: `${yesterday}T12:00:00`   // noon UTC
 });
 
 // Date objects (converted automatically)
 client.hyperliquid.orderbook.history('BTC', {
-  start: new Date('2024-01-01'),
-  end: new Date('2024-01-02')
+  start: new Date(Date.now() - 86400000),
+  end: new Date()
 });
 
 // WebSocket replay also accepts both
@@ -2478,7 +2497,9 @@ For large-scale data exports (historical order books, trades, and other datasets
 
 ## Requirements
 
-- Node.js 18+ or modern browsers with `fetch` and `WebSocket` support
+- Node.js 18 or later, or a modern browser with `fetch` and `WebSocket`.
+- In Node.js the WebSocket client uses the `ws` package, which is installed with the SDK; in browsers, the built-in `WebSocket`.
+- Webhook signature verification uses WebCrypto; on Node.js 18, pass `subtle` as described in [Verifying a delivery](#verifying-a-delivery).
 
 ## License
 

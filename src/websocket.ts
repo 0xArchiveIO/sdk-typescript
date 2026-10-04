@@ -1660,8 +1660,8 @@ export class OxArchiveWs {
   /**
    * Handle HIP-4 outcome settlement events. Pushed once per `(outcome_id, side)`
    * when the outcome flips to settled. After this event the server proactively
-   * unsubscribes the client from every hip4_* subscription on the settled coin —
-   * treat the event as a terminal signal for that coin.
+   * unsubscribes the client from every hip4_* subscription on the settled
+   * coin; treat the event as a terminal signal for that coin.
    *
    * @example
    * ```typescript
