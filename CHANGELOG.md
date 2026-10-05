@@ -5,7 +5,7 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
-## 1.12.0 (2026-09-28)
+## 1.12.0 (2026-10-05)
 
 This release adopts the 0xArchive API contract `2026-10-01`. Every REST
 request sends `0xArchive-Version: 2026-10-01` and the WebSocket client
