@@ -5,8 +5,8 @@
  * - Hyperliquid (perpetuals data from April 2023)
  * - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
  * - Hyperliquid HIP-4 outcome markets at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
- * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (candles from 2025-03-22T10:50:22Z; trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
- * - Lighter.xyz, with two deployments: mainnet at /v1/lighter and client.lighter,
+ * - Hyperliquid Spot at /v1/hyperliquid/spot and client.spot (candles from 2025-03-22 10:50 UTC; trades from 2025-03-22 10:50:22 UTC; order book, L4 and TWAP from 2026-05-05)
+ * - Lighter, with two deployments: mainnet at /v1/lighter and client.lighter,
  *   and Robinhood Chain at /v1/rh-lighter and client.rhLighter
  * - Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
  *   client.lighter.positions and client.rhLighter.positions
@@ -23,7 +23,7 @@
  * // Hyperliquid data
  * const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
  *
- * // Lighter.xyz data
+ * // Lighter data
  * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
  *
  * // Hyperliquid HIP-3 data
@@ -63,10 +63,34 @@ export {
   type LighterAccountIndex,
 } from './resources';
 
-// WebSocket client
-export { OxArchiveWs } from './websocket';
+// API contract: version, error codes, venues
+export {
+  API_VERSION,
+  API_VERSION_HEADER,
+  ERROR_CODES,
+  WEBSOCKET_ONLY_ERROR_CODES,
+  VENUES,
+  isErrorCode,
+  type ErrorCode,
+  type WebSocketOnlyErrorCode,
+  type Venue,
+} from './contract';
 
-// Orderbook Reconstructor — Lighter tick-level
+// WebSocket client and the channel capability table
+export {
+  OxArchiveWs,
+  WS_CHANNEL_CAPABILITIES,
+  WS_LIVE_CHANNELS,
+  WS_REPLAY_CHANNELS,
+  WS_BULK_REPLAY_CHANNELS,
+  type WsChannelCapability,
+} from './websocket';
+
+// Order and L4 parameter types
+export type { OrderHistoryParams, OrderFlowParams, TpslParams } from './resources/orders';
+export type { L4OrderBookParams } from './resources/l4-orderbook';
+
+// Orderbook Reconstructor: Lighter tick-level
 export {
   OrderBookReconstructor,
   reconstructOrderBook,
@@ -76,7 +100,7 @@ export {
   type ReconstructOptions,
 } from './orderbook-reconstructor';
 
-// L4 Orderbook Reconstructor — Hyperliquid / HIP-3
+// L4 Orderbook Reconstructor: Hyperliquid / HIP-3
 export {
   L4OrderBookReconstructor,
   type L4Order,
@@ -86,7 +110,11 @@ export {
 } from './l4-reconstructor';
 
 // L2 Full-Depth Orderbook resource
-export { L2OrderBookResource, type L2OrderBookParams } from './resources/l2-orderbook';
+export {
+  L2OrderBookResource,
+  type L2OrderBookParams,
+  type L2OrderBookHistoryParams,
+} from './resources/l2-orderbook';
 export type { L3OrderBookParams, L3OrderBookHistoryParams } from './resources/l3-orderbook';
 export { Hip3BreadthResource } from './resources/hip3-breadth';
 
@@ -243,6 +271,9 @@ export {
   WalletClassificationSchema,
   WalletClassificationResponseSchema,
   // Symbol universe schemas
+  VenueSchema,
+  CapabilitySchema,
+  CapabilitiesResponseSchema,
   SymbolEntrySchema,
   SymbolsResponseSchema,
   // WebSocket schemas
@@ -309,6 +340,7 @@ export {
   type ValidatedHip4Question,
   type ValidatedWalletClassification,
   type ValidatedSymbolEntry,
+  type ValidatedCapability,
 } from './schemas';
 
 // Types
@@ -323,9 +355,17 @@ export type {
   GetOrderBookParams,
   OrderBookHistoryParams,
   LighterGranularity,
+  // Capabilities
+  Capability,
+  CapabilityDatatype,
+  // L4 order book snapshot
+  L4RestingOrder,
+  L4OrderBookSnapshot,
   // Trades
   Trade,
   GetTradesCursorParams,
+  RecentTradesParams,
+  TradeSideFilter,
   CursorResponse,
   TradeSide,
   TradeDirection,
@@ -484,6 +524,10 @@ export type {
   Hip4L4Channel,
   SpotL4Channel,
   HyperliquidL4LiveOnlyChannel,
+  L4Channel,
+  WsBulkReplayChannel,
+  WsLiveOnlyChannel,
+  WsRestOnlyChannel,
   FullDepthL2Channel,
   LighterLiveChannel,
   LighterReplayOnlyChannel,
@@ -509,6 +553,8 @@ export type {
   WsReplay,
   WsStandardReplay,
   WsStandardReplayOptions,
+  WsBulkReplay,
+  WsBulkReplayOptions,
   WsCoreL4Replay,
   WsCoreL4ReplayOptions,
   WsReplayPause,
@@ -602,6 +648,7 @@ export type {
   WebhookEstimateResult,
   // Errors
   ApiError,
+  OxArchiveErrorDetails,
 } from './types';
 
 export { OxArchiveError } from './types';

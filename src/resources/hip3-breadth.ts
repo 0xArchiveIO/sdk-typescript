@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -52,9 +52,6 @@ export class Hip3BreadthResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? Hip3BreadthArrayResponseSchema : undefined,
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 }

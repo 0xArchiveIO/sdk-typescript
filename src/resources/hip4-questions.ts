@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, Hip4ListQuestionsParams, Hip4Question } from '../types';
 import { Hip4QuestionArrayResponseSchema, Hip4QuestionResponseSchema } from '../schemas';
 
@@ -12,7 +12,7 @@ import { Hip4QuestionArrayResponseSchema, Hip4QuestionResponseSchema } from '../
  * const questions = [];
  * let page = await client.hyperliquid.hip4.questions.list({ limit: 500 });
  * questions.push(...page.data);
- * while (page.nextCursor) {
+ * while (page.hasMore) {
  *   page = await client.hyperliquid.hip4.questions.list({ limit: 500, cursor: page.nextCursor });
  *   questions.push(...page.data);
  * }
@@ -27,8 +27,8 @@ export class Hip4QuestionsResource {
   ) {}
 
   /**
-   * List HIP-4 questions, one page at a time. Pass `nextCursor` back
-   * unchanged as `cursor` until it is undefined.
+   * List HIP-4 questions, one page at a time. While `hasMore` is true, pass
+   * `nextCursor` back unchanged as `cursor`.
    *
    * @param params - Cursor and page size (default 100, max 1000)
    */
@@ -38,10 +38,7 @@ export class Hip4QuestionsResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? Hip4QuestionArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta?.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**

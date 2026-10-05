@@ -1,4 +1,5 @@
 import type { WebhookEvent } from './webhook-signature';
+import type { ErrorCode, Venue } from './contract';
 
 /**
  * Configuration options for the 0xarchive client
@@ -20,10 +21,26 @@ export interface ClientOptions {
 export interface ApiMeta {
   /** Number of records returned */
   count: number;
-  /** Cursor for next page (if available) */
+  /**
+   * Opaque cursor for the next page. Present exactly when `hasMore` is true;
+   * pass it back unchanged as `cursor` with unchanged filters.
+   */
   nextCursor?: string;
+  /**
+   * Set on every cursor-paged route: true while another page may follow,
+   * false on the last page. A last page can be empty when the previous page
+   * was exactly full.
+   */
+  hasMore?: boolean;
   /** Unique request ID for debugging */
   requestId: string;
+  /**
+   * The canonical public symbol the response is for (`BTC`, `km:US500`,
+   * `#66900`, `HYPE-USDC`). Set on per-symbol routes.
+   */
+  symbol?: string;
+  /** The venue the response is for. Set on per-symbol routes. */
+  venue?: Venue;
   /** Coverage start date (ISO 8601), present when the requested window ends before the symbol's coverage begins */
   coverageFrom?: string;
   /** Advisory notice explaining an empty response (e.g. window predates coverage) */
@@ -129,7 +146,7 @@ export interface GetOrderBookParams {
 
 /**
  * Lighter orderbook data granularity levels.
- * Controls the resolution of historical orderbook data (Lighter.xyz only).
+ * Controls the resolution of historical orderbook data (Lighter only).
  *
  * - 'checkpoint': ~60s intervals (default)
  * - '30s': 30 second intervals
@@ -143,12 +160,56 @@ export interface OrderBookHistoryParams extends CursorPaginationParams {
   /** Number of price levels to return per side */
   depth?: number;
   /**
-   * Data resolution for Lighter orderbook history (Lighter.xyz only, ignored for Hyperliquid).
+   * Data resolution for Lighter orderbook history (Lighter only; Hyperliquid routes do not take it).
    * Controls the granularity of returned snapshots.
    * Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
    * @default 'checkpoint'
    */
   granularity?: LighterGranularity;
+}
+
+/**
+ * One resting order in an L4 order book snapshot
+ * (`l4Orderbook.get()`).
+ */
+export interface L4RestingOrder {
+  /** Order id. */
+  oid: number;
+  /** Owner of the order. */
+  userAddress: string;
+  /** `B` (bid) or `A` (ask). */
+  side: 'B' | 'A';
+  price: number;
+  size: number;
+  /**
+   * When the order took its place in the queue (RFC 3339 UTC). Null when the
+   * queue time is unknown.
+   */
+  timestamp: string | null;
+  /** `timestamp` in Unix milliseconds, or null when unknown. */
+  timestampMs: number | null;
+}
+
+/**
+ * An L4 order book snapshot from `l4Orderbook.get()`: every resting order,
+ * rebuilt from the nearest checkpoint plus the diffs after it.
+ */
+export interface L4OrderBookSnapshot {
+  coin: string;
+  /** The instant the book describes (RFC 3339 UTC). */
+  timestamp: string;
+  /** The checkpoint the book was rebuilt from (RFC 3339 UTC). */
+  checkpointTimestamp: string;
+  /** Number of diffs applied on top of the checkpoint. */
+  diffsApplied: number;
+  /** Last block included. */
+  lastBlockNumber: number;
+  bids: L4RestingOrder[];
+  asks: L4RestingOrder[];
+  bidCount: number;
+  askCount: number;
+  totalBidSize: number;
+  totalAskSize: number;
 }
 
 // =============================================================================
@@ -225,7 +286,7 @@ export interface Trade {
   builderFee?: string;
   /** HIP-3 deployer fee share on this fill (in quote currency). Negative for the maker side (rebate), positive for the taker side. Present only on HIP-3 fills. */
   deployerFee?: string;
-  /** Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builderFee and deployerFee — paid to the network, not to a builder or deployer. Present only when the order paid for priority. */
+  /** Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builderFee and deployerFee: paid to the network, not to a builder or deployer. Present only when the order paid for priority. */
   priorityGas?: number;
   /** Client order ID */
   cloid?: string;
@@ -236,7 +297,7 @@ export interface Trade {
 /**
  * Cursor-based pagination parameters (recommended)
  * More efficient than offset-based pagination for large datasets.
- * The API returns `next_cursor` as a numeric string. Treat it as an opaque
+ * The API returns `next_cursor` as a string. Treat it as an opaque
  * client value: pass the returned `nextCursor` unchanged to the next request;
  * do not parse or transform it.
  */
@@ -252,22 +313,50 @@ export interface CursorPaginationParams {
 }
 
 /**
- * Parameters for getting trades with cursor-based pagination (recommended).
- * The trade routes take the time range, cursor and limit only; there is no
- * side filter.
+ * Taker side filter for trade routes: `'buy'` keeps trades whose taker
+ * bought (`side: 'B'`), `'sell'` keeps trades whose taker sold
+ * (`side: 'A'`).
  */
-export type GetTradesCursorParams = CursorPaginationParams;
+export type TradeSideFilter = 'buy' | 'sell';
 
 /**
- * Response with cursor for pagination
+ * Parameters for trade history with cursor-based pagination. `side`
+ * filters on the server, so a full page still holds `limit` matching trades
+ * and the cursor pages the filtered tape; send the same `side` on every page.
+ */
+export interface GetTradesCursorParams extends CursorPaginationParams {
+  /** Keep only buys or only sells. Every venue accepts it. */
+  side?: TradeSideFilter;
+}
+
+/** Parameters for the most recent trades of a symbol (`trades.recent()`). */
+export interface RecentTradesParams {
+  /** Number of trades to return (default 100). */
+  limit?: number;
+  /** Keep only buys or only sells. */
+  side?: TradeSideFilter;
+}
+
+/**
+ * One page of a cursor-paged series.
+ *
+ * Keep paging while `hasMore` is true: pass `nextCursor` back unchanged as
+ * `cursor` with the same filters. `hasMore` is false on the last page, which
+ * can be empty when the previous page was exactly full.
  */
 export interface CursorResponse<T> {
   data: T;
-  /** Cursor for next page (use as cursor parameter) */
+  /** Cursor for next page (use as cursor parameter). Present exactly when `hasMore` is true. */
   nextCursor?: string;
   /**
-   * Response metadata, where the method returns it. Trade history returns it
-   * so Lighter callers can read `finalizedThrough` and `clampedTo`.
+   * True while another page may follow. Read from `meta.hasMore`; when an
+   * older server omits it, true exactly when `nextCursor` is set.
+   */
+  hasMore: boolean;
+  /**
+   * Response metadata: `requestId`, `count`, and where the API sends them
+   * `symbol`, `venue`, coverage notices (`coverageFrom`, `notice`) and the
+   * Lighter finalization boundary (`finalizedThrough`, `clampedTo`).
    */
   meta?: ApiMeta;
 }
@@ -358,7 +447,7 @@ export interface Instrument {
 }
 
 /**
- * Trading instrument metadata (Lighter.xyz)
+ * Trading instrument metadata (Lighter)
  *
  * Lighter instruments have a different schema than Hyperliquid with more
  * detailed market configuration including fees and minimum amounts.
@@ -574,7 +663,7 @@ export interface Hip4OutcomeSideSpec {
  *
  * Spot has no funding, no open interest, and no liquidations. Candle history
  * is served separately through `SpotClient.candles` at
- * `/v1/hyperliquid/spot/candles/{symbol}` from 2025-03-22T10:50:22Z.
+ * `/v1/hyperliquid/spot/candles/{symbol}` from 2025-03-22 10:50 UTC.
  */
 export interface SpotPair {
   /** Dashed canonical symbol (e.g. `HYPE-USDC`, `PURR-USDC`). `coin` is an alias. */
@@ -861,8 +950,10 @@ export interface LiquidationLevelBucket {
 export interface LiquidationLevels {
   /** Mark price at the snapshot, center of the requested range */
   midPrice: number;
-  /** UTC snapshot time the levels reflect */
+  /** Snapshot time the levels reflect (RFC 3339 UTC, millisecond precision). */
   snapshotTs: string;
+  /** `snapshotTs` in Unix milliseconds. */
+  snapshotTsMs: number;
   /** Hyperliquid block height the snapshot reflects */
   blockNumber: number;
   /** Total long notional at risk across the whole book */
@@ -885,8 +976,11 @@ export interface LiquidationLevelsParams {
   buckets?: number;
   /** Side filter; the other side is zeroed */
   side?: LevelsSide;
-  /** Point-in-time read: epoch ms. Serves the newest snapshot at or before this instant. History begins 2026-07-27. */
-  at?: number;
+  /**
+   * Point-in-time read: Unix ms or an RFC 3339 string. Serves the newest
+   * snapshot at or before this instant. History begins 2026-07-27.
+   */
+  at?: number | string;
 }
 
 /**
@@ -917,7 +1011,10 @@ export interface LevelsHistoryParams {
  * `summary: true` was requested.
  */
 export interface LiquidationLevelsHistoryItem {
+  /** Snapshot time (RFC 3339 UTC, millisecond precision). */
   snapshotTs: string;
+  /** `snapshotTs` in Unix milliseconds. */
+  snapshotTsMs: number;
   blockNumber: number;
   midPrice: number;
   totalLong: number;
@@ -981,7 +1078,10 @@ export interface TriggerLevelsParams {
  * omitted when `summary: true` was requested.
  */
 export interface TriggerLevelsHistoryItem {
+  /** Snapshot time (RFC 3339 UTC, millisecond precision). */
   snapshotTs: string;
+  /** `snapshotTs` in Unix milliseconds. */
+  snapshotTsMs: number;
   midPrice: number;
   totalBidSize: number;
   totalAskSize: number;
@@ -1074,7 +1174,8 @@ export interface LiquidationVolumeParams extends CursorPaginationParams {
  * Lighter reports both accounts of the trade rather than a single liquidated
  * user: `askAccount` and `bidAccount` are Lighter account indices, and the
  * `taker*` / `maker*` fields describe each side's state before the trade.
- * Prices and sizes are numbers; `timestamp` is Unix milliseconds.
+ * Prices and sizes are numbers; `timestamp` is RFC 3339 UTC and
+ * `timestampMs` the same instant in Unix milliseconds.
  *
  * Rows backfilled from the venue's finalized export have `source: 'bucket'`
  * and an empty `rawJson` (on Robinhood Chain, the span before live capture);
@@ -1084,8 +1185,10 @@ export interface LiquidationVolumeParams extends CursorPaginationParams {
 export interface LighterLiquidation {
   /** Market symbol (perps uppercase, e.g. `BTC`). */
   symbol: string;
-  /** Trade time (Unix ms). */
-  timestamp: number;
+  /** Trade time (RFC 3339 UTC, millisecond precision). */
+  timestamp: string;
+  /** Trade time in Unix milliseconds. */
+  timestampMs: number;
   /** Intra-block ordering (microseconds). */
   transactionTimeUs: number;
   /** Lighter trade id. */
@@ -1140,8 +1243,10 @@ export interface LighterLiquidation {
 export interface LighterLiquidationVolume {
   /** Market symbol. */
   symbol: string;
-  /** Bucket start (Unix ms). */
-  timestamp: number;
+  /** Bucket start (RFC 3339 UTC). */
+  timestamp: string;
+  /** Bucket start in Unix milliseconds. */
+  timestampMs: number;
   /** Total liquidated notional in the deployment's quote asset. */
   totalUsd: number;
   /** Number of liquidation trades in the bucket. */
@@ -1777,8 +1882,10 @@ export interface CvdParams {
 
 /** One cumulative volume delta bucket. */
 export interface CvdBucket {
-  /** Bucket open time in Unix milliseconds (UTC). */
-  timestamp: number;
+  /** Bucket open time (RFC 3339 UTC). */
+  timestamp: string;
+  /** Bucket open time in Unix milliseconds. */
+  timestampMs: number;
   /** Taker buy notional in the bucket. */
   buyVolume: number;
   /** Taker sell notional in the bucket. */
@@ -1818,8 +1925,10 @@ export interface Hip3OracleDiscoveryBounds {
   upperBound: number;
   /** Source block number. */
   blockNumber: number;
-  /** Source timestamp in Unix milliseconds. */
-  timestamp: number;
+  /** Source time (RFC 3339 UTC, millisecond precision). */
+  timestamp: string;
+  /** Source time in Unix milliseconds. */
+  timestampMs: number;
 }
 
 /** Latest deployer-pushed external price and mark price for a HIP-3 market. */
@@ -1832,8 +1941,10 @@ export interface Hip3OracleExternalPrice {
   markPrice?: number | null;
   /** Source block number. */
   blockNumber: number;
-  /** Source timestamp in Unix milliseconds. */
-  timestamp: number;
+  /** Source time (RFC 3339 UTC, millisecond precision). */
+  timestamp: string;
+  /** Source time in Unix milliseconds. */
+  timestampMs: number;
 }
 
 // =============================================================================
@@ -2028,48 +2139,117 @@ export interface SymbolEntry {
 }
 
 // =============================================================================
+// Capabilities
+// =============================================================================
+
+/**
+ * Datatype ids used by `GET /v1/capabilities`. The list can grow; unknown ids
+ * are still typed as strings.
+ */
+export type CapabilityDatatype =
+  | 'l2_orderbook'
+  | 'l2_full_depth'
+  | 'l2_full_depth_diffs'
+  | 'l3_orderbook'
+  | 'l4_orderbook'
+  | 'l4_diffs'
+  | 'l4_orders'
+  | 'order_flow'
+  | 'tpsl'
+  | 'trigger_levels'
+  | 'liquidation_levels'
+  | 'trades'
+  | 'candles'
+  | 'funding'
+  | 'oi'
+  | 'liquidations'
+  | 'liquidations_by_user'
+  | 'cvd'
+  | 'prices'
+  | 'summary'
+  | 'freshness'
+  | 'instruments'
+  | 'breadth'
+  | 'oracle'
+  | 'twap'
+  | 'outcomes'
+  | 'questions'
+  | 'wallet_profile'
+  | 'wallet_classify'
+  | 'positions'
+  | 'ticker'
+  | (string & {});
+
+/**
+ * One venue x datatype offer from `client.capabilities()`
+ * (`GET /v1/capabilities`): where the datatype is served, whether it streams
+ * live and replays over WebSocket, and from when.
+ */
+export interface Capability {
+  /** Venue (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`). */
+  venue: Venue;
+  /** Datatype id, e.g. `trades`, `l4_diffs`, `oi`. */
+  datatype: CapabilityDatatype;
+  /** REST route templates that serve it, e.g. `/v1/hyperliquid/trades/{symbol}`. */
+  restRoutes: string[];
+  /** WebSocket channels that carry it (empty when REST only). */
+  wsChannels: string[];
+  /** True when a WebSocket channel streams it live. */
+  live: boolean;
+  /** True when a WebSocket channel replays it. */
+  replay: boolean;
+  /**
+   * First served instant (RFC 3339 UTC), or null when the datatype has no
+   * single floor (reference data, point-in-time reads).
+   */
+  availableFrom: string | null;
+  /**
+   * `event` (one row per exchange event), `snapshot` (periodic state),
+   * `sample` (periodic readings), `interval` (buckets of `interval`) or
+   * `reference` (catalog data).
+   */
+  cadence: string;
+  /** Largest `limit` one page accepts, or null when the route is not paged. */
+  pageLimit: number | null;
+  /** Values `interval` accepts (empty when the route takes none). */
+  intervals: string[];
+  /** Notes, e.g. that a floor is a policy floor or that replay is bulk. */
+  notes: string | null;
+}
+
+// =============================================================================
 // WebSocket Types
 // =============================================================================
 
 /**
  * WebSocket channel types.
  *
- * - ticker/all_tickers: live subscriptions only
- * - liquidations: live + replay (Hyperliquid; live as of 1.6.0)
- * - hip3_liquidations: live + replay (HIP-3; live as of 1.6.0)
- * - lighter_orderbook, lighter_trades, lighter_open_interest, lighter_funding:
- *   live subscriptions + historical replay. Live messages use the
- *   Hyperliquid-style payloads described by `LighterLiveOrderbook`,
- *   `LighterLiveTrade` and `LighterLiveStats`; replay rows keep their own
- *   shapes.
- * - lighter_candles, lighter_l3_orderbook: historical replay only; use Lighter
- *   REST for current data
- * - rh_lighter_orderbook, rh_lighter_trades, rh_lighter_open_interest,
- *   rh_lighter_funding: Lighter on Robinhood Chain (the second Lighter
- *   deployment), live subscriptions + historical replay. Live payloads have
- *   the same shapes as the mainnet `lighter_*` live payloads. Live data is
- *   served on `wss://api.0xarchive.io/ws` only.
- * - rh_lighter_candles: Lighter on Robinhood Chain candles, historical replay
- *   only (once candles are enabled for that deployment)
- * - open_interest, funding: Hyperliquid core live subscriptions + historical
- *   replay
- * - hip3_open_interest, hip3_funding: historical only (replay)
+ * Which channels stream live and which replay is listed in
+ * `WS_CHANNEL_CAPABILITIES` (exported by the SDK), which mirrors
+ * `GET /v1/capabilities`:
  *
- * HIP-4 channels (outcome contracts; no funding or liquidations):
- * - hip4_trades: realtime + replay
- * - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused
- * - l4_diffs, l4_orders: Hyperliquid core live data and bounded replay. Core
- *   replay starts with `l4_snapshot`, followed by ordered `l4_batch` pages.
- * - hip3_l4_diffs, hip3_l4_orders, hip4_l4_diffs, hip4_l4_orders,
- *   spot_l4_diffs, spot_l4_orders: real-time only
- * - orderbook_full, hip3_orderbook_full: full-depth L2 order book (every
- *   price level) for Hyperliquid core and HIP-3, real-time only. A
- *   subscription starts with an `l4_snapshot` message carrying the whole
- *   aggregated book (`WsL2FullDepthSnapshot`), then `l4_batch` messages of
- *   level changes (`WsL2FullDepthBatch`).
+ * - Live and replay: `orderbook`, `trades`, `liquidations`, `open_interest`,
+ *   `funding`; `hip3_orderbook`, `hip3_trades`, `hip3_open_interest`,
+ *   `hip3_funding`, `hip3_liquidations`; `hip4_trades`; `lighter_orderbook`,
+ *   `lighter_trades`, `lighter_open_interest`, `lighter_funding`; and the
+ *   Robinhood Chain `rh_lighter_orderbook`, `rh_lighter_trades`,
+ *   `rh_lighter_open_interest`, `rh_lighter_funding`.
+ * - Live and bulk replay: the L4 channels of every product (`l4_diffs`,
+ *   `l4_orders`, `hip3_l4_*`, `hip4_l4_*`, `spot_l4_*`) and the full-depth
+ *   L2 channels (`orderbook_full`, `hip3_orderbook_full`). A bulk replay is
+ *   single-channel, needs an explicit `end`, ignores `speed`, and starts with
+ *   an `l4_snapshot` followed by ordered `l4_batch` messages.
+ * - Replay only: `candles`, `hip3_candles`, `hip4_orderbook`,
+ *   `hip4_open_interest`, `lighter_candles`, `lighter_l3_orderbook`,
+ *   `rh_lighter_candles`.
+ * - Live only: `ticker`, `all_tickers`, `spot_orderbook`, `spot_trades`.
+ * - Neither: `spot_twap`. Spot TWAP statuses are served over REST only
+ *   (`client.spot.twap`); the channel name is kept so existing code compiles.
  *
  * Liquidation messages share the trade wire format: each item is a fill row
- * with `is_liquidation: true`.
+ * with `is_liquidation: true`. Lighter and Robinhood Chain replay rows use the
+ * live payload shapes (`LighterLiveOrderbook`, `LighterLiveTrade`,
+ * `LighterLiveStats`).
  */
 export type WsChannel =
   | 'orderbook' | 'trades' | 'candles' | 'liquidations' | 'ticker' | 'all_tickers'
@@ -2089,24 +2269,50 @@ export type WsChannel =
 
 /**
  * Full-depth L2 order book channels (every price level, Hyperliquid core and
- * HIP-3). These channels are live-only.
+ * HIP-3). Live, and bulk replay derived from the L4 stream.
  */
 export type FullDepthL2Channel = 'orderbook_full' | 'hip3_orderbook_full';
 
-/** Hyperliquid core L4 channels with checkpoint-anchored replay support. */
+/** Hyperliquid core L4 channels. */
 export type HyperliquidCoreL4Channel = 'l4_diffs' | 'l4_orders';
 
-/** HIP-3 L4 channels. These channels are live-only. */
+/** HIP-3 L4 channels. */
 export type Hip3L4Channel = 'hip3_l4_diffs' | 'hip3_l4_orders';
 
-/** HIP-4 L4 channels. These channels are live-only. */
+/** HIP-4 L4 channels. */
 export type Hip4L4Channel = 'hip4_l4_diffs' | 'hip4_l4_orders';
 
-/** Hyperliquid Spot L4 channels. These channels are live-only. */
+/** Hyperliquid Spot L4 channels. */
 export type SpotL4Channel = 'spot_l4_diffs' | 'spot_l4_orders';
 
-/** L4 channels that must not be sent in a historical replay request. */
+/** Every L4 channel, on every product. */
+export type L4Channel = HyperliquidCoreL4Channel | Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
+
+/**
+ * The HIP-3, HIP-4 and Spot L4 channels.
+ *
+ * @deprecated These channels now support replay, like the core L4 channels.
+ * The name is kept so existing code compiles; use {@link L4Channel} or
+ * {@link WsBulkReplayChannel}.
+ */
 export type HyperliquidL4LiveOnlyChannel = Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
+
+/**
+ * Channels replayed in bulk: every L4 channel and the full-depth L2 channels.
+ * A bulk replay is single-channel, needs an explicit `end`, and ignores
+ * `speed`: an `l4_snapshot` anchor at or before `start`, then `l4_batch`
+ * pages in block order until `end`.
+ */
+export type WsBulkReplayChannel = L4Channel | FullDepthL2Channel;
+
+/** Channels that stream live only; the API does not replay them. */
+export type WsLiveOnlyChannel = 'ticker' | 'all_tickers' | 'spot_orderbook' | 'spot_trades';
+
+/**
+ * Channels whose data is served over REST only: the API neither streams nor
+ * replays them, and the client refuses both before sending.
+ */
+export type WsRestOnlyChannel = 'spot_twap';
 
 /** Lighter channels that accept live subscriptions as well as replay. */
 export type LighterLiveChannel =
@@ -2132,11 +2338,11 @@ export type RhLighterLiveChannel =
 /** Lighter on Robinhood Chain channels that support historical replay only. */
 export type RhLighterReplayOnlyChannel = 'rh_lighter_candles';
 
-/** Replay-capable channels, including the existing Lighter replay channels. */
-export type WsReplayableChannel = Exclude<WsChannel, HyperliquidL4LiveOnlyChannel | FullDepthL2Channel>;
+/** Every channel the API replays. */
+export type WsReplayableChannel = Exclude<WsChannel, WsLiveOnlyChannel | WsRestOnlyChannel>;
 
-/** Replay-capable channels other than the dedicated core L4 replay path. */
-export type WsStandardReplayChannel = Exclude<WsReplayableChannel, HyperliquidCoreL4Channel>;
+/** Channels replayed with timing preserved (`speed`), alone or in a multi-channel replay. */
+export type WsStandardReplayChannel = Exclude<WsReplayableChannel, WsBulkReplayChannel>;
 
 /** Subscribe message from client */
 export interface WsSubscribe {
@@ -2207,33 +2413,50 @@ export interface WsStandardReplay extends WsStandardReplayOptions {
   coin?: string;
 }
 
-/** Options for checkpoint-anchored Hyperliquid core L4 replay. */
-export interface WsCoreL4ReplayOptions {
-  /** Start timestamp (Unix ms). */
+/**
+ * Options for a bulk replay (L4 and full-depth L2 channels, every product).
+ */
+export interface WsBulkReplayOptions {
+  /** Start timestamp (Unix ms). The replay anchors on the nearest checkpoint at or before it. */
   start: number;
-  /** Required end timestamp (Unix ms) for the bounded L4 replay. */
+  /** End timestamp (Unix ms). Required: a bulk replay is bounded. */
   end: number;
-  /** Accepted for API compatibility but ignored by the bulk L4 replay task. */
+  /** Accepted for API compatibility but ignored: a bulk replay is not paced. */
   speed?: number;
 }
 
 /**
- * Hyperliquid core L4 replay request. The server emits one `l4_snapshot`
- * anchor, then one or more `l4_batch` pages ordered by `(block_number, seq)`.
- * `end` is required because this is a bounded bulk replay; `speed` is ignored.
+ * Options for checkpoint-anchored Hyperliquid core L4 replay.
+ *
+ * @deprecated Use {@link WsBulkReplayOptions}; bulk replay now covers every
+ * L4 and full-depth channel.
  */
-export interface WsCoreL4Replay extends WsCoreL4ReplayOptions {
+export type WsCoreL4ReplayOptions = WsBulkReplayOptions;
+
+/**
+ * Bulk replay request (L4 and full-depth L2 channels). The server emits one
+ * `l4_snapshot` anchor, then one or more `l4_batch` pages ordered by block.
+ * `end` is required; `speed` is ignored; one channel per replay.
+ */
+export interface WsBulkReplay extends WsBulkReplayOptions {
   op: 'replay';
-  channel: HyperliquidCoreL4Channel;
-  /** Core L4 replay is single-channel only. */
+  channel: WsBulkReplayChannel;
+  /** Bulk replay is single-channel only. */
   channels?: never;
   symbol?: string;
   /** @deprecated Use `symbol`. */
   coin?: string;
 }
 
-/** Replay request union with live-only HIP-3, HIP-4, and Spot L4 excluded. */
-export type WsReplay = WsStandardReplay | WsCoreL4Replay;
+/**
+ * Hyperliquid core L4 replay request.
+ *
+ * @deprecated Use {@link WsBulkReplay}.
+ */
+export type WsCoreL4Replay = WsBulkReplay;
+
+/** Replay request union: timed replay or bulk replay. */
+export type WsReplay = WsStandardReplay | WsBulkReplay;
 
 /** Replay control messages */
 export interface WsReplayPause { op: 'replay.pause'; }
@@ -2300,6 +2523,8 @@ export interface WsSubscribed {
   coin?: string;
   /** Canonical symbol echoed by the server (Lighter symbols, on both deployments, are echoed uppercase). */
   symbol?: string;
+  /** The API version the connection selected (`2026-10-01`). */
+  version?: string;
 }
 
 /** Unsubscription confirmed from server */
@@ -2316,10 +2541,19 @@ export interface WsPong {
   type: 'pong';
 }
 
-/** Error from server */
+/**
+ * Error from server. `error_code` is the stable code as sent (see
+ * `ErrorCode`); the SDK copies it to `errorCode` before handlers run.
+ * `slow_consumer` means the connection fell behind a stream and messages were
+ * dropped: re-subscribe, or restart the replay, to resync.
+ */
 export interface WsError {
   type: 'error';
   message: string;
+  /** Stable error code, as sent on the wire. */
+  error_code?: ErrorCode | (string & {});
+  /** The same code as `error_code`, set by the SDK. */
+  errorCode?: ErrorCode | (string & {});
 }
 
 /** Data message from server (real-time) */
@@ -2337,12 +2571,16 @@ export interface WsReplayStarted {
   type: 'replay_started';
   channel: WsChannel;
   coin: string;
+  /** Canonical symbol. */
+  symbol?: string;
   /** Start timestamp in milliseconds */
   start: number;
   /** End timestamp in milliseconds */
   end: number;
   /** Playback speed multiplier */
   speed: number;
+  /** The API version the connection selected (`2026-10-01`). */
+  version?: string;
 }
 
 /** Replay paused response */
@@ -2566,13 +2804,13 @@ export interface WsL4OrderEvent {
 export type WsL4BatchEvent = WsL4DiffEvent | WsL4OrderEvent;
 
 /**
- * L4 snapshot envelope. Core replay sends this first, anchored at the nearest
- * checkpoint at or before the requested start. HIP-3, HIP-4, and Spot L4 use
- * the same envelope for live delivery only.
+ * L4 snapshot envelope, for every product (core, HIP-3, HIP-4, Spot). A live
+ * subscription starts with it, and a replay sends it first, anchored at the
+ * nearest checkpoint at or before the requested start.
  */
 export interface WsL4Snapshot<T = WsL4SnapshotData> {
   type: 'l4_snapshot';
-  channel: HyperliquidCoreL4Channel | Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
+  channel: L4Channel;
   coin: string;
   symbol: string;
   last_block_number: number;
@@ -2581,12 +2819,12 @@ export interface WsL4Snapshot<T = WsL4SnapshotData> {
 }
 
 /**
- * L4 batch envelope. Core replay emits batches after its initial snapshot in
- * strict `(block_number, seq)` order; HIP-3, HIP-4, and Spot L4 are live-only.
+ * L4 batch envelope, for every product. A replay emits batches of up to 5,000
+ * events after its initial snapshot, in strict `(block_number, seq)` order.
  */
 export interface WsL4Batch<T extends WsL4BatchEvent = WsL4BatchEvent> {
   type: 'l4_batch';
-  channel: HyperliquidCoreL4Channel | Hip3L4Channel | Hip4L4Channel | SpotL4Channel;
+  channel: L4Channel;
   coin: string;
   symbol: string;
   data: T[];
@@ -2644,7 +2882,7 @@ export interface WsL2FullDepthDelta {
 }
 
 /**
- * First message of a live full-depth L2 subscription (`orderbook_full`,
+ * First message of a full-depth L2 subscription or replay (`orderbook_full`,
  * `hip3_orderbook_full`): the whole aggregated book. It shares the
  * `l4_snapshot` message type with the L4 channels; tell them apart by
  * `channel`.
@@ -2661,8 +2899,10 @@ export interface WsL2FullDepthSnapshot {
 }
 
 /**
- * Level changes on a live full-depth L2 subscription, in order. It shares the
- * `l4_batch` message type with the L4 channels; tell them apart by `channel`.
+ * Level changes on a full-depth L2 subscription or replay, in order. A replay
+ * sends one batch per 100 ms of event time, never splitting a block. It
+ * shares the `l4_batch` message type with the L4 channels; tell them apart by
+ * `channel`.
  */
 export interface WsL2FullDepthBatch {
   type: 'l4_batch';
@@ -2677,8 +2917,10 @@ export interface WsL2FullDepthBatch {
 //
 // Live `lighter_*` data messages use the same shapes as Hyperliquid live data.
 // Live `rh_lighter_*` messages (Lighter on Robinhood Chain) use these same
-// shapes. Replay of the same channels is unchanged and keeps its own
-// `historical_data` row shapes, which differ from these.
+// shapes. Replay of the same channels uses them too (API version 2026-10-01,
+// which the SDK selects): a `historical_data` book is a `LighterLiveOrderbook`,
+// a trade is an array holding one `LighterLiveTrade` leg, and open interest
+// and funding are a `LighterLiveStats`.
 // -----------------------------------------------------------------------------
 
 /** One price level in a live `lighter_orderbook` message. */
@@ -2710,9 +2952,9 @@ export interface LighterLiveOrderbook {
  * array length, and sum `sz` over one leg per `tid` for volume.
  *
  * Live trades are preliminary. The finalized record, including fees, is served
- * by `client.lighter.trades.list()` (`GET /v1/lighter/trades/{symbol}`), which
+ * by `client.lighter.trades.history()` (`GET /v1/lighter/trades/{symbol}`), which
  * returns reconciled trades only. On Robinhood Chain (`rh_lighter_trades`) the
- * finalized record is `client.rhLighter.trades.list()`.
+ * finalized record is `client.rhLighter.trades.history()`.
  */
 export interface LighterLiveTrade {
   coin: string;
@@ -2734,11 +2976,11 @@ export interface LighterLiveTrade {
   crossed: boolean;
   /** Null in live messages: Lighter's live stream does not carry it. */
   dir: string | null;
-  /** Null in live messages: Lighter's live stream does not carry it. */
+  /** Null in live messages: Lighter's live stream does not carry it. Replay fills it from the reconciled record. */
   fee: string | null;
   /** Null in live messages: Lighter's live stream does not carry it. */
   fee_token: string | null;
-  /** Null in live messages: Lighter's live stream does not carry it. */
+  /** Null in live messages: Lighter's live stream does not carry it. Replay fills it from the reconciled record where Lighter reports one. */
   closed_pnl: string | null;
   /** This account's signed position before the trade, as a decimal string. */
   start_position: string | null;
@@ -2785,10 +3027,10 @@ export interface LighterLiveStats {
 /**
  * HIP-4 outcome settlement notification.
  *
- * Pushed once per `(outcome_id, side)` when `hip4_outcome_metadata.is_settled`
- * flips to true. After delivering this message the server proactively
- * unsubscribes the client from every hip4_* subscription on the settled coin —
- * treat this as a terminal signal for the coin.
+ * Pushed once per `(outcome_id, side)` when the outcome settles. After
+ * delivering this message the server proactively unsubscribes the client
+ * from every hip4_* subscription on the settled coin; treat this as a
+ * terminal signal for the coin.
  */
 export interface WsOutcomeSettled {
   type: 'outcome_settled';
@@ -2952,38 +3194,88 @@ export interface Web3SubscribeResult {
 // =============================================================================
 
 /**
- * API error response.
+ * API error response body, as the SDK reads it (keys camelCased).
  *
  * Error responses have no `meta`: the request id sits at the top level,
- * beside the code and the message.
+ * beside the HTTP status (`code`), the stable `errorCode` and the message.
  */
 export interface ApiError {
+  /** Always false on an error response. */
+  success?: false;
+  /** HTTP status. */
   code: number;
+  /** Stable error code (`error_code`); see {@link ErrorCode}. */
+  errorCode?: ErrorCode | (string & {});
+  /** Human-readable message. */
   error: string;
   /** Request id to quote to support. Surfaced as `OxArchiveError.requestId`. */
   requestId?: string;
+  /** The request parameter the error is about, when there is one. */
+  param?: string;
+  /** Values the parameter accepts, when the API lists them. */
+  validValues?: string[];
   /**
-   * Stable application error code when the API sends one, for example
-   * `snapshot_advanced` (409: restart pagination without a cursor),
-   * `invalid_cursor` or `positions_unavailable`.
+   * On `unsupported_for_venue`: the venues and routes that serve the
+   * datatype.
    */
-  errorCode?: string;
+  availableOn?: Array<{ venue: string; route: string }>;
+}
+
+/** Extra fields an {@link OxArchiveError} can carry. */
+export interface OxArchiveErrorDetails {
+  /** The request parameter the error is about (`param`). */
+  param?: string;
+  /** Values the parameter accepts (`valid_values`). */
+  validValues?: string[];
+  /** The whole error body as the SDK read it (keys camelCased). */
+  body?: Record<string, unknown>;
 }
 
 /**
- * SDK error class
+ * The error every REST method throws.
+ *
+ * Branch on `errorCode`, the API's stable code (`error_code`), rather than on
+ * the message. `status` is the HTTP status; `requestId` is the id to quote to
+ * support; `param` and `validValues` say which parameter was refused and what
+ * it accepts. Errors raised before a response arrives (a timeout, a network
+ * failure, a refusal before sending) have no `errorCode`.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await client.hyperliquid.trades.history('BTC', { start, end, side: 'buy' });
+ * } catch (error) {
+ *   if (error instanceof OxArchiveError && error.errorCode === 'invalid_parameter') {
+ *     console.log(error.param, error.validValues);
+ *   }
+ * }
+ * ```
  */
 export class OxArchiveError extends Error {
+  /** HTTP status (the same value as `status`). */
   code: number;
   requestId?: string;
   /**
-   * Stable application error code from the API envelope (`error_code`), when
-   * sent. For example `snapshot_advanced` on a 409 from a positions cursor
-   * whose snapshot was replaced: restart pagination without a cursor.
+   * Stable error code from the API envelope (`error_code`), when sent. One of
+   * {@link ERROR_CODES}, or a route-specific code such as `snapshot_advanced`
+   * (409 from a positions cursor whose snapshot was replaced: restart
+   * pagination without a cursor).
    */
-  errorCode?: string;
+  errorCode?: ErrorCode | (string & {});
+  /** The request parameter the error is about, when the API names one. */
+  param?: string;
+  /** Values the parameter accepts, when the API lists them. */
+  validValues?: string[];
+  /** The whole error body as the SDK read it, for fields not surfaced above. */
+  body?: Record<string, unknown>;
 
-  constructor(message: string, code: number, requestId?: string, errorCode?: string) {
+  constructor(
+    message: string,
+    code: number,
+    requestId?: string,
+    errorCode?: string,
+    details?: OxArchiveErrorDetails,
+  ) {
     super(message);
     this.name = 'OxArchiveError';
     this.code = code;
@@ -2991,6 +3283,20 @@ export class OxArchiveError extends Error {
     if (errorCode !== undefined) {
       this.errorCode = errorCode;
     }
+    if (details?.param !== undefined) {
+      this.param = details.param;
+    }
+    if (details?.validValues !== undefined) {
+      this.validValues = details.validValues;
+    }
+    if (details?.body !== undefined) {
+      this.body = details.body;
+    }
+  }
+
+  /** HTTP status of the failed request (the same value as `code`). */
+  get status(): number {
+    return this.code;
   }
 }
 

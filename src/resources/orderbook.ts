@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -102,7 +102,7 @@ export class OrderBookResource {
    * });
    *
    * // Subsequent pages
-   * while (result.nextCursor) {
+   * while (result.hasMore) {
    *   result = await client.orderbook.history('BTC', {
    *     start: Date.now() - 86400000,
    *     end: Date.now(),
@@ -121,10 +121,7 @@ export class OrderBookResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? OrderBookArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /**

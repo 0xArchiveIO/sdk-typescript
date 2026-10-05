@@ -1,4 +1,5 @@
-import type { HttpClient, KeyPreserver } from '../http';
+import { type HttpClient, type KeyPreserver, unwrapEnvelope } from '../http';
+import type { z } from 'zod';
 import type { SymbolEntry } from '../types';
 import { SymbolsResponseSchema } from '../schemas';
 
@@ -37,12 +38,15 @@ export class SymbolsResource {
    * rather than calling it per request.
    */
   async list(): Promise<SymbolEntry[]> {
-    const response = await this.http.get<{ symbols: SymbolEntry[] }>(
+    const body = await this.http.get<unknown>(
       '/v1/symbols',
       undefined,
-      this.http.validationEnabled ? SymbolsResponseSchema : undefined,
+      this.http.validationEnabled ? (SymbolsResponseSchema as unknown as z.ZodType<unknown>) : undefined,
       preserveSymbolMaps
     );
-    return response.symbols;
+    // The API version the SDK sends returns the list as the envelope's
+    // `data`; the older body carried it as `symbols`.
+    const payload = unwrapEnvelope<SymbolEntry[] | { symbols: SymbolEntry[] }>(body);
+    return Array.isArray(payload) ? payload : payload.symbols;
   }
 }

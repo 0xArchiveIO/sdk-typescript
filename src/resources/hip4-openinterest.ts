@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -39,10 +39,7 @@ export class Hip4OpenInterestResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? Hip4OpenInterestArrayResponseSchema : undefined,
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /** Get the current per-side HIP-4 open interest snapshot. */

@@ -9,8 +9,9 @@ import {
 } from '../src';
 import type { CvdParams, WsChannel, WsL2FullDepthBatch, WsL2FullDepthSnapshot } from '../src';
 import {
+  bulkReplayEndError,
+  bulkReplayMultiError,
   FULL_DEPTH_L2_CHANNELS,
-  FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR,
   OxArchiveWs,
 } from '../src/websocket';
 import { WsChannelSchema, WsServerMessageSchema } from '../src/schemas';
@@ -44,9 +45,24 @@ function client(validate = false) {
   return new OxArchive({ apiKey: 'test-key', baseUrl: BASE, validate });
 }
 
+// The 2026-10-01 shape: RFC 3339 `timestamp` plus integer `timestamp_ms`.
 const CVD_ROWS = [
-  { timestamp: 1790639100000, buy_volume: 9980.41574, sell_volume: 231235.17863, delta: -221254.76289, cumulative_delta: -221254.76289 },
-  { timestamp: 1790639160000, buy_volume: 21354.74669, sell_volume: 4732459.50115, delta: -4711104.75446, cumulative_delta: -4932359.51735 },
+  {
+    timestamp: '2026-09-28T23:45:00.000Z',
+    timestamp_ms: 1790639100000,
+    buy_volume: 9980.41574,
+    sell_volume: 231235.17863,
+    delta: -221254.76289,
+    cumulative_delta: -221254.76289,
+  },
+  {
+    timestamp: '2026-09-28T23:46:00.000Z',
+    timestamp_ms: 1790639160000,
+    buy_volume: 21354.74669,
+    sell_volume: 4732459.50115,
+    delta: -4711104.75446,
+    cumulative_delta: -4932359.51735,
+  },
 ];
 
 describe('CVD', () => {
@@ -79,7 +95,8 @@ describe('CVD', () => {
       limit: '2',
     });
     expect(page.data[0]).toEqual({
-      timestamp: 1790639100000,
+      timestamp: '2026-09-28T23:45:00.000Z',
+      timestampMs: 1790639100000,
       buyVolume: 9980.41574,
       sellVolume: 231235.17863,
       delta: -221254.76289,
@@ -149,7 +166,8 @@ describe('HIP-3 oracle', () => {
         lower_bound: 714.628,
         upper_bound: 789.852,
         block_number: 1038634032,
-        timestamp: 1781678086894,
+        timestamp: '2026-06-17T06:34:46.894Z',
+        timestamp_ms: 1781678086894,
       })
     );
 
@@ -167,19 +185,34 @@ describe('HIP-3 oracle', () => {
       lowerBound: 714.628,
       upperBound: 789.852,
       blockNumber: 1038634032,
-      timestamp: 1781678086894,
+      timestamp: '2026-06-17T06:34:46.894Z',
+      timestampMs: 1781678086894,
     });
   });
 
   it('externalPrice() GETs the external-price route and allows null prices', async () => {
     const fetchMock = stubFetch(
-      ok({ symbol: 'xyz:XYZ100', external_price: null, mark_price: 752.1, block_number: 1, timestamp: 2 })
+      ok({
+        symbol: 'xyz:XYZ100',
+        external_price: null,
+        mark_price: 752.1,
+        block_number: 1,
+        timestamp: '1970-01-01T00:00:00.002Z',
+        timestamp_ms: 2,
+      })
     );
 
     const price = await client(true).hyperliquid.hip3.oracle.externalPrice('xyz:XYZ100');
 
     expect(requestAt(fetchMock).url.pathname).toBe('/v1/hyperliquid/hip3/oracle/external-price/xyz:XYZ100');
-    expect(price).toEqual({ symbol: 'xyz:XYZ100', externalPrice: null, markPrice: 752.1, blockNumber: 1, timestamp: 2 });
+    expect(price).toEqual({
+      symbol: 'xyz:XYZ100',
+      externalPrice: null,
+      markPrice: 752.1,
+      blockNumber: 1,
+      timestamp: '1970-01-01T00:00:00.002Z',
+      timestampMs: 2,
+    });
   });
 });
 
@@ -500,17 +533,18 @@ describe('full-depth L2 WebSocket channels', () => {
   });
 
   it.each(['orderbook_full', 'hip3_orderbook_full'] as WsChannel[])(
-    'refuses %s replay before sending, because the API serves it live only',
+    'replays %s in bulk: single-channel, with an explicit end',
     (channel) => {
       const { ws, send } = openClient();
 
-      expect(() => (ws.replay as any)(channel, 'BTC', { start: 1, end: 2 })).toThrow(
-        FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR
-      );
+      ws.replay(channel as 'orderbook_full', 'BTC', { start: 1, end: 2, speed: 50 });
+      expect(JSON.parse(send.mock.calls[0]![0])).toEqual({ op: 'replay', channel, symbol: 'BTC', start: 1, end: 2, speed: 50 });
+
+      expect(() => (ws.replay as any)(channel, 'BTC', { start: 1 })).toThrow(bulkReplayEndError(channel));
       expect(() => (ws.multiReplay as any)(['orderbook', channel], 'BTC', { start: 1, end: 2 })).toThrow(
-        FULL_DEPTH_L2_LIVE_ONLY_REPLAY_ERROR
+        bulkReplayMultiError(channel)
       );
-      expect(send).not.toHaveBeenCalled();
+      expect(send).toHaveBeenCalledTimes(1);
     }
   );
 

@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, CursorPaginationParams } from '../types';
 
 export interface L3OrderBookParams {
@@ -18,7 +18,7 @@ export interface L3OrderBookHistoryParams extends CursorPaginationParams {
 /**
  * L3 Order Book API resource (Lighter only)
  *
- * Access Lighter.xyz L3 orderbook snapshots and history. The served snapshot
+ * Access Lighter L3 orderbook snapshots and history. The served snapshot
  * is order-level data capped at 250 orders per side.
  *
  * @example
@@ -71,6 +71,6 @@ export class L3OrderBookResource {
       `${this.basePath}/l3orderbook/${this.coinTransform(symbol)}/history`,
       params as unknown as Record<string, unknown>
     );
-    return { data: response.data, nextCursor: response.meta.nextCursor };
+    return cursorPage(response);
   }
 }

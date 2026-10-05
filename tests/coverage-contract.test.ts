@@ -58,6 +58,8 @@ describe('HIP-4 candles and coverage contract', () => {
         },
       ],
       nextCursor: '1777708860000',
+      hasMore: true,
+      meta: { count: 1, nextCursor: '1777708860000', requestId: 'request-1' },
     });
 
     const [requestUrl] = fetchMock.mock.calls[0] as [string];
@@ -288,24 +290,24 @@ describe('HIP-4 candles and coverage contract', () => {
 
     expect(hip4Section).toContain('client.hyperliquid.hip4.candles.history');
     expect(hip4Section).toContain('2026-05-02');
-    expect(hip4Section).toContain('~10s');
+    expect(hip4Section).toContain('about 10 seconds');
     expect(hip4Section).toMatch(/no HIP-4 funding/i);
     expect(hip4Section).not.toMatch(/no candles/i);
     expect(readme).not.toContain('All schemas on every tier');
     expect(`${readme}\n${types}`).not.toContain('raw ~1 min');
     expect(readme).toContain('250 orders per side');
-    expect(readme).toContain('Candles served from 2025-08-01');
-    expect(readme).toContain('March 5, 2026+');
-    expect(readme).toContain('exact starts vary by market');
+    expect(readme).toContain('candles from 2025-08-01');
+    expect(readme).toContain('L3 order book from 2026-03-05 03:33');
+    expect(readme).toContain('Starts can be later for individual markets');
     expect(readme).toContain('individual resting orders');
     const l3SectionStart = readme.indexOf('### L3 Order Book (Lighter only)');
     const l3SectionEnd = readme.indexOf('### L2 Order Book (Full-Depth)');
     const l3Section = readme.slice(l3SectionStart, l3SectionEnd);
-    expect(l3Section).toContain('2026-03-05T00:00:00Z');
+    expect(l3Section).toContain('timestamp: Date.now() - 3600000');
     expect(l3Section).not.toContain('1704067200000');
     expect(readme).not.toContain('tick-level individual order detail');
-    expect(readme).toContain('live bridges are paused');
-    expect(types).toContain('stored replay only; live bridges paused');
+    expect(readme).not.toContain('live bridges are paused');
+    expect(types).not.toContain('live bridges paused');
     expect(types).toContain('The SDK URL-encodes `#` to `%23` on the wire');
     expect(types).not.toContain('it does NOT auto-encode `#`');
     expect(readme).toMatch(/Per fill.*maker.*taker/i);
@@ -318,11 +320,11 @@ describe('HIP-4 candles and coverage contract', () => {
     const spotSection = readme.slice(spotSectionStart, spotSectionEnd);
     expect(spotSection).toContain('GET /v1/hyperliquid/spot/candles/{symbol}');
     expect(spotSection).toContain('client.spot.candles.history');
-    expect(spotSection).toContain('2025-03-22T10:50:22Z');
+    expect(spotSection).toContain('2025-03-22 10:50 UTC');
     expect(spotSection).toContain('numeric-string pagination cursors');
     expect(spotSection).not.toMatch(/no funding,[\s\S]{0,80}no candles/i);
     expect(types).toContain('SpotClient.candles');
-    expect(exchanges).toContain('2025-03-22T10:50:22Z');
+    expect(exchanges).toContain('2025-03-22 10:50 UTC');
     expect(candleResource).toContain('10,000 for core Hyperliquid, HIP-3, and Lighter');
     expect(candleResource).toContain('1,000 for HIP-4 and Hyperliquid Spot');
     expect(candleResource).not.toContain('maximum `limit` of 1000');
@@ -421,9 +423,10 @@ describe('HIP-4 candles and coverage contract', () => {
       },
       namespaces: { eligible: {}, above: {}, at: {}, below: {} },
     });
-    expect(history).toEqual({
+    expect(history).toMatchObject({
       data: [current],
       nextCursor: '1756382400000',
+      hasMore: true,
     });
 
     const currentUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));

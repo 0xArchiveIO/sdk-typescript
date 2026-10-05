@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type {
   ApiResponse,
   CursorResponse,
@@ -57,7 +57,7 @@ export class InstrumentsResource {
 }
 
 /**
- * Lighter.xyz Instruments API resource
+ * Lighter Instruments API resource
  *
  * Lighter instruments have a different schema than Hyperliquid with more
  * detailed market configuration including fees and minimum amounts.
@@ -235,10 +235,7 @@ export class Hip4OutcomesResource {
       `${this.basePath}/outcomes`,
       query
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta.nextCursor,
-    };
+    return cursorPage(response);
   }
 
   /** Get a single outcome aggregate. Response includes `aggregatedOi`. */

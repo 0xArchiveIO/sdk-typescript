@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, unwrapEnvelope } from '../http';
 import type {
   ApiResponse,
   CoverageResponse,
@@ -23,6 +23,10 @@ import { PositionsFreshnessArrayResponseSchema } from '../schemas';
  *
  * Venue scopes: `hyperliquid`, `hip3`, `hip4`, `spot` (Hyperliquid Spot),
  * `lighter` (Lighter mainnet) and `rh-lighter` (Lighter on Robinhood Chain).
+ *
+ * Each method returns the report itself: the SDK reads it from the standard
+ * `{ success, data, meta }` envelope these routes answer with under the API
+ * version it sends.
  *
  * @example
  * ```typescript
@@ -64,7 +68,7 @@ export class DataQualityResource {
    * ```
    */
   async status(): Promise<StatusResponse> {
-    return this.http.get<StatusResponse>(`${this.basePath}/status`);
+    return unwrapEnvelope<StatusResponse>(await this.http.get<unknown>(`${this.basePath}/status`));
   }
 
   // ===========================================================================
@@ -88,7 +92,7 @@ export class DataQualityResource {
    * ```
    */
   async coverage(): Promise<CoverageResponse> {
-    return this.http.get<CoverageResponse>(`${this.basePath}/coverage`);
+    return unwrapEnvelope<CoverageResponse>(await this.http.get<unknown>(`${this.basePath}/coverage`));
   }
 
   /**
@@ -105,9 +109,9 @@ export class DataQualityResource {
    * ```
    */
   async exchangeCoverage(exchange: string): Promise<ExchangeCoverage> {
-    return this.http.get<ExchangeCoverage>(
+    return unwrapEnvelope<ExchangeCoverage>(await this.http.get<unknown>(
       `${this.basePath}/coverage/${exchange.toLowerCase()}`
-    );
+    ));
   }
 
   /**
@@ -151,13 +155,13 @@ export class DataQualityResource {
     symbol: string,
     options?: SymbolCoverageOptions,
   ): Promise<SymbolCoverageResponse> {
-    return this.http.get<SymbolCoverageResponse>(
+    return unwrapEnvelope<SymbolCoverageResponse>(await this.http.get<unknown>(
       // Symbols are case-sensitive (HIP-3 `km:US500`) and can carry `#` (HIP-4
       // `#0`), which would otherwise end the URL path, so the symbol is
       // percent-encoded and never case-folded.
       `${this.basePath}/coverage/${exchange.toLowerCase()}/${encodeURIComponent(symbol)}`,
       options as unknown as Record<string, unknown>
-    );
+    ));
   }
 
   // ===========================================================================
@@ -180,10 +184,10 @@ export class DataQualityResource {
    * ```
    */
   async listIncidents(params?: ListIncidentsParams): Promise<IncidentsResponse> {
-    return this.http.get<IncidentsResponse>(
+    return unwrapEnvelope<IncidentsResponse>(await this.http.get<unknown>(
       `${this.basePath}/incidents`,
       params as unknown as Record<string, unknown>
-    );
+    ));
   }
 
   /**
@@ -200,7 +204,7 @@ export class DataQualityResource {
    * ```
    */
   async getIncident(incidentId: string): Promise<Incident> {
-    return this.http.get<Incident>(`${this.basePath}/incidents/${incidentId}`);
+    return unwrapEnvelope<Incident>(await this.http.get<unknown>(`${this.basePath}/incidents/${incidentId}`));
   }
 
   // ===========================================================================
@@ -225,7 +229,7 @@ export class DataQualityResource {
    * ```
    */
   async latency(): Promise<LatencyResponse> {
-    return this.http.get<LatencyResponse>(`${this.basePath}/latency`);
+    return unwrapEnvelope<LatencyResponse>(await this.http.get<unknown>(`${this.basePath}/latency`));
   }
 
   // ===========================================================================
@@ -248,10 +252,10 @@ export class DataQualityResource {
    * ```
    */
   async sla(params?: SlaParams): Promise<SlaResponse> {
-    return this.http.get<SlaResponse>(
+    return unwrapEnvelope<SlaResponse>(await this.http.get<unknown>(
       `${this.basePath}/sla`,
       params as unknown as Record<string, unknown>
-    );
+    ));
   }
 
   // ===========================================================================

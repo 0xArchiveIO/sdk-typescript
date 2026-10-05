@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR,
+  bulkReplayEndError,
   LIGHTER_INTERVAL_CHANNEL_ERROR,
   LIGHTER_LIVE_CHANNELS,
   LIGHTER_REPLAY_CHANNELS,
@@ -332,7 +332,7 @@ describe('Lighter WebSocket capabilities', () => {
       }),
     );
     expect(() => (ws.replay as any)('l4_diffs', 'BTC', { start: 1 }))
-      .toThrow('Hyperliquid core L4 replay requires an explicit end timestamp.');
+      .toThrow(bulkReplayEndError('l4_diffs'));
   });
 
   it.each([
@@ -342,15 +342,16 @@ describe('Lighter WebSocket capabilities', () => {
     'hip4_l4_orders',
     'spot_l4_diffs',
     'spot_l4_orders',
-  ] as WsChannel[])('rejects %s replay because the channel is live-only', (channel) => {
+  ] as WsChannel[])('sends a bounded %s replay, like core L4', (channel) => {
     vi.stubGlobal('WebSocket', { OPEN: 1 });
     const ws = new OxArchiveWs({ apiKey: 'test-key' });
     const send = vi.fn();
     (ws as any).ws = { readyState: 1, send };
 
-    expect(() => (ws.replay as any)(channel, 'BTC', { start: 1, end: 2 }))
-      .toThrow(HYPERLIQUID_L4_LIVE_ONLY_REPLAY_ERROR);
-    expect(send).not.toHaveBeenCalled();
+    ws.replay(channel as any, 'BTC', { start: 1, end: 2 });
+    expect(JSON.parse(send.mock.calls[0]![0])).toEqual({ op: 'replay', channel, symbol: 'BTC', start: 1, end: 2, speed: 1 });
+    expect(() => (ws.replay as any)(channel, 'BTC', { start: 1 })).toThrow(bulkReplayEndError(channel));
+    expect(send).toHaveBeenCalledTimes(1);
   });
 });
 

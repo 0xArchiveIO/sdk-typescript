@@ -1,4 +1,4 @@
-import type { HttpClient } from '../http';
+import { type HttpClient, cursorPage } from '../http';
 import type { ApiResponse, CursorResponse, CvdBucket, CvdParams } from '../types';
 import { CvdBucketArrayResponseSchema } from '../schemas';
 
@@ -8,10 +8,10 @@ import { CvdBucketArrayResponseSchema } from '../schemas';
  *
  * Buckets are labelled by their open time in UTC and are omitted when they
  * hold no trades. A page holds up to `limit` buckets (default 500, max
- * 10000). While `nextCursor` is set, pass it back unchanged as `cursor` with
- * the same `start`, `end` and `interval`, and stop when it is undefined. Below
- * `1h` a page can hold fewer than `limit` buckets and still carry a cursor, so
- * stop on the cursor, not on a short page.
+ * 10000). While `hasMore` is true, pass `nextCursor` back unchanged as
+ * `cursor` with the same `start`, `end` and `interval`, and stop when
+ * `hasMore` is false. Below `1h` a page can hold fewer than `limit` buckets
+ * and still have more to follow, so stop on `hasMore`, not on a short page.
  *
  * `cumulativeDelta` runs from the first bucket of each response, so it
  * restarts on every page; rebuild it from `delta` when joining pages.
@@ -22,7 +22,7 @@ import { CvdBucketArrayResponseSchema } from '../schemas';
  * const buckets = [];
  * let page = await client.hyperliquid.cvd.history('BTC', window);
  * buckets.push(...page.data);
- * while (page.nextCursor) {
+ * while (page.hasMore) {
  *   page = await client.hyperliquid.cvd.history('BTC', { ...window, cursor: page.nextCursor });
  *   buckets.push(...page.data);
  * }
@@ -45,7 +45,7 @@ export class CvdResource {
    *
    * @param symbol - The symbol (e.g. 'BTC'; HIP-3 symbols keep their prefix and case, e.g. 'km:US500')
    * @param params - Window, interval (default `1h`), cursor and page size
-   * @returns Buckets, `nextCursor` while more may follow, and `meta` (its `notice` says when a response is one page of several)
+   * @returns Buckets, `nextCursor` and `hasMore` while more may follow, and `meta` (its `notice` says when a response is one page of several)
    */
   async history(symbol: string, params: CvdParams = {}): Promise<CursorResponse<CvdBucket[]>> {
     const response = await this.http.get<ApiResponse<CvdBucket[]>>(
@@ -53,10 +53,6 @@ export class CvdResource {
       params as unknown as Record<string, unknown>,
       this.http.validationEnabled ? CvdBucketArrayResponseSchema : undefined
     );
-    return {
-      data: response.data,
-      nextCursor: response.meta?.nextCursor,
-      meta: response.meta,
-    };
+    return cursorPage(response);
   }
 }

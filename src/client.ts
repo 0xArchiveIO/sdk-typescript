@@ -1,5 +1,7 @@
-import type { ClientOptions } from './types';
+import type { z } from 'zod';
+import type { ApiResponse, Capability, ClientOptions } from './types';
 import { HttpClient } from './http';
+import { CapabilitiesResponseSchema } from './schemas';
 import { HyperliquidClient, LighterClient, RhLighterClient, SpotClient } from './exchanges';
 import {
   OrderBookResource,
@@ -21,16 +23,21 @@ const DEFAULT_TIMEOUT = 30000;
  *
  * Two venues: Hyperliquid and Lighter. Lighter has two deployments: mainnet
  * and Robinhood Chain.
- * - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
+ * - `client.hyperliquid` - Hyperliquid perpetuals (order book from 2023-04-15)
  *   - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
  *   - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets
- * - `client.spot` - Hyperliquid Spot (candles from 2025-03-22T10:50:22Z;
- *   trades from 2025-03-22; orderbook + L4 + TWAP live from 2026-05-05)
- * - `client.lighter` - Lighter.xyz, mainnet deployment
- * - `client.rhLighter` - Lighter.xyz, Robinhood Chain deployment (USDG-quoted)
+ * - `client.spot` - Hyperliquid Spot (candles from 2025-03-22 10:50 UTC;
+ *   trades from 2025-03-22 10:50:22 UTC; order book, L4 and TWAP from 2026-05-05)
+ * - `client.lighter` - Lighter, mainnet deployment
+ * - `client.rhLighter` - Lighter, Robinhood Chain deployment (USDG-quoted)
  *
  * Webhook management is on `client.webhooks`, and the public symbol
- * universe with coverage per symbol on `client.symbols`.
+ * universe with coverage per symbol on `client.symbols`. What each venue
+ * serves, over REST and WebSocket, and from when, is `client.capabilities()`.
+ *
+ * Every request sends `0xArchive-Version: 2026-10-01` (`API_VERSION`), the
+ * API contract this SDK parses. Failed requests throw `OxArchiveError`, whose
+ * `errorCode` is one of `ERROR_CODES`.
  *
  * Account positions are on `client.hyperliquid.positions`,
  * `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
@@ -46,7 +53,7 @@ const DEFAULT_TIMEOUT = 30000;
  * const hlOrderbook = await client.hyperliquid.orderbook.get('BTC');
  * console.log(`BTC mid price: ${hlOrderbook.mid_price}`);
  *
- * // Lighter.xyz data (mainnet, and the Robinhood Chain deployment)
+ * // Lighter data (mainnet, and the Robinhood Chain deployment)
  * const lighterOrderbook = await client.lighter.orderbook.get('BTC');
  * const rhOrderbook = await client.rhLighter.orderbook.get('BTC');
  *
@@ -82,7 +89,7 @@ export class OxArchive {
   public readonly hyperliquid: HyperliquidClient;
 
   /**
-   * Lighter.xyz exchange data, mainnet deployment. Trade history begins January 17, 2025; exact starts vary by market and data type.
+   * Lighter exchange data, mainnet deployment. Trade history begins January 17, 2025; exact starts vary by market and data type.
    */
   public readonly lighter: LighterClient;
 
@@ -97,8 +104,8 @@ export class OxArchive {
 
   /**
    * Hyperliquid Spot exchange data. Candle history is served from
-   * 2025-03-22T10:50:22Z; trades are backfilled from 2025-03-22; orderbook,
-   * L4, and TWAP statuses are live from 2026-05-05. Symbols are dashed
+   * 2025-03-22 10:50 UTC and trades from 2025-03-22 10:50:22 UTC; order book,
+   * L4, and TWAP statuses from 2026-05-05. Symbols are dashed
    * canonical (e.g. `HYPE-USDC`).
    */
   public readonly spot: SpotClient;
@@ -195,5 +202,31 @@ export class OxArchive {
     this.instruments = new InstrumentsResource(this.http, legacyBase);
     this.funding = new FundingResource(this.http, legacyBase);
     this.openInterest = new OpenInterestResource(this.http, legacyBase);
+  }
+
+  /**
+   * What each venue serves (`GET /v1/capabilities`): one row per venue and
+   * datatype with the REST routes, the WebSocket channels and whether they
+   * stream live and replay, the first served instant (`availableFrom`),
+   * cadence, page limit and accepted intervals. Public and cached by the API
+   * for five minutes; no credits are used.
+   *
+   * @example
+   * ```typescript
+   * const rows = await client.capabilities();
+   * const replayable = rows.filter((r) => r.replay).flatMap((r) => r.wsChannels);
+   * const hip3Trades = rows.find((r) => r.venue === 'hip3' && r.datatype === 'trades');
+   * console.log(hip3Trades?.availableFrom, hip3Trades?.pageLimit);
+   * ```
+   */
+  async capabilities(): Promise<Capability[]> {
+    const response = await this.http.get<ApiResponse<Capability[]>>(
+      '/v1/capabilities',
+      undefined,
+      this.http.validationEnabled
+        ? (CapabilitiesResponseSchema as unknown as z.ZodType<ApiResponse<Capability[]>>)
+        : undefined
+    );
+    return response.data;
   }
 }
