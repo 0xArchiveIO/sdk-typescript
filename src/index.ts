@@ -79,6 +79,7 @@ export {
 // WebSocket client and the channel capability table
 export {
   OxArchiveWs,
+  STREAM_WS_URL,
   WS_CHANNEL_CAPABILITIES,
   WS_LIVE_CHANNELS,
   WS_REPLAY_CHANNELS,
@@ -311,6 +312,11 @@ export {
   LighterLiveTradesSchema,
   LighterLiveAssetCtxSchema,
   LighterLiveStatsSchema,
+  // Pending transaction (mempool) WebSocket payload schemas
+  MempoolSignatureSchema,
+  MempoolActionSchema,
+  MempoolItemSchema,
+  WsMempoolDataSchema,
   // Validated types (inferred from schemas)
   type ValidatedApiMeta,
   type ValidatedPriceLevel,
@@ -326,6 +332,7 @@ export {
   type ValidatedLighterLiveOrderbook,
   type ValidatedLighterLiveTrade,
   type ValidatedLighterLiveStats,
+  type ValidatedMempoolItem,
   type ValidatedLighterLiquidation,
   type ValidatedLighterLiquidationVolume,
   type ValidatedPosition,
@@ -600,6 +607,11 @@ export type {
   LighterLiveTrade,
   LighterLiveAssetCtx,
   LighterLiveStats,
+  // Pending transactions (mempool)
+  MempoolItem,
+  MempoolAction,
+  MempoolSignature,
+  WsMempoolData,
   // HIP-4 settlement event
   WsOutcomeSettled,
   // Webhooks

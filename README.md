@@ -1734,6 +1734,8 @@ In Node.js the client connects with the [`ws`](https://www.npmjs.com/package/ws)
 
 > Lighter on Robinhood Chain uses `rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`, and `rh_lighter_funding` (live and replay) and `rh_lighter_candles` (replay only). See [Lighter on Robinhood Chain Channels](#lighter-on-robinhood-chain-channels).
 
+> `mempool` streams pending Hyperliquid transactions, live only, on `wss://stream.0xarchive.io/ws` (`STREAM_WS_URL`) only, with the Pro, Scale and Enterprise plans. See [Pending Transactions (mempool)](#pending-transactions-mempool).
+
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
 
@@ -1847,7 +1849,7 @@ ws.replay('hip3_l4_diffs', 'xyz:SP500', { start: t0, end: t0 + 3_600_000 });
 // Also: ws.replay('spot_l4_orders', 'HYPE-USDC', ...), ws.replay('orderbook_full', 'BTC', ...)
 ```
 
-`ticker`, `all_tickers`, `spot_orderbook` and `spot_trades` stream live only, and `hip4_orderbook`, `hip4_open_interest`, `lighter_l3_orderbook` and the candle channels replay only; the SDK refuses the mode a channel does not offer before sending. `spot_twap` neither streams nor replays: Spot TWAP statuses are served over REST only (`client.spot.twap`).
+`ticker`, `all_tickers`, `spot_orderbook`, `spot_trades` and `mempool` stream live only, and `hip4_orderbook`, `hip4_open_interest`, `lighter_l3_orderbook` and the candle channels replay only; the SDK refuses the mode a channel does not offer before sending. `spot_twap` neither streams nor replays: Spot TWAP statuses are served over REST only (`client.spot.twap`).
 
 ### WebSocket errors
 
@@ -1902,7 +1904,7 @@ Gap thresholds vary by channel:
 ```typescript
 const ws = new OxArchiveWs({
   apiKey: '0xa_your_api_key',          // Required
-  wsUrl: 'wss://api.0xarchive.io/ws', // Optional
+  wsUrl: 'wss://api.0xarchive.io/ws', // Optional; STREAM_WS_URL for mempool
   autoReconnect: true,                // Auto-reconnect on disconnect (default: true)
   reconnectDelay: 1000,               // Initial reconnect delay in ms (default: 1000)
   maxReconnectAttempts: 10,           // Max reconnect attempts (default: 10)
@@ -1927,6 +1929,7 @@ const ws = new OxArchiveWs({
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes (bulk) |
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes (bulk) |
 | `orderbook_full` | Full-depth L2 order book (every price level) | Yes | Yes | Yes (bulk) |
+| `mempool` | Pending transactions on every Hyperliquid product, on `wss://stream.0xarchive.io/ws` with the Pro, Scale and Enterprise plans | Optional | Yes | No |
 
 Each `liquidations` data message is a fill row with `is_liquidation: true`; the wire shape matches `trades` exactly. Use `onLiquidations` to receive a parsed `Trade[]`.
 
@@ -2048,6 +2051,49 @@ await ws.connect();
 ws.subscribeLiquidations('BTC');
 ws.subscribeHip3Liquidations('xyz:TSLA');
 ```
+
+#### Pending Transactions (mempool)
+
+`mempool` streams signed Hyperliquid transactions (orders, cancels, modifies, TWAPs, leverage changes, transfers and every other action type) as our Hyperliquid node receives them from its peers, before they are included in a block. It covers every Hyperliquid product: perps, HIP-3, HIP-4 and spot.
+
+- Live only: there is no replay, no history and no REST route. Pending transactions are not stored.
+- Pending is not executed: a transaction seen here can still be rejected, expire or never land.
+- The same signed action can occasionally arrive twice; deduplicate on `signature` if needed.
+- Served on `wss://stream.0xarchive.io/ws` (`STREAM_WS_URL`) only, with the same API key and protocol as the default endpoint. A client on the default endpoint refuses the subscription before sending.
+- Included with the Pro, Scale and Enterprise plans; on other plans the server answers `forbidden`. Each data message counts like any other WebSocket message.
+
+```typescript
+import { OxArchiveWs, STREAM_WS_URL } from '@0xarchive/sdk';
+
+const ws = new OxArchiveWs({ apiKey: '0xa_your_api_key', wsUrl: STREAM_WS_URL });
+
+ws.onMempool((symbol, items) => {
+  for (const item of items) {
+    console.log(item.received_at, item.action.type, item.symbols, item.nonce);
+  }
+});
+ws.onServerError((error) => console.error(error.errorCode, error.message));
+
+await ws.connect();
+
+ws.subscribeMempool('BTC');      // actions that reference BTC
+ws.subscribeMempool('xyz:TSLA'); // HIP-3; spot is HYPE-USDC, HIP-4 is #<coin>
+// ws.subscribeMempool();        // every pending transaction
+```
+
+`mempool` is the one channel whose symbol is optional. Leave it out for every pending transaction: the unfiltered stream is several megabytes per second before compression, and the number of unfiltered subscriptions is limited. When it is at capacity the server answers `rate_limited`; subscribe with a symbol, or try again later. A symbol subscription receives every action whose asset ids include that market, whole, so an order batch touching BTC and ETH reaches both BTC and ETH subscribers. An unknown symbol gets `invalid_symbol`. In Node.js the client connects with the `ws` package, which negotiates compression (permessage-deflate), as browsers do.
+
+Each message holds the transactions of one batch our node received from a peer, as `MempoolItem` rows (`WsMempoolData` is the whole message):
+
+| Field | Meaning |
+|-------|---------|
+| `received_at`, `received_at_ms` | When our node received the transaction: RFC 3339 UTC with nanosecond precision, and Unix milliseconds. Not a block time. |
+| `symbols` | The markets the action's asset ids reference, in canonical spelling and first-seen order, without repeats. Empty for actions with no market, such as transfers. |
+| `action` | The action exactly as signed, in Hyperliquid's exchange-action format: asset ids (`a`, `asset`), not symbols, and prices and sizes as strings. `action.type` names it (`order`, `cancel`, `modify`, `twapOrder`, `updateLeverage`, `usdSend` and others); Hyperliquid adds types over time. |
+| `nonce` | The action's nonce |
+| `vault_address` | The vault or subaccount the action acts for, or null |
+| `expires_after_ms` | The action's `expiresAfter` (Unix milliseconds), or null |
+| `signature` | `{ r, s, v }`. The signer can be recovered from it and `action`; the signer's address is not included. |
 
 #### Lighter Channels
 
@@ -2453,6 +2499,9 @@ import type {
   LighterLiveTrade,
   LighterLiveStats,
   RhLighterLiveChannel,
+  // Pending transactions (mempool)
+  MempoolItem,
+  WsMempoolData,
   // Orderbook reconstruction
   OrderbookDelta,
   TickData,
@@ -2465,7 +2514,7 @@ import type {
 import { OrderBookReconstructor } from '@0xarchive/sdk';
 
 // Contract constants and the WebSocket channel table
-import { API_VERSION, ERROR_CODES, VENUES, WS_CHANNEL_CAPABILITIES } from '@0xarchive/sdk';
+import { API_VERSION, ERROR_CODES, VENUES, STREAM_WS_URL, WS_CHANNEL_CAPABILITIES } from '@0xarchive/sdk';
 ```
 
 ## Runtime Validation

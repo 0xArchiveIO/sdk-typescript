@@ -5,6 +5,43 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
+## 1.13.0 (2026-10-08)
+
+### Added
+- The `mempool` WebSocket channel: signed Hyperliquid transactions (orders,
+  cancels, modifies, TWAPs, leverage changes, transfers and every other
+  action type) as our Hyperliquid node receives them from its peers, before
+  they are included in a block, on every Hyperliquid product (perps, HIP-3,
+  HIP-4 and spot). It is live only, with no replay, history or REST route,
+  and is served on `wss://stream.0xarchive.io/ws` only, with the Pro, Scale
+  and Enterprise plans; other plans receive `forbidden`. A pending
+  transaction can still be rejected, expire or never land.
+- `ws.subscribeMempool(symbol?)` and `ws.unsubscribeMempool(symbol?)`. Leave
+  the symbol out for every pending transaction, or pass one (`BTC`,
+  `xyz:TSLA`, `HYPE-USDC`, `#49720`) for only the actions that reference
+  that market. `mempool` is the one channel whose symbol is optional, and
+  `ws.subscribe('mempool')` works too. `ws.onMempool()` receives each batch
+  as typed `MempoolItem` rows, with the subscription's symbol, or null on the
+  unfiltered stream. When the unfiltered stream is at capacity the server
+  answers `rate_limited`; subscribe with a symbol instead.
+- `STREAM_WS_URL` (`wss://stream.0xarchive.io/ws`). Create the client with
+  `wsUrl: STREAM_WS_URL` to subscribe to `mempool`. A client on the default
+  endpoint refuses a `mempool` subscription before sending, and a replay of
+  `mempool` is refused on every endpoint.
+- Types `MempoolItem`, `MempoolAction`, `MempoolSignature` and
+  `WsMempoolData`, with Zod schemas `MempoolItemSchema`,
+  `MempoolActionSchema`, `MempoolSignatureSchema` and `WsMempoolDataSchema`.
+- `wsEndpoint` and `plans` on `WsChannelCapability` and on `Capability`
+  (`ws_endpoint` and `plans` in `GET /v1/capabilities`). They are set only
+  where a channel is served on one endpoint, or is included with some plans
+  rather than all, as on `mempool`. Absent means the default endpoint and
+  every plan.
+
+### Changed
+- `WsSubscribed` and `WsUnsubscribed` (and `WsSubscribedSchema`,
+  `WsUnsubscribedSchema`) and `WsDataSchema` accept a null `coin` and
+  `symbol`, which the server sends on the unfiltered `mempool` stream.
+
 ## 1.12.0 (2026-10-05)
 
 This release adopts the 0xArchive API contract `2026-10-01`. Every REST
