@@ -17,9 +17,9 @@ semantic versioning.
   and Enterprise plans; other plans receive `forbidden`. A pending
   transaction can still be rejected, expire or never land.
 - `ws.subscribeMempool(symbol?)` and `ws.unsubscribeMempool(symbol?)`. Leave
-  the symbol out for every pending transaction, or pass one (`BTC`,
-  `xyz:TSLA`, `HYPE-USDC`, `#49720`) for only the actions that reference
-  that market. `mempool` is the one channel whose symbol is optional, and
+  the symbol out for every pending transaction our Hyperliquid node
+  receives, or pass one (`BTC`, `xyz:TSLA`, `HYPE-USDC`, `#49720`) for only
+  the actions that reference that market. `mempool` is the one channel whose symbol is optional, and
   `ws.subscribe('mempool')` works too. `ws.onMempool()` receives each batch
   as typed `MempoolItem` rows, with the subscription's symbol, or null on the
   unfiltered stream. When the unfiltered stream is at capacity the server

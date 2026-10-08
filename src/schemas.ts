@@ -271,7 +271,7 @@ export const WsChannelSchema = z.enum([
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
 
 // Server -> Client messages. `coin` and `symbol` are null on the unfiltered
-// `mempool` stream, the one channel subscribed without a symbol.
+// `mempool` stream, the channel whose symbol filter is optional.
 export const WsSubscribedSchema = z.object({
   type: z.literal('subscribed'),
   channel: WsChannelSchema,

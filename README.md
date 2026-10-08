@@ -2078,10 +2078,10 @@ await ws.connect();
 
 ws.subscribeMempool('BTC');      // actions that reference BTC
 ws.subscribeMempool('xyz:TSLA'); // HIP-3; spot is HYPE-USDC, HIP-4 is #<coin>
-// ws.subscribeMempool();        // every pending transaction
+// ws.subscribeMempool();        // every pending transaction our Hyperliquid node receives
 ```
 
-`mempool` is the one channel whose symbol is optional. Leave it out for every pending transaction: the unfiltered stream is several megabytes per second before compression, and the number of unfiltered subscriptions is limited. When it is at capacity the server answers `rate_limited`; subscribe with a symbol, or try again later. A symbol subscription receives every action whose asset ids include that market, whole, so an order batch touching BTC and ETH reaches both BTC and ETH subscribers. An unknown symbol gets `invalid_symbol`. In Node.js the client connects with the `ws` package, which negotiates compression (permessage-deflate), as browsers do.
+`mempool` is the one channel whose symbol is optional. Leave it out for every pending transaction our Hyperliquid node receives: the unfiltered stream is several megabytes per second before compression, and unfiltered subscriptions share a server-wide capacity limit, which does not apply to symbol subscriptions. When that capacity is reached the server answers `rate_limited`; subscribe with a symbol, or try again later. A symbol subscription receives every action whose asset ids include that market, whole, so an order batch touching BTC and ETH reaches both BTC and ETH subscribers. An unknown symbol gets `invalid_symbol`. In Node.js the client connects with the `ws` package, which negotiates compression (permessage-deflate), as browsers do.
 
 Each message holds the transactions of one batch our node received from a peer, as `MempoolItem` rows (`WsMempoolData` is the whole message):
 

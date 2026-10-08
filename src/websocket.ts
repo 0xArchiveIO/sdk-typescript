@@ -1176,9 +1176,10 @@ export class OxArchiveWs {
    * when the unfiltered stream is at capacity (subscribe with a symbol, or
    * try again later); read these with `onServerError()`.
    *
-   * @param symbol Optional. Leave it out for every pending transaction (the
-   *   unfiltered stream is several megabytes per second before compression),
-   *   or pass a symbol for only the actions that reference that market:
+   * @param symbol Optional. Leave it out for every pending transaction our
+   *   Hyperliquid node receives (the unfiltered stream is several megabytes
+   *   per second before compression), or pass a symbol for only the actions
+   *   that reference that market:
    *   `BTC`, `xyz:TSLA` (HIP-3), `HYPE-USDC` (spot) or `#49720` (HIP-4).
    *
    * @example
