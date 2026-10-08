@@ -11,13 +11,55 @@ const section = (text: string, start: string, end: string): string => {
   return text.slice(from, to);
 };
 
+describe('1.13.0 release surface', () => {
+  const readme = readRepoFile('README.md');
+  const changelog = readRepoFile('CHANGELOG.md');
+  const pkg = JSON.parse(readRepoFile('package.json')) as { version: string };
+
+  it('carries one aligned version', () => {
+    expect(pkg.version).toBe('1.13.0');
+    expect(changelog.indexOf('## 1.13.0')).toBeGreaterThanOrEqual(0);
+    expect(changelog.indexOf('## 1.13.0')).toBeLessThan(changelog.indexOf('## 1.12.0'));
+  });
+
+  it('documents the mempool channel: endpoint, plans, symbol and errors', () => {
+    const mempool = section(readme, '#### Pending Transactions (mempool)', '#### Lighter Channels');
+    for (const text of [
+      '`wss://stream.0xarchive.io/ws`',
+      '`STREAM_WS_URL`',
+      'Pro, Scale and Enterprise',
+      '`forbidden`',
+      '`rate_limited`',
+      '`invalid_symbol`',
+      'subscribeMempool',
+      'onMempool',
+      'Live only',
+    ]) {
+      expect(mempool).toContain(text);
+    }
+    for (const field of ['received_at', 'received_at_ms', 'symbols', 'action', 'nonce', 'vault_address', 'expires_after_ms', 'signature']) {
+      expect(mempool).toContain(`\`${field}\``);
+    }
+    const notes = section(changelog, '## 1.13.0', '## 1.12.0');
+    expect(notes).toContain('`STREAM_WS_URL`');
+    expect(notes).toContain('Pro, Scale');
+  });
+
+  it('uses no em dashes in the new copy', () => {
+    const newCopy = [
+      section(readme, '#### Pending Transactions (mempool)', '#### Lighter Channels'),
+      section(changelog, '## 1.13.0', '## 1.12.0'),
+    ].join('\n');
+    expect(newCopy).not.toContain('\u2014');
+  });
+});
+
 describe('1.12.0 release surface', () => {
   const readme = readRepoFile('README.md');
   const changelog = readRepoFile('CHANGELOG.md');
   const pkg = JSON.parse(readRepoFile('package.json')) as { version: string; files: string[] };
 
-  it('carries one aligned version', () => {
-    expect(pkg.version).toBe('1.12.0');
+  it('keeps its changelog entry in order', () => {
     expect(changelog.indexOf('## 1.12.0')).toBeLessThan(changelog.indexOf('## 1.11.0'));
   });
 

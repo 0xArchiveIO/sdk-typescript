@@ -2178,6 +2178,7 @@ export type CapabilityDatatype =
   | 'wallet_classify'
   | 'positions'
   | 'ticker'
+  | 'mempool'
   | (string & {});
 
 /**
@@ -2215,6 +2216,17 @@ export interface Capability {
   intervals: string[];
   /** Notes, e.g. that a floor is a policy floor or that replay is bulk. */
   notes: string | null;
+  /**
+   * The only WebSocket endpoint that serves the datatype's channels, e.g.
+   * `wss://stream.0xarchive.io/ws` for `mempool`. Absent when the channels
+   * are served on the default endpoint, `wss://api.0xarchive.io/ws`.
+   */
+  wsEndpoint?: string;
+  /**
+   * The plans that include the datatype, e.g. `['pro', 'scale', 'enterprise']`
+   * for `mempool`. Absent when every plan includes it, Free included.
+   */
+  plans?: string[];
 }
 
 // =============================================================================
@@ -2242,7 +2254,11 @@ export interface Capability {
  * - Replay only: `candles`, `hip3_candles`, `hip4_orderbook`,
  *   `hip4_open_interest`, `lighter_candles`, `lighter_l3_orderbook`,
  *   `rh_lighter_candles`.
- * - Live only: `ticker`, `all_tickers`, `spot_orderbook`, `spot_trades`.
+ * - Live only: `ticker`, `all_tickers`, `spot_orderbook`, `spot_trades`,
+ *   `mempool`. `mempool` (pending transactions on every Hyperliquid product)
+ *   is served on `wss://stream.0xarchive.io/ws` (`STREAM_WS_URL`) only, with
+ *   the Pro, Scale and Enterprise plans, and is the one channel whose symbol
+ *   is optional.
  * - Neither: `spot_twap`. Spot TWAP statuses are served over REST only
  *   (`client.spot.twap`); the channel name is kept so existing code compiles.
  *
@@ -2265,7 +2281,8 @@ export type WsChannel =
   | 'l4_diffs' | 'l4_orders'
   | 'hip3_l4_diffs' | 'hip3_l4_orders'
   | 'hip4_l4_diffs' | 'hip4_l4_orders'
-  | 'orderbook_full' | 'hip3_orderbook_full';
+  | 'orderbook_full' | 'hip3_orderbook_full'
+  | 'mempool';
 
 /**
  * Full-depth L2 order book channels (every price level, Hyperliquid core and
@@ -2306,7 +2323,7 @@ export type HyperliquidL4LiveOnlyChannel = Hip3L4Channel | Hip4L4Channel | SpotL
 export type WsBulkReplayChannel = L4Channel | FullDepthL2Channel;
 
 /** Channels that stream live only; the API does not replay them. */
-export type WsLiveOnlyChannel = 'ticker' | 'all_tickers' | 'spot_orderbook' | 'spot_trades';
+export type WsLiveOnlyChannel = 'ticker' | 'all_tickers' | 'spot_orderbook' | 'spot_trades' | 'mempool';
 
 /**
  * Channels whose data is served over REST only: the API neither streams nor
@@ -2520,9 +2537,14 @@ export type WsClientMessage =
 export interface WsSubscribed {
   type: 'subscribed';
   channel: WsChannel;
-  coin?: string;
-  /** Canonical symbol echoed by the server (Lighter symbols, on both deployments, are echoed uppercase). */
-  symbol?: string;
+  /** The same value as `symbol`; null on the unfiltered `mempool` stream. */
+  coin?: string | null;
+  /**
+   * Canonical symbol echoed by the server (Lighter symbols, on both
+   * deployments, are echoed uppercase); null on the unfiltered `mempool`
+   * stream.
+   */
+  symbol?: string | null;
   /** The API version the connection selected (`2026-10-01`). */
   version?: string;
 }
@@ -2531,9 +2553,10 @@ export interface WsSubscribed {
 export interface WsUnsubscribed {
   type: 'unsubscribed';
   channel: WsChannel;
-  coin?: string;
-  /** Canonical symbol echoed by the server. */
-  symbol?: string;
+  /** The same value as `symbol`; null on the unfiltered `mempool` stream. */
+  coin?: string | null;
+  /** Canonical symbol echoed by the server; null on the unfiltered `mempool` stream. */
+  symbol?: string | null;
 }
 
 /** Pong response from server */
@@ -2556,7 +2579,11 @@ export interface WsError {
   errorCode?: ErrorCode | (string & {});
 }
 
-/** Data message from server (real-time) */
+/**
+ * Data message from server (real-time). `mempool` messages have their own
+ * shape, {@link WsMempoolData}: `coin` and `symbol` are null on the
+ * unfiltered stream.
+ */
 export interface WsData<T = unknown> {
   type: 'data';
   channel: WsChannel;
@@ -3022,6 +3049,81 @@ export interface LighterLiveAssetCtx {
 export interface LighterLiveStats {
   coin: string;
   ctx: LighterLiveAssetCtx;
+}
+
+// -----------------------------------------------------------------------------
+// Pending transactions (`mempool`)
+//
+// Signed Hyperliquid transactions as our Hyperliquid node receives them from
+// its peers, before they are included in a block, on every Hyperliquid product
+// (perps, HIP-3, HIP-4 and spot). Live only: nothing is stored or replayed.
+// -----------------------------------------------------------------------------
+
+/** The signature of a pending transaction, as signed. */
+export interface MempoolSignature {
+  r: string;
+  s: string;
+  v: number;
+}
+
+/**
+ * A signed action in Hyperliquid's exchange-action format, exactly as signed:
+ * markets are asset ids (`a` or `asset`), not symbols, and prices and sizes
+ * are strings. `type` names the action, for example `order`, `cancel`,
+ * `modify`, `twapOrder`, `updateLeverage` or `usdSend`. Hyperliquid adds
+ * action types over time, so expect types not listed here.
+ */
+export interface MempoolAction {
+  type: string;
+  [field: string]: unknown;
+}
+
+/**
+ * One signed action on the `mempool` channel. Pending is not executed: a
+ * transaction seen here can still be rejected, expire or never land. The same
+ * signed action can occasionally arrive twice; deduplicate on `signature` if
+ * needed.
+ */
+export interface MempoolItem {
+  /**
+   * When our node received the transaction, RFC 3339 UTC with nanosecond
+   * precision. Not a block time.
+   */
+  received_at: string;
+  /** `received_at` as Unix milliseconds. */
+  received_at_ms: number;
+  /**
+   * The markets the action's asset ids reference, in canonical spelling
+   * (`BTC`, `xyz:TSLA`, `HYPE-USDC`, `#49720`), in first-seen order without
+   * repeats. Empty for actions with no market, such as transfers.
+   */
+  symbols: string[];
+  /**
+   * The action exactly as signed, fields in signed order, so the signer can
+   * be recovered from `signature`. The signer's address is not included.
+   */
+  action: MempoolAction;
+  /** The action's nonce. */
+  nonce: number;
+  /** The vault or subaccount the action acts for, or null. */
+  vault_address: string | null;
+  /** The action's `expiresAfter` (Unix ms), or null. */
+  expires_after_ms: number | null;
+  signature: MempoolSignature;
+}
+
+/**
+ * A `mempool` data message: one per batch of transactions our node receives
+ * from a peer, sent as soon as it arrives.
+ */
+export interface WsMempoolData {
+  type: 'data';
+  channel: 'mempool';
+  /** The subscription's symbol, or null on the unfiltered stream. */
+  coin: string | null;
+  /** The subscription's symbol, or null on the unfiltered stream. */
+  symbol: string | null;
+  data: MempoolItem[];
 }
 
 /**

@@ -265,24 +265,26 @@ export const WsChannelSchema = z.enum([
   'hip3_l4_diffs', 'hip3_l4_orders',
   'hip4_l4_diffs', 'hip4_l4_orders',
   'orderbook_full', 'hip3_orderbook_full',
+  'mempool',
 ]);
 
 export const WsConnectionStateSchema = z.enum(['connecting', 'connected', 'disconnected', 'reconnecting']);
 
-// Server -> Client messages
+// Server -> Client messages. `coin` and `symbol` are null on the unfiltered
+// `mempool` stream, the channel whose symbol filter is optional.
 export const WsSubscribedSchema = z.object({
   type: z.literal('subscribed'),
   channel: WsChannelSchema,
-  coin: z.string().optional(),
-  symbol: z.string().optional(),
+  coin: z.string().nullable().optional(),
+  symbol: z.string().nullable().optional(),
   version: z.string().optional(),
 });
 
 export const WsUnsubscribedSchema = z.object({
   type: z.literal('unsubscribed'),
   channel: WsChannelSchema,
-  coin: z.string().optional(),
-  symbol: z.string().optional(),
+  coin: z.string().nullable().optional(),
+  symbol: z.string().nullable().optional(),
 });
 
 export const WsPongSchema = z.object({
@@ -299,8 +301,8 @@ export const WsErrorSchema = z.object({
 export const WsDataSchema = z.object({
   type: z.literal('data'),
   channel: WsChannelSchema,
-  coin: z.string(),
-  symbol: z.string().optional(),
+  coin: z.string().nullable(),
+  symbol: z.string().nullable().optional(),
   data: z.unknown(),
 });
 
@@ -355,6 +357,35 @@ export const LighterLiveAssetCtxSchema = z.object({
 export const LighterLiveStatsSchema = z.object({
   coin: z.string(),
   ctx: LighterLiveAssetCtxSchema,
+});
+
+// Pending transactions (the `data` items of `mempool` messages). The action
+// keeps every field it was signed with.
+export const MempoolSignatureSchema = z.object({
+  r: z.string(),
+  s: z.string(),
+  v: z.number(),
+});
+
+export const MempoolActionSchema = z.object({ type: z.string() }).passthrough();
+
+export const MempoolItemSchema = z.object({
+  received_at: z.string(),
+  received_at_ms: z.number().int(),
+  symbols: z.array(z.string()),
+  action: MempoolActionSchema,
+  nonce: z.number().int(),
+  vault_address: z.string().nullable(),
+  expires_after_ms: z.number().int().nullable(),
+  signature: MempoolSignatureSchema,
+});
+
+export const WsMempoolDataSchema = z.object({
+  type: z.literal('data'),
+  channel: z.literal('mempool'),
+  coin: z.string().nullable(),
+  symbol: z.string().nullable(),
+  data: z.array(MempoolItemSchema),
 });
 
 // Replay messages
@@ -1216,6 +1247,8 @@ export const CapabilitySchema = z.object({
   pageLimit: z.number().nullable(),
   intervals: z.array(z.string()),
   notes: z.string().nullable(),
+  wsEndpoint: z.string().optional(),
+  plans: z.array(z.string()).optional(),
 });
 
 export const CapabilitiesResponseSchema = ApiResponseSchema(z.array(CapabilitySchema));
@@ -1238,6 +1271,7 @@ export type ValidatedWsServerMessage = z.infer<typeof WsServerMessageSchema>;
 export type ValidatedLighterLiveOrderbook = z.infer<typeof LighterLiveOrderbookSchema>;
 export type ValidatedLighterLiveTrade = z.infer<typeof LighterLiveTradeSchema>;
 export type ValidatedLighterLiveStats = z.infer<typeof LighterLiveStatsSchema>;
+export type ValidatedMempoolItem = z.infer<typeof MempoolItemSchema>;
 export type ValidatedLighterLiquidation = z.infer<typeof LighterLiquidationSchema>;
 export type ValidatedLighterLiquidationVolume = z.infer<typeof LighterLiquidationVolumeSchema>;
 export type ValidatedPosition = z.infer<typeof PositionSchema>;

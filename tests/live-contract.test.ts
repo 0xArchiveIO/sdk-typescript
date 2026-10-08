@@ -26,11 +26,17 @@ describe.skipIf(!apiKey)('live API contract', () => {
     }
     // Every channel the API lists is in the table, with its venue, datatype and modes.
     for (const [channel, row] of rowOf) {
-      expect(WS_CHANNEL_CAPABILITIES[channel as WsChannel], channel).toMatchObject({
+      const capability = WS_CHANNEL_CAPABILITIES[channel as WsChannel];
+      expect(capability, channel).toMatchObject({
         venue: row.venue,
         datatype: row.datatype,
         live: row.live,
         replay: row.replay,
+      });
+      // The endpoint and plans, on the rows that set them and on no other.
+      expect({ wsEndpoint: capability?.wsEndpoint, plans: capability?.plans }, channel).toEqual({
+        wsEndpoint: row.wsEndpoint,
+        plans: row.plans,
       });
     }
     // A table channel the API lists on no row is REST only: its datatype's

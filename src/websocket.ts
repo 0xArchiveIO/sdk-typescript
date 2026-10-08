@@ -31,6 +31,14 @@
  * ws.subscribeRhLighter('trades', 'AAPL-USDG');
  * ```
  *
+ * @example Pending transactions (mempool), on the stream endpoint
+ * ```typescript
+ * const ws = new OxArchiveWs({ apiKey: 'ox_...', wsUrl: STREAM_WS_URL });
+ * ws.onMempool((symbol, items) => console.log(symbol, items.length));
+ * await ws.connect();
+ * ws.subscribeMempool('BTC');
+ * ```
+ *
  * @example Historical replay (like Tardis.dev)
  * ```typescript
  * const ws = new OxArchiveWs({ apiKey: 'ox_...' });
@@ -68,6 +76,8 @@ import type {
   LighterLiveOrderbook,
   LighterLiveTrade,
   LighterLiveStats,
+  MempoolItem,
+  WsMempoolData,
   WsSubscribe,
   WsSubscribeOptions,
   WsConnectionState,
@@ -94,6 +104,19 @@ const DEFAULT_WS_URL = 'wss://api.0xarchive.io/ws';
 const DEFAULT_PING_INTERVAL = 30000; // 30 seconds
 const DEFAULT_RECONNECT_DELAY = 1000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
+
+/**
+ * The stream endpoint. It serves `mempool`, which no other endpoint serves,
+ * and a subset of the live Hyperliquid channels. Every other channel, and
+ * all replay, is on the default endpoint, `wss://api.0xarchive.io/ws`. The
+ * API key and protocol are the same on both.
+ *
+ * @example
+ * ```typescript
+ * const stream = new OxArchiveWs({ apiKey: 'ox_...', wsUrl: STREAM_WS_URL });
+ * ```
+ */
+export const STREAM_WS_URL = 'wss://stream.0xarchive.io/ws';
 
 // =============================================================================
 // WebSocket implementation
@@ -193,18 +216,35 @@ export interface WsChannelCapability {
    * `l4_batch` pages.
    */
   bulkReplay: boolean;
+  /**
+   * The only endpoint that serves the channel (`/v1/capabilities`
+   * `ws_endpoint`), e.g. {@link STREAM_WS_URL} for `mempool`. Absent when the
+   * channel is served on the default endpoint, `wss://api.0xarchive.io/ws`.
+   */
+  wsEndpoint?: string;
+  /**
+   * The plans that include the channel (`/v1/capabilities` `plans`), e.g.
+   * `['pro', 'scale', 'enterprise']` for `mempool`. Absent when every plan
+   * includes it, Free included.
+   */
+  plans?: readonly string[];
 }
 
 const offer = (
   venue: Venue,
   datatype: CapabilityDatatype,
   modes: { live?: boolean; replay?: boolean; bulk?: boolean },
+  access: { wsEndpoint?: string; plans?: readonly string[] } = {},
 ): WsChannelCapability => ({
   venue,
   datatype,
   live: modes.live ?? false,
   replay: (modes.replay ?? false) || (modes.bulk ?? false),
   bulkReplay: modes.bulk ?? false,
+  // Set only where the API sets them: absent means the default endpoint and
+  // every plan.
+  ...(access.wsEndpoint !== undefined ? { wsEndpoint: access.wsEndpoint } : {}),
+  ...(access.plans !== undefined ? { plans: access.plans } : {}),
 });
 
 const LIVE_AND_REPLAY = { live: true, replay: true } as const;
@@ -220,6 +260,7 @@ const REST_ONLY = {} as const;
  * replay checks read it, so a live subscription or replay the API does not
  * serve is refused before sending. `spot_twap` is listed with neither mode:
  * Spot TWAP statuses are served over REST only (`client.spot.twap`).
+ * `mempool` is the one channel with an endpoint and plans of its own.
  */
 export const WS_CHANNEL_CAPABILITIES: Readonly<Record<WsChannel, WsChannelCapability>> = Object.freeze({
   // Hyperliquid core
@@ -269,6 +310,11 @@ export const WS_CHANNEL_CAPABILITIES: Readonly<Record<WsChannel, WsChannelCapabi
   rh_lighter_candles: offer('rh-lighter', 'candles', REPLAY_ONLY),
   rh_lighter_funding: offer('rh-lighter', 'funding', LIVE_AND_REPLAY),
   rh_lighter_open_interest: offer('rh-lighter', 'oi', LIVE_AND_REPLAY),
+  // Pending transactions on every Hyperliquid product
+  mempool: offer('hyperliquid', 'mempool', LIVE_ONLY, {
+    wsEndpoint: STREAM_WS_URL,
+    plans: Object.freeze(['pro', 'scale', 'enterprise']),
+  }),
 });
 
 const ALL_CHANNELS = Object.keys(WS_CHANNEL_CAPABILITIES) as WsChannel[];
@@ -398,9 +444,22 @@ export function replayOnlyError(channel: WsChannel): string {
   );
 }
 
+/** The refusal for a replay of `mempool`, which is never stored. */
+export const MEMPOOL_REPLAY_ERROR =
+  'mempool is live only; pending transactions are not stored, so there is no replay or REST history.';
+
 /** The refusal for a replay of a channel that only streams live. */
 export function liveOnlyError(channel: WsChannel): string {
+  if (channel === 'mempool') return MEMPOOL_REPLAY_ERROR;
   return `${channel} is live only; the API does not replay it. Subscribe for live data or use REST for history.`;
+}
+
+/**
+ * The refusal for a subscription, on the default endpoint, to a channel that
+ * only another endpoint serves (`wsEndpoint` in its capability).
+ */
+export function endpointOnlyError(channel: WsChannel, endpoint: string): string {
+  return `${channel} is served on ${endpoint} only. Create a client with { wsUrl: '${endpoint}' } to subscribe to it.`;
 }
 
 /** The refusal for a live subscription or replay of a channel served over REST only. */
@@ -418,10 +477,25 @@ export function bulkReplayMultiError(channel: WsChannel): string {
   return `${channel} supports single-channel replay only; replay it with replay(), not multiReplay().`;
 }
 
-function validateLiveSubscription(channel: WsChannel, options?: WsSubscribeOptions): void {
+/** True when `url` points at the default endpoint, `wss://api.0xarchive.io/ws`. */
+function isDefaultEndpoint(url: string): boolean {
+  try {
+    return new URL(url).host === new URL(DEFAULT_WS_URL).host;
+  } catch {
+    return false;
+  }
+}
+
+function validateLiveSubscription(channel: WsChannel, wsUrl: string, options?: WsSubscribeOptions): void {
   const capability = capabilityOf(channel);
   if (capability && !capability.live) {
     throw new Error(capability.replay ? replayOnlyError(channel) : restOnlyError(channel));
+  }
+  // Only the default endpoint is known not to serve a channel that names
+  // another one. Any other URL (a proxy, for example) is left to the server,
+  // which answers with `endpoint_unsupported` if it does not serve it.
+  if (capability?.wsEndpoint !== undefined && isDefaultEndpoint(wsUrl)) {
+    throw new Error(endpointOnlyError(channel, capability.wsEndpoint));
   }
   const intervalMs = options?.intervalMs;
   // `== null` also treats an explicit null from JavaScript callers as omitted.
@@ -649,8 +723,11 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * `hip4_open_interest`, `lighter_candles`, `lighter_l3_orderbook` and
  * `rh_lighter_candles` are replay-only, and `spot_twap` is served over REST
  * only. Live Lighter data, on either deployment, is served on
- * `wss://api.0xarchive.io/ws` (the default URL). `WS_CHANNEL_CAPABILITIES`
- * lists what every channel offers.
+ * `wss://api.0xarchive.io/ws` (the default URL). `mempool`, the pending
+ * transactions of every Hyperliquid product, is live only and served on
+ * `wss://stream.0xarchive.io/ws` (`STREAM_WS_URL`) only: create the client
+ * with that `wsUrl` to subscribe to it. `WS_CHANNEL_CAPABILITIES` lists what
+ * every channel offers.
  *
  * Call `connect()` and wait for it to resolve before sending. A replay or
  * other request made while the client is connecting or reconnecting is
@@ -668,7 +745,8 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * `errorCode` (`onServerError()`). `slow_consumer` means the connection fell
  * behind a stream and messages were dropped: re-subscribe, or restart the
  * replay, to resync. `endpoint_unsupported` means the endpoint does not serve
- * the channel; the message names the one that does.
+ * the channel; the message names the one that does. `forbidden` on
+ * `mempool` means the plan does not include it.
  *
  * **Keep-Alive:** The server sends WebSocket ping frames every 30 seconds
  * and will disconnect idle connections after 60 seconds. This SDK automatically
@@ -710,6 +788,7 @@ export class OxArchiveWs {
   private rhLighterOrderbookHandlers: Array<(coin: string, data: LighterLiveOrderbook) => void> = [];
   private rhLighterTradesHandlers: Array<(coin: string, data: LighterLiveTrade[]) => void> = [];
   private rhLighterStatsHandlers: Array<(channel: 'rh_lighter_open_interest' | 'rh_lighter_funding', coin: string, data: LighterLiveStats) => void> = [];
+  private mempoolHandlers: Array<(symbol: string | null, items: MempoolItem[]) => void> = [];
 
   constructor(options: WsOptions) {
     this.options = {
@@ -861,15 +940,21 @@ export class OxArchiveWs {
    * level, then `l4_batch` messages of level changes. Read them with
    * `onMessage`; see `WsL2FullDepthSnapshot` and `WsL2FullDepthBatch`.
    *
+   * `mempool` is served on `wss://stream.0xarchive.io/ws` only
+   * (`STREAM_WS_URL`), and its symbol is optional; see `subscribeMempool()`.
+   *
    * @param channel - Channel to subscribe to
-   * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive
+   * @param coin - Symbol (e.g. 'BTC'); Lighter symbols are case-insensitive.
+   *   Required on every channel except `all_tickers` (none) and `mempool`
+   *   (optional).
    * @param options - `intervalMs` sets the book rate for `lighter_orderbook`
    *   and `rh_lighter_orderbook` only (100 to 5000 ms, default one book a second)
-   * @throws Error for a replay-only or REST-only channel, or an `intervalMs`
-   *   on another channel or outside 100 to 5000
+   * @throws Error for a replay-only or REST-only channel, an `intervalMs`
+   *   on another channel or outside 100 to 5000, or `mempool` on a client
+   *   connected to the default endpoint
    */
   subscribe(channel: WsChannel, coin?: string, options?: WsSubscribeOptions): void {
-    validateLiveSubscription(channel, options);
+    validateLiveSubscription(channel, this.options.wsUrl, options);
     const subscription: StoredSubscription = { channel, coin };
     if (options?.intervalMs != null) {
       subscription.intervalMs = options.intervalMs;
@@ -1080,6 +1165,43 @@ export class OxArchiveWs {
   }
 
   /**
+   * Subscribe to pending transactions (`mempool`): signed Hyperliquid actions
+   * as our Hyperliquid node receives them from its peers, before they are in
+   * a block, on every Hyperliquid product. Live only, with the Pro, Scale and
+   * Enterprise plans.
+   *
+   * Served on `wss://stream.0xarchive.io/ws` only: create the client with
+   * `wsUrl: STREAM_WS_URL`. On the default endpoint this throws before
+   * sending. The server answers `forbidden` on other plans and `rate_limited`
+   * when the unfiltered stream is at capacity (subscribe with a symbol, or
+   * try again later); read these with `onServerError()`.
+   *
+   * @param symbol Optional. Leave it out for every pending transaction our
+   *   Hyperliquid node receives (the unfiltered stream is several megabytes
+   *   per second before compression), or pass a symbol for only the actions
+   *   that reference that market:
+   *   `BTC`, `xyz:TSLA` (HIP-3), `HYPE-USDC` (spot) or `#49720` (HIP-4).
+   *
+   * @example
+   * ```typescript
+   * const ws = new OxArchiveWs({ apiKey: 'ox_...', wsUrl: STREAM_WS_URL });
+   * ws.onMempool((symbol, items) => {
+   *   for (const item of items) console.log(item.received_at, item.action.type, item.symbols);
+   * });
+   * await ws.connect();
+   * ws.subscribeMempool('BTC');
+   * ```
+   */
+  subscribeMempool(symbol?: string): void {
+    this.subscribe('mempool', symbol);
+  }
+
+  /** Unsubscribe from pending transactions: the unfiltered stream, or one symbol. */
+  unsubscribeMempool(symbol?: string): void {
+    this.unsubscribe('mempool', symbol);
+  }
+
+  /**
    * Subscribe to a HIP-4 channel for a given outcome coin.
    *
    * @param channel One of `hip4_trades`, `hip4_l4_diffs`, `hip4_l4_orders`
@@ -1120,8 +1242,8 @@ export class OxArchiveWs {
    *
    * Which channels replay is `WS_CHANNEL_CAPABILITIES` (it mirrors
    * `client.capabilities()`); a channel the API does not replay (`ticker`,
-   * `all_tickers`, `spot_orderbook`, `spot_trades`, `spot_twap`) is refused
-   * before sending.
+   * `all_tickers`, `spot_orderbook`, `spot_trades`, `mempool`, `spot_twap`)
+   * is refused before sending.
    *
    * - Timed replay (every other channel) preserves the original timing,
    *   scaled by `speed`, and delivers `historical_data` messages. Lighter and
@@ -1636,6 +1758,17 @@ export class OxArchiveWs {
   }
 
   /**
+   * Handle `mempool` messages: the pending transactions in one batch our node
+   * received from a peer. `symbol` is the subscription's symbol, or null on
+   * the unfiltered stream. A symbol subscription receives every action that
+   * references the market, whole, so an order batch touching two markets
+   * reaches the subscribers of both.
+   */
+  onMempool(handler: (symbol: string | null, items: MempoolItem[]) => void): void {
+    this.mempoolHandlers.push(handler);
+  }
+
+  /**
    * Handle `{"type":"error"}` messages from the server. `errorCode` is the
    * stable code (see `ERROR_CODES`): for example `unsupported_for_venue` when
    * a channel does not offer the requested mode, `rate_limited` when
@@ -1880,7 +2013,13 @@ export class OxArchiveWs {
         break;
       }
       case 'data': {
-        if (RH_LIGHTER_REPLAY_CHANNELS.has(message.channel)) {
+        if (message.channel === 'mempool') {
+          const msg = message as unknown as WsMempoolData;
+          const items = Array.isArray(msg.data) ? msg.data : [];
+          for (const handler of this.mempoolHandlers) {
+            handler(msg.symbol ?? msg.coin ?? null, items);
+          }
+        } else if (RH_LIGHTER_REPLAY_CHANNELS.has(message.channel)) {
           this.dispatchRhLighter(message.channel, message.coin, message.data);
         } else if (message.channel === 'lighter_orderbook' && this.lighterOrderbookHandlers.length > 0) {
           // A Lighter-specific handler takes the book, so Lighter 'BTC' does

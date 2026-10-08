@@ -877,7 +877,8 @@ describe('order history triggered and depth', () => {
 // 7. WebSocket replay availability mirrors /v1/capabilities
 // =============================================================================
 
-// Every WebSocket row of `GET /v1/capabilities` on 2026-10-04:
+// Every WebSocket row of `GET /v1/capabilities` on 2026-10-04, and the
+// `mempool` row that comes with that channel:
 // [venue, datatype, ws_channels, live, replay]. The Spot TWAP row lists no
 // channel: `spot_twap` is accepted on subscribe but neither streams nor
 // replays, so its data is REST only.
@@ -922,6 +923,13 @@ const WS_CAPABILITY_ROWS: Array<[string, string, WsChannel[], boolean, boolean]>
   ['rh-lighter', 'candles', ['rh_lighter_candles'], false, true],
   ['rh-lighter', 'funding', ['rh_lighter_funding'], true, true],
   ['rh-lighter', 'oi', ['rh_lighter_open_interest'], true, true],
+  ['hyperliquid', 'mempool', ['mempool'], true, false],
+];
+
+// The rows that set `ws_endpoint` and `plans`, the only ones that do:
+// [channel, ws_endpoint, plans].
+const ENDPOINT_AND_PLAN_ROWS: Array<[WsChannel, string, string[]]> = [
+  ['mempool', 'wss://stream.0xarchive.io/ws', ['pro', 'scale', 'enterprise']],
 ];
 
 // Channel names the SDK keeps for compatibility whose capabilities row lists
@@ -945,6 +953,18 @@ describe('WebSocket channel capabilities', () => {
     expect(Object.keys(WS_CHANNEL_CAPABILITIES).sort()).toEqual(expected.map(([c]) => c).sort());
     for (const [channel, capability] of expected) {
       expect(WS_CHANNEL_CAPABILITIES[channel], channel).toMatchObject(capability);
+    }
+  });
+
+  it('sets an endpoint and plans on the rows that have them, and on no other', () => {
+    const restricted = new Map(ENDPOINT_AND_PLAN_ROWS.map(([channel, wsEndpoint, plans]) => [channel, { wsEndpoint, plans }]));
+    for (const [channel, capability] of Object.entries(WS_CHANNEL_CAPABILITIES)) {
+      const expected = restricted.get(channel as WsChannel);
+      if (expected) {
+        expect(capability, channel).toMatchObject(expected);
+      } else {
+        expect('wsEndpoint' in capability || 'plans' in capability, channel).toBe(false);
+      }
     }
   });
 
@@ -988,7 +1008,7 @@ describe('WebSocket channel capabilities', () => {
     },
   );
 
-  it.each(['ticker', 'all_tickers', 'spot_orderbook', 'spot_trades'] as const)(
+  it.each(['ticker', 'all_tickers', 'spot_orderbook', 'spot_trades', 'mempool'] as const)(
     'refuses a %s replay before sending',
     (channel) => {
       const { ws, sent } = openClient();
