@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0xArchiveIO/sdk-typescript/HEAD/assets/readme/hero-dark.png">
-  <img alt="@0xarchive/sdk, the 0xArchive TypeScript SDK: Hyperliquid and Lighter, live in your app. 494 BTC trades from both venues over one WebSocket connection in 60 seconds." src="https://raw.githubusercontent.com/0xArchiveIO/sdk-typescript/HEAD/assets/readme/hero-light.png" width="800">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0xArchiveIO/sdk-typescript/HEAD/assets/readme/hero-dark.svg">
+  <img alt="@0xarchive/sdk, the 0xArchive TypeScript SDK: Hyperliquid and Lighter, live in your app. 494 BTC trades from both venues over one WebSocket connection in 60 seconds." src="https://raw.githubusercontent.com/0xArchiveIO/sdk-typescript/HEAD/assets/readme/hero-light.svg" width="800">
 </picture>
 
 <a href="https://www.npmjs.com/package/@0xarchive/sdk"><img alt="npm: @0xarchive/sdk" src="https://img.shields.io/npm/v/%400xarchive%2Fsdk?style=flat-square&label=npm&labelColor=3a3a37&color=21C55E"></a> <img alt="types: included" src="https://img.shields.io/badge/types-included-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="node: 18+" src="https://img.shields.io/badge/node-18+-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="data: Hyperliquid · Lighter" src="https://img.shields.io/badge/data-Hyperliquid_·_Lighter-21C55E?style=flat-square&labelColor=3a3a37">
