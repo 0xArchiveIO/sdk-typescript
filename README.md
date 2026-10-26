@@ -13,8 +13,6 @@
 
 Put Hyperliquid and Lighter market data in a Node service, dashboard or agent backend: typed REST calls, live WebSocket streams, historical replay and signed webhooks from one package.
 
-<sub>The chart: `subscribeTrades('BTC')` and `subscribeLighter('trades', 'BTC')` on one `OxArchiveWs` connection for 60 seconds from 2026-10-26 19:44 UTC, each trade counted once.</sub>
-
 ## Highlights
 
 - **Two venues, one client.** Hyperliquid core perps, HIP-3, HIP-4 and Spot, and Lighter on mainnet and Robinhood Chain, as `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter` and `client.rhLighter`. [Account positions](#account-positions) work on Hyperliquid, HIP-3 and both Lighter deployments.
