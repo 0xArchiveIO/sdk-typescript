@@ -1,12 +1,27 @@
-# @0xarchive/sdk
+<div align="center">
 
-[![npm version](https://img.shields.io/npm/v/%400xarchive%2Fsdk.svg)](https://www.npmjs.com/package/@0xarchive/sdk) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0xArchiveIO/sdk-typescript/HEAD/assets/readme/hero-dark.png">
+  <img alt="@0xarchive/sdk, the 0xArchive TypeScript SDK: Hyperliquid and Lighter, live in your app. 494 BTC trades from both venues over one WebSocket connection in 60 seconds." src="https://raw.githubusercontent.com/0xArchiveIO/sdk-typescript/HEAD/assets/readme/hero-light.png" width="800">
+</picture>
 
-TypeScript client for 0xArchive market data in Node services, dashboards, coding-agent workflows, and agent backends.
+<a href="https://www.npmjs.com/package/@0xarchive/sdk"><img alt="npm: @0xarchive/sdk" src="https://img.shields.io/npm/v/%400xarchive%2Fsdk?style=flat-square&label=npm&labelColor=3a3a37&color=21C55E"></a> <img alt="types: included" src="https://img.shields.io/badge/types-included-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="node: 18+" src="https://img.shields.io/badge/node-18+-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="data: Hyperliquid · Lighter" src="https://img.shields.io/badge/data-Hyperliquid_·_Lighter-21C55E?style=flat-square&labelColor=3a3a37">
 
-0xArchive is granular market data infrastructure for two venues: Hyperliquid and Lighter. Hyperliquid includes core perps (`/v1/hyperliquid`), HIP-3 builder perps (`/v1/hyperliquid/hip3`), HIP-4 outcome markets (`/v1/hyperliquid/hip4`), and Hyperliquid Spot (`/v1/hyperliquid/spot`). Lighter has two deployments: mainnet (`/v1/lighter`) and Robinhood Chain (`/v1/rh-lighter`). In this SDK these map to `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter`, and `client.rhLighter`. [Account positions](#account-positions) are available on `client.hyperliquid`, `client.hyperliquid.hip3`, `client.lighter`, and `client.rhLighter`.
+[Install](#installation) · [Quick start](#quick-start) · [Reference](#rest-api-reference) · [WebSocket](#websocket-client) · [Webhooks](#webhooks) · [Docs](https://docs.0xarchive.io/sdks)
 
-Use this SDK when the integration belongs in TypeScript or JavaScript code and you want typed REST helpers, WebSocket support, replay workflows, webhook management with signature verification, and order-book reconstruction utilities.
+</div>
+
+Put Hyperliquid and Lighter market data in a Node service, dashboard or agent backend: typed REST calls, live WebSocket streams, historical replay and signed webhooks from one package.
+
+<sub>The chart: `subscribeTrades('BTC')` and `subscribeLighter('trades', 'BTC')` on one `OxArchiveWs` connection for 60 seconds from 2026-10-26 19:44 UTC, each trade counted once.</sub>
+
+## Highlights
+
+- **Two venues, one client.** Hyperliquid core perps, HIP-3, HIP-4 and Spot, and Lighter on mainnet and Robinhood Chain, as `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter` and `client.rhLighter`. [Account positions](#account-positions) work on Hyperliquid, HIP-3 and both Lighter deployments.
+- **Live and replay on one socket.** Hyperliquid books, trades and L4 diffs, and Lighter books, trades, funding and open interest, stream live; replay plays history back through the same handlers.
+- **Webhooks with verification.** Create rules, dry-run them before they go live, and check every delivery's signature in Node, browsers or edge runtimes.
+- **Books at every depth.** L2 snapshots, full-depth L2, L4 books with the wallet behind each order, and client-side reconstruction.
+- **Typed, optionally validated.** Types ship with the package; turn on Zod validation with `validate: true`.
 
 ## Installation
 
