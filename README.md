@@ -13,9 +13,10 @@
 
 Put Hyperliquid and Lighter market data in a Node service, dashboard or agent backend: typed REST calls, live WebSocket streams, historical replay and signed webhooks from one package.
 
+0xArchive is granular market data infrastructure for two venues: Hyperliquid and Lighter. Hyperliquid includes core perps (`/v1/hyperliquid`), HIP-3 builder perps (`/v1/hyperliquid/hip3`), HIP-4 outcome markets (`/v1/hyperliquid/hip4`), and Hyperliquid Spot (`/v1/hyperliquid/spot`). Lighter has two deployments: mainnet (`/v1/lighter`) and Robinhood Chain (`/v1/rh-lighter`). In this SDK these map to `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter`, and `client.rhLighter`. [Account positions](#account-positions) are available on `client.hyperliquid`, `client.hyperliquid.hip3`, `client.lighter`, and `client.rhLighter`.
+
 ## Highlights
 
-- **Two venues, one client.** Hyperliquid core perps, HIP-3, HIP-4 and Spot, and Lighter on mainnet and Robinhood Chain, as `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter` and `client.rhLighter`. [Account positions](#account-positions) work on Hyperliquid, HIP-3 and both Lighter deployments.
 - **Live and replay on one socket.** Hyperliquid books, trades and L4 diffs, and Lighter books, trades, funding and open interest, stream live; replay plays history back through the same handlers.
 - **Webhooks with verification.** Create rules, dry-run them before they go live, and check every delivery's signature in Node, browsers or edge runtimes.
 - **Books at every depth.** L2 snapshots, full-depth L2, L4 books with the wallet behind each order, and client-side reconstruction.
