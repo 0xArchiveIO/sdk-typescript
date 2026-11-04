@@ -11,13 +11,66 @@ const section = (text: string, start: string, end: string): string => {
   return text.slice(from, to);
 };
 
-describe('1.13.0 release surface', () => {
+describe('1.14.0 release surface', () => {
   const readme = readRepoFile('README.md');
   const changelog = readRepoFile('CHANGELOG.md');
   const pkg = JSON.parse(readRepoFile('package.json')) as { version: string };
 
   it('carries one aligned version', () => {
-    expect(pkg.version).toBe('1.13.0');
+    expect(pkg.version).toBe('1.14.0');
+    expect(changelog.indexOf('## 1.14.0')).toBeGreaterThanOrEqual(0);
+    expect(changelog.indexOf('## 1.14.0')).toBeLessThan(changelog.indexOf('## 1.13.0'));
+  });
+
+  it('documents the four datasets: plans, coverage, iterators and the plan error', () => {
+    const section4 = section(readme, '### Build-and-above datasets', '### Data Quality Monitoring');
+    for (const text of [
+      'Build, Pro, Scale and Enterprise',
+      '`PlanRequiredError`',
+      'client.hyperliquid.tradeIntent',
+      'client.hyperliquid.hip3.tradeIntent',
+      'client.hyperliquid.usdcFlows',
+      'client.hyperliquid.breadthMa',
+      'client.hyperliquid.hip3.breadthMa',
+      'client.hyperliquid.positioning',
+      'client.hyperliquid.hip3.positioning',
+      // Coverage, exact dates
+      '2025-05-25 15:00',
+      '2025-10-13 12:00',
+      '2026-07-14 00:00',
+      '2025-09-27 09:33',
+      'n = 5 from 2025-03-27, 20 from 2025-04-11, 50 from 2025-05-11, 200 from 2025-10-08',
+      'n = 5 from 2025-12-27, 20 from 2026-01-11, 50 from 2026-02-10, 200 from 2026-07-10',
+      'never stop on a short or empty page',
+      'dedupe on `id`',
+      'No wallet is named',
+      'not comparable with above-VWAP breadth',
+      'no history',
+    ]) {
+      expect(section4).toContain(text);
+    }
+    const errors = section(readme, '## Error Handling', '## TypeScript Support');
+    expect(errors).toContain('PlanRequiredError');
+    expect(errors).toContain('requiredPlans');
+    const notes = section(changelog, '## 1.14.0', '## 1.13.0');
+    expect(notes).toContain('`PlanRequiredError`');
+    expect(notes).toContain('Build, Pro, Scale and Enterprise');
+  });
+
+  it('uses no em dashes in the new copy', () => {
+    const newCopy = [
+      section(readme, '### Build-and-above datasets', '### Data Quality Monitoring'),
+      section(changelog, '## 1.14.0', '## 1.13.0'),
+    ].join('\n');
+    expect(newCopy).not.toContain('\u2014');
+  });
+});
+
+describe('1.13.0 release surface', () => {
+  const readme = readRepoFile('README.md');
+  const changelog = readRepoFile('CHANGELOG.md');
+
+  it('keeps its changelog entry in order', () => {
     expect(changelog.indexOf('## 1.13.0')).toBeGreaterThanOrEqual(0);
     expect(changelog.indexOf('## 1.13.0')).toBeLessThan(changelog.indexOf('## 1.12.0'));
   });

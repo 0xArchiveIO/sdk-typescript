@@ -33,6 +33,11 @@ export const API_VERSION_HEADER = '0xArchive-Version';
  * - `route_not_found`: no route matches the path.
  * - `not_found`: the route exists but the resource id does not.
  * - `unauthorized`, `forbidden`, `insufficient_credits`, `rate_limited`, `conflict`.
+ *   `forbidden` is also the plan refusal: trade intent, USDC flows, breadth
+ *   above the n-day moving average and positioning are included with the
+ *   Build, Pro, Scale and Enterprise plans, and the `mempool` WebSocket
+ *   channel with Pro, Scale and Enterprise. A REST plan refusal is thrown as
+ *   `PlanRequiredError`, with `requiredPlans`.
  * - `upstream_unavailable`: a dependency is unavailable; retry later.
  * - `internal_error`.
  * - `slow_consumer` (WebSocket only): the connection fell behind a stream and

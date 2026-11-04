@@ -1100,6 +1100,133 @@ export const CvdBucketSchema = z.object({
 export const CvdBucketArrayResponseSchema = ApiResponseSchema(z.array(CvdBucketSchema));
 
 // =============================================================================
+// Build-and-above dataset schemas: trade intent, USDC flows, moving-average
+// breadth and positioning
+// =============================================================================
+
+export const TradeIntentBucketSchema = z.object({
+  timestamp: z.string(),
+  timestampMs: z.number(),
+  close: z.number().nullable(),
+  priceSource: z.string().nullable(),
+  openLong: z.number(),
+  openShort: z.number(),
+  tpLong: z.number(),
+  tpShort: z.number(),
+  stopLong: z.number(),
+  stopShort: z.number(),
+  flipLs: z.number(),
+  flipSl: z.number(),
+  mmUsd: z.number(),
+  winnersFlow: z.number().nullable(),
+  losersFlow: z.number().nullable(),
+  winnersNet: z.number().nullable(),
+  winnersGross: z.number().nullable(),
+  losersNet: z.number().nullable(),
+  losersGross: z.number().nullable(),
+  winnersCount: z.number().int().nullable(),
+  losersCount: z.number().int().nullable(),
+  quality: z.string(),
+  isFinal: z.boolean(),
+  preliminary: z.boolean(),
+  preliminaryFrom: z.string().nullable(),
+  preliminaryFromMs: z.number().nullable(),
+  method: z.string(),
+});
+
+export const TradeIntentBucketArrayResponseSchema = ApiResponseSchema(z.array(TradeIntentBucketSchema));
+
+export const UsdcFlowEventSchema = z.object({
+  id: z.string(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
+  kind: z.string(),
+  amountUsd: z.number(),
+  feeUsd: z.number(),
+  user: z.string().nullable(),
+  txHash: z.string().nullable(),
+  blockNumber: z.number(),
+  eventIndex: z.number(),
+});
+
+export const UsdcFlowEventArrayResponseSchema = ApiResponseSchema(z.array(UsdcFlowEventSchema));
+
+export const UsdcFlowVolumeBucketSchema = z.object({
+  timestamp: z.string(),
+  timestampMs: z.number(),
+  depositUsd: z.number(),
+  depositCount: NonNegativeIntegerSchema,
+  withdrawUsd: z.number(),
+  withdrawCount: NonNegativeIntegerSchema,
+  evmInUsd: z.number(),
+  evmInCount: NonNegativeIntegerSchema,
+  evmOutUsd: z.number(),
+  evmOutCount: NonNegativeIntegerSchema,
+  netUsd: z.number(),
+});
+
+export const UsdcFlowVolumeBucketArrayResponseSchema = ApiResponseSchema(z.array(UsdcFlowVolumeBucketSchema));
+
+export const BreadthMaCountsSchema = z.object({
+  candidates: NonNegativeIntegerSchema,
+  eligible: NonNegativeIntegerSchema,
+  above: NonNegativeIntegerSchema,
+  at: NonNegativeIntegerSchema,
+  below: NonNegativeIntegerSchema,
+  excludedStalePrice: NonNegativeIntegerSchema,
+  excludedShortHistory: NonNegativeIntegerSchema,
+});
+
+export const BreadthMaDistanceSchema = z.object({
+  p25: z.number().nullable(),
+  median: z.number().nullable(),
+  p75: z.number().nullable(),
+});
+
+export const BreadthMaReadingSchema = z.object({
+  timestamp: z.string(),
+  timestampMs: z.number(),
+  calculatedAt: z.string(),
+  calculatedAtMs: z.number(),
+  n: z.number().int(),
+  method: z.string(),
+  valuePct: z.number().nullable(),
+  coverageRatio: z.number().min(0).max(1),
+  counts: BreadthMaCountsSchema,
+  distance: BreadthMaDistanceSchema,
+  isFinal: z.boolean(),
+});
+
+export const BreadthMaReadingResponseSchema = ApiResponseSchema(BreadthMaReadingSchema);
+export const BreadthMaReadingArrayResponseSchema = ApiResponseSchema(z.array(BreadthMaReadingSchema));
+
+export const PositioningReadingSchema = z.object({
+  symbol: z.string(),
+  window: z.string(),
+  windowStart: z.string(),
+  windowStartMs: z.number(),
+  windowEnd: z.string(),
+  windowEndMs: z.number(),
+  oiStart: z.number().nullable(),
+  oiEnd: z.number().nullable(),
+  markStart: z.number().nullable(),
+  markEnd: z.number().nullable(),
+  oiBuckets: NonNegativeIntegerSchema,
+  buyUsd: z.number(),
+  sellUsd: z.number(),
+  liqLongUsd: z.number(),
+  liqShortUsd: z.number(),
+  liqLongCount: NonNegativeIntegerSchema,
+  liqShortCount: NonNegativeIntegerSchema,
+  typicalPrice: z.number().nullable(),
+  typicalOi: z.number().nullable(),
+  typicalFlow: z.number().nullable(),
+  typicalWindows: NonNegativeIntegerSchema,
+});
+
+export const PositioningReadingArrayResponseSchema = ApiResponseSchema(z.array(PositioningReadingSchema));
+
+// =============================================================================
 // HIP-3 Oracle Schemas
 // =============================================================================
 
@@ -1281,6 +1408,11 @@ export type ValidatedAccountSummary = z.infer<typeof AccountSummarySchema>;
 export type ValidatedMarketPositionsSummary = z.infer<typeof MarketPositionsSummarySchema>;
 export type ValidatedWalletPositions = z.infer<typeof WalletPositionsSchema>;
 export type ValidatedCvdBucket = z.infer<typeof CvdBucketSchema>;
+export type ValidatedTradeIntentBucket = z.infer<typeof TradeIntentBucketSchema>;
+export type ValidatedUsdcFlowEvent = z.infer<typeof UsdcFlowEventSchema>;
+export type ValidatedUsdcFlowVolumeBucket = z.infer<typeof UsdcFlowVolumeBucketSchema>;
+export type ValidatedBreadthMaReading = z.infer<typeof BreadthMaReadingSchema>;
+export type ValidatedPositioningReading = z.infer<typeof PositioningReadingSchema>;
 export type ValidatedHip3OracleDiscoveryBounds = z.infer<typeof Hip3OracleDiscoveryBoundsSchema>;
 export type ValidatedHip3OracleExternalPrice = z.infer<typeof Hip3OracleExternalPriceSchema>;
 export type ValidatedHip4Question = z.infer<typeof Hip4QuestionSchema>;

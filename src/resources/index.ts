@@ -34,3 +34,12 @@ export { Hip3OracleResource } from './hip3-oracle';
 export { Hip4QuestionsResource } from './hip4-questions';
 export { WalletsResource } from './wallets';
 export { SymbolsResource } from './symbols';
+export { TradeIntentResource, TRADE_INTENT_INTERVALS, TRADE_INTENT_MAX_LIMIT } from './trade-intent';
+export {
+  UsdcFlowsResource,
+  USDC_FLOW_KINDS,
+  USDC_FLOW_VOLUME_INTERVALS,
+  USDC_FLOWS_MAX_LIMIT,
+} from './usdc-flows';
+export { BreadthMaResource, BREADTH_MA_LENGTHS, BREADTH_MA_INTERVALS, BREADTH_MA_MAX_LIMIT } from './breadth-ma';
+export { PositioningResource, POSITIONING_WINDOWS } from './positioning';

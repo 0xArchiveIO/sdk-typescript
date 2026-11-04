@@ -43,6 +43,10 @@ import {
   Hip3OracleResource,
   Hip4QuestionsResource,
   WalletsResource,
+  TradeIntentResource,
+  UsdcFlowsResource,
+  BreadthMaResource,
+  PositioningResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -134,6 +138,34 @@ export class HyperliquidClient {
   public readonly wallets: WalletsResource;
 
   /**
+   * Trade intent: each bucket's USD volume by why it traded (new positions,
+   * profit taken, stopped out, flips), market makers apart, and the trailing
+   * 72-hour winners and losers as aggregates. Hourly intervals from
+   * 2025-05-25 15:00 UTC. Build, Pro, Scale and Enterprise plans.
+   */
+  public readonly tradeIntent: TradeIntentResource;
+
+  /**
+   * USDC entering and leaving HyperCore (Arbitrum bridge and HyperEVM): every
+   * event, and totals per interval. From 2025-09-27 09:33 UTC. Build, Pro,
+   * Scale and Enterprise plans.
+   */
+  public readonly usdcFlows: UsdcFlowsResource;
+
+  /**
+   * Breadth above the n-day moving average (n = 5, 20, 50 or 200; n = 5 from
+   * 2025-03-27). Build, Pro, Scale and Enterprise plans.
+   */
+  public readonly breadthMa: BreadthMaResource;
+
+  /**
+   * Positioning: every listed perp's open interest change, taker flow and
+   * liquidations over the current 1h, 4h or 24h window. Build, Pro, Scale and
+   * Enterprise plans.
+   */
+  public readonly positioning: PositioningResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (trades from 2025-10-13)
    */
   public readonly hip3: Hip3Client;
@@ -165,6 +197,10 @@ export class HyperliquidClient {
     this.cvd = new CvdResource(http, basePath);
     this.wallets = new WalletsResource(http, basePath);
     this.breadth = new Hip3BreadthResource(http, basePath);
+    this.tradeIntent = new TradeIntentResource(http, basePath);
+    this.usdcFlows = new UsdcFlowsResource(http, basePath);
+    this.breadthMa = new BreadthMaResource(http, basePath);
+    this.positioning = new PositioningResource(http, basePath);
     this.hip3 = new Hip3Client(http);
     this.hip4 = new Hip4Client(http);
   }
@@ -304,6 +340,27 @@ export class Hip3Client {
    */
   public readonly wallets: WalletsResource;
 
+  /**
+   * Trade intent: each bucket's USD volume by why it traded, market makers
+   * apart, and the trailing 72-hour winners and losers as aggregates. Hourly
+   * intervals from 2025-10-13 12:00 UTC. Build, Pro, Scale and Enterprise
+   * plans.
+   */
+  public readonly tradeIntent: TradeIntentResource;
+
+  /**
+   * Breadth above the n-day moving average for HIP-3 perps (n = 5, 20, 50 or
+   * 200; n = 5 from 2025-12-27). Build, Pro, Scale and Enterprise plans.
+   */
+  public readonly breadthMa: BreadthMaResource;
+
+  /**
+   * Positioning: every listed HIP-3 perp's open interest change, taker flow
+   * and liquidations over the current 1h, 4h or 24h window. Build, Pro, Scale
+   * and Enterprise plans.
+   */
+  public readonly positioning: PositioningResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -326,6 +383,9 @@ export class Hip3Client {
     this.cvd = new CvdResource(http, basePath, coinTransform);
     this.oracle = new Hip3OracleResource(http, basePath);
     this.wallets = new WalletsResource(http, basePath);
+    this.tradeIntent = new TradeIntentResource(http, basePath, coinTransform);
+    this.breadthMa = new BreadthMaResource(http, basePath);
+    this.positioning = new PositioningResource(http, basePath);
   }
 
   /**
