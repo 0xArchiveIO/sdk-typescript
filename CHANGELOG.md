@@ -5,7 +5,7 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
-## 1.14.0 (Unreleased)
+## 1.14.0 (2026-11-04)
 
 ### Added
 - Four datasets included with the Build, Pro, Scale and Enterprise plans.
