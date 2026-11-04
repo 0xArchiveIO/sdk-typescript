@@ -5,6 +5,50 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
+## 1.14.0 (2026-11-04)
+
+### Added
+- Four datasets included with the Build, Pro, Scale and Enterprise plans.
+  A Free key gets HTTP 403 `forbidden`, thrown as `PlanRequiredError`.
+- Trade intent: `client.hyperliquid.tradeIntent` and
+  `client.hyperliquid.hip3.tradeIntent`, with `history(symbol, params)` and
+  `iterate(symbol, params)`. Each `TradeIntentBucket` splits one market's
+  USD volume by why it traded: new longs and shorts (`openLong`,
+  `openShort`), profit taken (`tpLong`, `tpShort`), stopped out
+  (`stopLong`, `stopShort`) and flips (`flipLs`, `flipSl`), market makers
+  apart (`mmUsd`), plus the trailing-72-hour winners and losers as
+  aggregates (no wallet is named). Intervals `1s` to `1d`, up to 2,000
+  buckets a page. Hourly intervals from 2025-05-25 15:00 UTC (Hyperliquid)
+  and 2025-10-13 12:00 UTC (HIP-3), minute intervals from 2026-07-14
+  00:00 UTC, second intervals for the last 3 days.
+- USDC flows: `client.hyperliquid.usdcFlows`, with `history(params)` and
+  `iterate(params)` for every event (`UsdcFlowEvent`: Arbitrum bridge
+  deposits and withdrawals, transfers to and from HyperEVM, with the
+  HyperCore account; filters `minUsd` and `kind`), and `volume(params)` and
+  `iterateVolume(params)` for totals per interval (`UsdcFlowVolumeBucket`).
+  From 2025-09-27 09:33 UTC, Hyperliquid only.
+- Breadth above the n-day moving average: `client.hyperliquid.breadthMa`
+  and `client.hyperliquid.hip3.breadthMa`, with `current({ n })`,
+  `history({ n, ... })` and `iterate({ n, ... })`, returning
+  `BreadthMaReading` (`valuePct`, `coverageRatio`, `counts`, the `distance`
+  quartiles, `isFinal`). `n` is required: 5, 20, 50 or 200. Hyperliquid
+  readings start 2025-03-27 (n = 5), 2025-04-11 (20), 2025-05-11 (50) and
+  2025-10-08 (200); HIP-3 2025-12-27, 2026-01-11, 2026-02-10 and
+  2026-07-10.
+- Positioning: `client.hyperliquid.positioning` and
+  `client.hyperliquid.hip3.positioning`, with `current({ window })`
+  (`'1h'`, `'4h'` or `'24h'`): one `PositioningReading` per listed perp over
+  the current window, with `meta.asOf` naming the close. No history.
+- The `iterate()` helpers follow `nextCursor` until it is absent, so a
+  short or empty page never ends them early. They need `start`; without
+  `end` they fix it to the current time once and send it on every page.
+- `PlanRequiredError` (extends `OxArchiveError`), with `datatype`,
+  `requiredPlans` and `upgradeUrl`, for a 403 plan refusal. Existing
+  `instanceof OxArchiveError` checks still catch it.
+- Zod schemas for the new records, `ApiError.datatype`, `requiredPlans`
+  and `upgradeUrl`, and the datatype ids `trade_intent`, `usdc_flows`,
+  `breadth_ma` and `positioning` on `CapabilityDatatype`.
+
 ## 1.13.0 (2026-10-08)
 
 ### Added

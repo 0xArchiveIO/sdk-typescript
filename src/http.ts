@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { ApiResponse, ApiError, CursorResponse } from './types';
-import { OxArchiveError } from './types';
+import { OxArchiveError, PlanRequiredError } from './types';
 import { TIME_PARAMS, toUnixMs } from './time';
 import { API_VERSION, API_VERSION_HEADER } from './contract';
 
@@ -131,17 +131,22 @@ export function errorFromResponse(status: number, body: unknown): OxArchiveError
   const validValues = Array.isArray(error.validValues)
     ? error.validValues.filter((v): v is string => typeof v === 'string')
     : undefined;
-  return new OxArchiveError(
-    message,
-    status,
-    requestIdOf(body),
-    typeof error.errorCode === 'string' ? error.errorCode : undefined,
-    {
-      param: typeof error.param === 'string' ? error.param : undefined,
-      validValues,
-      body: body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined,
-    }
-  );
+  const errorCode = typeof error.errorCode === 'string' ? error.errorCode : undefined;
+  const details = {
+    param: typeof error.param === 'string' ? error.param : undefined,
+    validValues,
+    body: body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined,
+  };
+  // A plan refusal names the plans that include the datatype.
+  if (status === 403 && errorCode === 'forbidden' && Array.isArray(error.requiredPlans)) {
+    return new PlanRequiredError(message, status, requestIdOf(body), errorCode, {
+      ...details,
+      datatype: typeof error.datatype === 'string' ? error.datatype : undefined,
+      requiredPlans: error.requiredPlans.filter((p): p is string => typeof p === 'string'),
+      upgradeUrl: typeof error.upgradeUrl === 'string' ? error.upgradeUrl : undefined,
+    });
+  }
+  return new OxArchiveError(message, status, requestIdOf(body), errorCode, details);
 }
 
 /**

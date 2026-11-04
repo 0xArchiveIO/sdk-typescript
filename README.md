@@ -106,6 +106,8 @@ Dates are the first served instant of each dataset, as `client.capabilities()` r
 
 **Account positions** coverage: Hyperliquid core position changes from 2025-05-25 and HIP-3 from 2025-10-13, hourly snapshots from 2026-06-07, and a live snapshot about every 5 minutes. Lighter mainnet from 2025-01-17 and Lighter on Robinhood Chain from 2026-06-26, with hourly snapshots over the whole history and a live snapshot about every 2 minutes.
 
+**Build-and-above datasets** (Build, Pro, Scale and Enterprise plans): trade intent hourly intervals from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; USDC flows from 2025-09-27 09:33; breadth above the n-day moving average from 2025-03-27 (Hyperliquid, n = 5) and 2025-12-27 (HIP-3, n = 5); positioning for the current window only. See [Build-and-above datasets](#build-and-above-datasets).
+
 For the first served instant of every venue and datatype, and which WebSocket channels stream live and replay, call [`client.capabilities()`](#capabilities).
 
 ## Configuration
@@ -1248,6 +1250,83 @@ for (const wallet of page.wallets) {
 
 // HIP-3 wallets that use TWAP orders
 const hip3Twap = await client.hyperliquid.hip3.wallets.classify({ uses_twap: true });
+```
+
+### Build-and-above datasets
+
+Four datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, and positioning. A Free key gets HTTP 403 with `errorCode` `forbidden`, thrown as `PlanRequiredError` (see [Error Handling](#error-handling)). `client.capabilities()` lists their rows with `plans`.
+
+| Dataset | Hyperliquid core | HIP-3 | Coverage (UTC) |
+| --- | --- | --- | --- |
+| Trade intent | `client.hyperliquid.tradeIntent` | `client.hyperliquid.hip3.tradeIntent` | Hourly intervals from 2025-05-25 15:00 (core) and 2025-10-13 12:00 (HIP-3); minute intervals from 2026-07-14 00:00; second intervals for the last 3 days |
+| USDC flows | `client.hyperliquid.usdcFlows` | none | From 2025-09-27 09:33 |
+| Breadth above the n-day moving average | `client.hyperliquid.breadthMa` | `client.hyperliquid.hip3.breadthMa` | Core: n = 5 from 2025-03-27, 20 from 2025-04-11, 50 from 2025-05-11, 200 from 2025-10-08. HIP-3: n = 5 from 2025-12-27, 20 from 2026-01-11, 50 from 2026-02-10, 200 from 2026-07-10 |
+| Positioning | `client.hyperliquid.positioning` | `client.hyperliquid.hip3.positioning` | The current window only; no history |
+
+The paged methods return `{ data, nextCursor, hasMore, meta }`. Their `iterate()` helpers (`iterateVolume()` for USDC flow totals) follow `nextCursor` until it is absent and never stop on a short or empty page. They need `start`; when `end` is left out, they fix it to the current time before the first request and send the same `end` on every page. When paging by hand, set `start` and `end` yourself: the default window is the 24 hours before each request's own now.
+
+#### Trade intent
+
+Each bucket splits one market's USD volume by why it traded: new longs and shorts (`openLong`, `openShort`), profit taken (`tpLong`, `tpShort`), stopped out (`stopLong`, `stopShort`: closes at a loss, liquidations and auto-deleveraging) and flips through zero (`flipLs`, `flipSl`). Both sides of every trade count; market makers' legs are in `mmUsd` only. The `winners*` and `losers*` fields are the market's trailing-72-hour winners and losers as aggregates: their flow, net and gross position and how many there are. No wallet is named.
+
+Intervals are `1s`, `5s`, `15s`, `1m`, `5m`, `15m`, `1h` (the default), `4h` and `1d`; `limit` is 1 to 2,000 (default 500). A page holds the buckets whose open is in `[start, end]`. Second buckets carry no `close`, `priceSource` or cohort net, gross and counts, and a second without a record had no trades, up to `meta.builtThrough`. A market idle for more than 7 days has no buckets there: a gap, not zero. `isFinal` marks a bucket that will not change; `preliminary` buckets belong to the hour still open and are replaced as final data lands (`preliminaryFrom` says where inside the bucket). `quality` is `ok`, `partial` or `quarantined` (cohort figures null). A 503 `upstream_unavailable` for a read that took too long is retryable: lower `limit` or narrow the window.
+
+```typescript
+const page = await client.hyperliquid.tradeIntent.history('BTC', {
+  start: '2026-11-02T00:00:00Z',
+  end: '2026-11-02T06:00:00Z',
+  interval: '1h',
+});
+for (const b of page.data) {
+  console.log(b.timestamp, b.openLong, b.openShort, b.stopLong, b.mmUsd, b.winnersFlow);
+}
+
+for await (const b of client.hyperliquid.hip3.tradeIntent.iterate('xyz:XYZ100', {
+  start: '2026-11-01', end: '2026-11-02', interval: '15m',
+})) {
+  console.log(b.timestamp, b.isFinal);
+}
+```
+
+#### USDC flows
+
+USDC entering and leaving HyperCore. `deposit` and `withdraw` are the Arbitrum bridge; `evm_in` and `evm_out` are USDC to and from HyperEVM (which also carries CCTP). Each event names the HyperCore account (`user`) and has an `id` (`block:index`): join pages and dedupe on it, because one bridge batch can carry up to 10 withdrawals under one hash and time. Events are oldest first in execution order. Events in the last 3 hours can still be added after you read them, so re-read that span and dedupe on `id`. With a high `minUsd` a page can be empty and still carry a cursor (a page reads at most 31 days).
+
+`volume()` returns totals per bucket (`1m`, `5m`, `15m`, `30m`, `1h` by default, `4h`, `1d`), zeros included, never past the bucket still filling. It counts every flow, so it takes no `minUsd` or `kind`. `netUsd` is deposits plus HyperEVM inflows less withdrawals and HyperEVM outflows.
+
+```typescript
+for await (const e of client.hyperliquid.usdcFlows.iterate({
+  start: '2026-11-02', end: '2026-11-03', kind: 'withdraw', minUsd: 1_000_000,
+})) {
+  console.log(e.id, e.timestamp, e.amountUsd, e.user);
+}
+
+const hourly = await client.hyperliquid.usdcFlows.volume({
+  start: '2026-11-02', end: '2026-11-03', interval: '1h', limit: 25,
+});
+```
+
+#### Breadth above the n-day moving average
+
+The share of the venue's perps whose price is above the mean of their daily closes over the n UTC days before the reading's day, with the quartiles of price / average - 1 (`distance`). `n` is required: 5, 20, 50 or 200, and each length starts on its own date (table above). A bucket carries its last reading, as of its end (`calculatedAt`); the bucket still forming, and `current()`, are as of about 4 minutes before now, on the minute. Do not average `valuePct` across buckets. Every perp the venue ever listed is a candidate from its first 1m bar: a delisted perp stays one and is counted in `excludedStalePrice` from 24 hours after its last trade, and a perp younger than n days counts in `excludedShortHistory`. So `coverageRatio` depends on `n`, is not a data-quality ratio, and is not comparable with above-VWAP breadth. `valuePct` and `distance` are null when nothing is eligible. Intervals are `1m` (the default) to `1d`; `limit` is 1 to 1,000.
+
+```typescript
+const now = await client.hyperliquid.breadthMa.current({ n: 200 });
+console.log(now.valuePct, now.counts.eligible, now.distance.median);
+
+const daily = await client.hyperliquid.hip3.breadthMa.history({
+  n: 50, start: '2026-10-01', end: '2026-11-01', interval: '1d',
+});
+```
+
+#### Positioning
+
+Every listed perp over the current trailing window (`window`: `1h`, `4h` or `24h`, required): its open interest at the start and end (`oiStart`, `oiEnd`), marks, taker buy and sell notional, liquidations, and its typical move over windows of that length (`typicalPrice`, `typicalOi`, `typicalFlow`). The window is `[close - window, close)`, where the close is the newest 5-minute boundary about 4 minutes behind now (`meta.asOf`). Open interest and marks are null when that 5-minute bucket has no reading, never 0; the typical moves are null under 288 counted windows. There is no history, paging or symbol filter: one record per listed perp, sorted by symbol.
+
+```typescript
+const { data, meta } = await client.hyperliquid.positioning.current({ window: '4h' });
+console.log(meta?.asOf);
+const btc = data.find((r) => r.symbol === 'BTC');
 ```
 
 ### Data Quality Monitoring
@@ -2425,7 +2504,7 @@ The codes (`ERROR_CODES`):
 | `unsupported_for_venue` | The datatype, or the WebSocket mode, is not offered on this venue; the message names where it is |
 | `route_not_found` | No route matches the path |
 | `not_found` | The route exists but the resource id does not |
-| `unauthorized`, `forbidden` | The API key is missing or invalid, or not allowed this request |
+| `unauthorized`, `forbidden` | The API key is missing or invalid, or not allowed this request. `forbidden` is also the plan refusal (`PlanRequiredError`) |
 | `insufficient_credits` | Monthly credits are spent |
 | `rate_limited` | Too many requests, or too many subscribe operations |
 | `conflict` | The request conflicts with current state (for example a replay already running) |
@@ -2434,6 +2513,20 @@ The codes (`ERROR_CODES`):
 | `slow_consumer` | WebSocket only: the connection fell behind a stream and messages were dropped; re-subscribe, or restart the replay, to resync |
 | `endpoint_unsupported` | WebSocket only: this endpoint does not serve the channel or operation; the message names the endpoint that does |
 | `positions_unavailable`, `api_key_limit_reached`, `oauth_not_permitted` | Route-specific codes |
+
+A plan refusal is thrown as `PlanRequiredError`, a subclass of `OxArchiveError`: HTTP 403, `errorCode` `forbidden`, with `datatype`, `requiredPlans` and `upgradeUrl`. Trade intent, USDC flows, breadth above the n-day moving average and positioning are included with the Build, Pro, Scale and Enterprise plans.
+
+```typescript
+import { PlanRequiredError } from '@0xarchive/sdk';
+
+try {
+  await client.hyperliquid.usdcFlows.history();
+} catch (error) {
+  if (error instanceof PlanRequiredError) {
+    console.error(`${error.datatype} needs ${error.requiredPlans.join(', ')}: ${error.upgradeUrl}`);
+  }
+}
+```
 
 `errorCode` is typed as `ErrorCode | string`, because a route can also send its own code, such as `snapshot_advanced` from a positions cursor whose snapshot was replaced. Errors raised before a response arrives (a timeout, a network failure) have no `errorCode`.
 
@@ -2486,6 +2579,12 @@ import type {
   Hip4Question,
   WalletClassification,
   SymbolEntry,
+  // Trade intent, USDC flows, moving-average breadth, positioning
+  TradeIntentBucket,
+  UsdcFlowEvent,
+  UsdcFlowVolumeBucket,
+  BreadthMaReading,
+  PositioningReading,
   // Webhooks
   WebhookEvent,
   WebhookEndpoint,

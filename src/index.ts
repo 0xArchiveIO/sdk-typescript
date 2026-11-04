@@ -13,6 +13,9 @@
  * - Webhook management on client.webhooks, with verifyWebhookSignature and
  *   constructWebhookEvent for receivers
  * - The public symbol universe on client.symbols
+ * - Build-and-above datasets: trade intent, USDC flows, breadth above the
+ *   n-day moving average and positioning (client.hyperliquid.tradeIntent,
+ *   usdcFlows, breadthMa, positioning, and the HIP-3 twins)
  *
  * @example
  * ```typescript
@@ -126,6 +129,24 @@ export {
   Hip4QuestionsResource,
   WalletsResource,
   SymbolsResource,
+} from './resources';
+
+// Build-and-above datasets: trade intent, USDC flows, breadth above the
+// n-day moving average and positioning
+export {
+  TradeIntentResource,
+  TRADE_INTENT_INTERVALS,
+  TRADE_INTENT_MAX_LIMIT,
+  UsdcFlowsResource,
+  USDC_FLOW_KINDS,
+  USDC_FLOW_VOLUME_INTERVALS,
+  USDC_FLOWS_MAX_LIMIT,
+  BreadthMaResource,
+  BREADTH_MA_LENGTHS,
+  BREADTH_MA_INTERVALS,
+  BREADTH_MA_MAX_LIMIT,
+  PositioningResource,
+  POSITIONING_WINDOWS,
 } from './resources';
 
 // Webhooks: management resource and signature verification for your receiver
@@ -257,6 +278,20 @@ export {
   // CVD schemas
   CvdBucketSchema,
   CvdBucketArrayResponseSchema,
+  // Trade intent, USDC flow, moving-average breadth and positioning schemas
+  TradeIntentBucketSchema,
+  TradeIntentBucketArrayResponseSchema,
+  UsdcFlowEventSchema,
+  UsdcFlowEventArrayResponseSchema,
+  UsdcFlowVolumeBucketSchema,
+  UsdcFlowVolumeBucketArrayResponseSchema,
+  BreadthMaCountsSchema,
+  BreadthMaDistanceSchema,
+  BreadthMaReadingSchema,
+  BreadthMaReadingResponseSchema,
+  BreadthMaReadingArrayResponseSchema,
+  PositioningReadingSchema,
+  PositioningReadingArrayResponseSchema,
   // HIP-3 oracle schemas
   Hip3OracleDiscoveryBoundsSchema,
   Hip3OracleExternalPriceSchema,
@@ -342,6 +377,11 @@ export {
   type ValidatedMarketPositionsSummary,
   type ValidatedWalletPositions,
   type ValidatedCvdBucket,
+  type ValidatedTradeIntentBucket,
+  type ValidatedUsdcFlowEvent,
+  type ValidatedUsdcFlowVolumeBucket,
+  type ValidatedBreadthMaReading,
+  type ValidatedPositioningReading,
   type ValidatedHip3OracleDiscoveryBounds,
   type ValidatedHip3OracleExternalPrice,
   type ValidatedHip4Question,
@@ -473,6 +513,35 @@ export type {
   CvdInterval,
   CvdParams,
   CvdBucket,
+  // Trade intent
+  TradeIntentInterval,
+  TradeIntentParams,
+  TradeIntentIterateParams,
+  TradeIntentPriceSource,
+  TradeIntentQuality,
+  TradeIntentBucket,
+  // USDC flows
+  UsdcFlowKind,
+  UsdcFlowsParams,
+  UsdcFlowsIterateParams,
+  UsdcFlowEvent,
+  UsdcFlowVolumeInterval,
+  UsdcFlowVolumeParams,
+  UsdcFlowVolumeIterateParams,
+  UsdcFlowVolumeBucket,
+  // Breadth above the n-day moving average
+  BreadthMaLength,
+  BreadthMaInterval,
+  BreadthMaCurrentParams,
+  BreadthMaHistoryParams,
+  BreadthMaIterateParams,
+  BreadthMaCounts,
+  BreadthMaDistance,
+  BreadthMaReading,
+  // Positioning
+  PositioningWindow,
+  PositioningParams,
+  PositioningReading,
   // HIP-3 oracle
   Hip3OracleDiscoveryBounds,
   Hip3OracleExternalPrice,
@@ -661,9 +730,10 @@ export type {
   // Errors
   ApiError,
   OxArchiveErrorDetails,
+  PlanRequiredErrorDetails,
 } from './types';
 
-export { OxArchiveError } from './types';
+export { OxArchiveError, PlanRequiredError } from './types';
 
 // Default export for convenience
 export { OxArchive as default } from './client';

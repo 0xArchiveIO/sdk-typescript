@@ -65,10 +65,15 @@ export interface ApiMeta {
   /**
    * Number of preliminary (not yet reconciled) rows in the page. Set on routes
    * that intentionally serve the preliminary tier, such as Lighter
-   * `/trades/{symbol}/recent`.
+   * `/trades/{symbol}/recent`, and on trade intent pages that hold buckets of
+   * the hour still open.
    */
   preliminaryRowCount?: number;
-  /** Account positions: the instant (RFC 3339 UTC) the returned state describes, taken from the data. */
+  /**
+   * The instant (RFC 3339 UTC) the returned state describes. On account
+   * positions it is taken from the data; on positioning it is the close the
+   * window ends at.
+   */
   asOf?: string;
   /** Account positions: the committed snapshot (RFC 3339 UTC) the response was read from. */
   snapshotTs?: string;
@@ -87,6 +92,9 @@ export interface ApiMeta {
    * Account positions: every event before this instant (RFC 3339 UTC) is built
    * into the change log and the as-of state. Reads are clamped to it. Data up
    * to it may still be preliminary; `finalizedThrough` says how far it is final.
+   * Trade intent: how far the series is built. A second interval bucket
+   * without a record before this instant had no trades; after it, nothing is
+   * known yet.
    */
   builtThrough?: string;
 }
@@ -1900,6 +1908,431 @@ export interface CvdBucket {
 }
 
 // =============================================================================
+// Build-and-above datasets: trade intent, USDC flows, moving-average breadth
+// and positioning
+// =============================================================================
+//
+// These four datasets are included with the Build, Pro, Scale and Enterprise
+// plans. A Free key gets HTTP 403 with `errorCode` `forbidden`, thrown as
+// {@link PlanRequiredError}.
+
+/** Bucket widths the trade intent routes accept. */
+export type TradeIntentInterval = '1s' | '5s' | '15s' | '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+
+/**
+ * Parameters for one page of trade intent (`tradeIntent.history()`).
+ *
+ * Every field is optional. `end` defaults to now and `start` to 24 hours
+ * before `end`. A page holds the buckets whose open is in `[start, end]`,
+ * oldest first. When paging by hand, set `start` and `end` and send them
+ * unchanged with `cursor`: without them each request takes its own default
+ * window, which moves with the clock.
+ */
+export interface TradeIntentParams {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start?: Timestamp;
+  /** End of the window, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: Timestamp;
+  /** Bucket width (default `'1h'`); buckets open on UTC epoch boundaries. */
+  interval?: TradeIntentInterval;
+  /** The previous page's `nextCursor`, passed back unchanged. */
+  cursor?: string;
+  /** Buckets per page, 1 to 2000 (default 500). */
+  limit?: number;
+}
+
+/**
+ * Parameters for `tradeIntent.iterate()`. `start` is required; when `end` is
+ * left out, the iterator fixes it to the current time before the first
+ * request and sends that same `end` on every page.
+ */
+export interface TradeIntentIterateParams extends Omit<TradeIntentParams, 'start' | 'cursor'> {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start: Timestamp;
+}
+
+/** Where a trade intent bucket's `close` comes from. */
+export type TradeIntentPriceSource = 'mark' | 'oracle' | 'carried' | 'trade' | (string & {});
+
+/** Completeness of a trade intent bucket. */
+export type TradeIntentQuality = 'ok' | 'partial' | 'quarantined' | (string & {});
+
+/**
+ * One trade intent bucket: the USD volume of one market in one interval, by
+ * why it traded.
+ *
+ * Both sides of every trade count, so buyers and sellers each sum to the
+ * bucket's volume; market makers' legs are in `mmUsd` and in no intent
+ * figure. The winners and losers are the market's trailing-72-hour winners
+ * and losers, served as aggregates only: no wallet is named.
+ *
+ * Second intervals (`1s`, `5s`, `15s`) carry no `close`, `priceSource` or
+ * cohort net, gross and counts (all null). A second without a record had no
+ * trades, as far as `meta.builtThrough` reaches.
+ */
+export interface TradeIntentBucket {
+  /** Bucket open time (RFC 3339 UTC). */
+  timestamp: string;
+  /** Bucket open time in Unix milliseconds. */
+  timestampMs: number;
+  /** The price the bucket's end is marked at; null on second intervals. */
+  close: number | null;
+  /** Where `close` comes from (`mark`, `oracle`, `carried` or `trade`); null on second intervals. */
+  priceSource: TradeIntentPriceSource | null;
+  /** USD that opened new longs. */
+  openLong: number;
+  /** USD that opened new shorts. */
+  openShort: number;
+  /** USD that closed longs at a profit. */
+  tpLong: number;
+  /** USD that closed shorts at a profit. */
+  tpShort: number;
+  /** USD that closed longs at a loss, including liquidations and auto-deleveraging. */
+  stopLong: number;
+  /** USD that closed shorts at a loss, including liquidations and auto-deleveraging. */
+  stopShort: number;
+  /** USD that flipped from long to short through zero. */
+  flipLs: number;
+  /** USD that flipped from short to long through zero. */
+  flipSl: number;
+  /** Market makers' legs, in USD. */
+  mmUsd: number;
+  /** What the winners bought less what they sold, in USD; null when quarantined. */
+  winnersFlow: number | null;
+  /** What the losers bought less what they sold, in USD; null when quarantined. */
+  losersFlow: number | null;
+  /** The winners' net position, in USD; null on second intervals and when quarantined. */
+  winnersNet: number | null;
+  /** The winners' gross position, in USD; null on second intervals and when quarantined. */
+  winnersGross: number | null;
+  /** The losers' net position, in USD; null on second intervals and when quarantined. */
+  losersNet: number | null;
+  /** The losers' gross position, in USD; null on second intervals and when quarantined. */
+  losersGross: number | null;
+  /** How many wallets are in the winners cohort; null on second intervals and when quarantined. */
+  winnersCount: number | null;
+  /** How many wallets are in the losers cohort; null on second intervals and when quarantined. */
+  losersCount: number | null;
+  /**
+   * `ok`, `partial` (the method's lookbacks were not yet full) or
+   * `quarantined` (the winners' and losers' figures are null; the intent
+   * figures are kept).
+   */
+  quality: TradeIntentQuality;
+  /** True when the bucket is final and will not change. */
+  isFinal: boolean;
+  /**
+   * True when the bucket holds preliminary data for the hour still open. It
+   * is replaced as final data lands, about 70 minutes after the hour.
+   */
+  preliminary: boolean;
+  /** Where inside the bucket its preliminary data begins (RFC 3339 UTC); null when not preliminary. */
+  preliminaryFrom: string | null;
+  /** `preliminaryFrom` in Unix milliseconds; null when not preliminary. */
+  preliminaryFromMs: number | null;
+  /** The method version the bucket was computed with, for example `who/3`. */
+  method: string;
+}
+
+/** A USDC flow's direction. */
+export type UsdcFlowKind = 'deposit' | 'withdraw' | 'evm_in' | 'evm_out';
+
+/**
+ * Parameters for one page of USDC flow events (`usdcFlows.history()`).
+ *
+ * Every field is optional. `end` defaults to now and `start` to 24 hours
+ * before `end`; both are inclusive.
+ */
+export interface UsdcFlowsParams {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start?: Timestamp;
+  /** End of the window, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: Timestamp;
+  /** The previous page's `nextCursor`, passed back unchanged. */
+  cursor?: string;
+  /** Events per page, 1 to 1000 (default 100). */
+  limit?: number;
+  /** Keep only events of at least this many USD, 0 to 1e12 (sent as `min_usd`). */
+  minUsd?: number;
+  /** Keep only one direction. */
+  kind?: UsdcFlowKind;
+}
+
+/**
+ * Parameters for `usdcFlows.iterate()`. `start` is required; when `end` is
+ * left out, the iterator fixes it to the current time before the first
+ * request and sends that same `end` on every page.
+ */
+export interface UsdcFlowsIterateParams extends Omit<UsdcFlowsParams, 'start' | 'cursor'> {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start: Timestamp;
+}
+
+/**
+ * One USDC flow into or out of HyperCore.
+ *
+ * `deposit` and `withdraw` are the Arbitrum bridge; `evm_in` and `evm_out`
+ * are USDC to and from HyperEVM (which also carries CCTP). `id` is the
+ * event's identity: join pages and dedupe on it, since `(timestamp, txHash)`
+ * is not unique (one bridge batch can carry up to 10 withdrawals under one
+ * hash and time).
+ */
+export interface UsdcFlowEvent {
+  /** The event's identity, `block:index`. */
+  id: string;
+  /** Event time (RFC 3339 UTC). */
+  timestamp: string;
+  /** Event time in Unix milliseconds. */
+  timestampMs: number;
+  /** Direction of the flow. */
+  kind: UsdcFlowKind | (string & {});
+  /** USDC moved, zero or more; `kind` gives the direction. */
+  amountUsd: number;
+  /** The withdrawal fee (1 USDC), or a transfer's fee charged in USDC, else 0. */
+  feeUsd: number;
+  /** The HyperCore account, or null when the source did not record it. */
+  user: string | null;
+  /** Transaction hash, or null when the source did not record it. */
+  txHash: string | null;
+  /** HyperCore block number. */
+  blockNumber: number;
+  /** Position of the event inside its block. */
+  eventIndex: number;
+}
+
+/** Bucket widths the USDC flow volume route accepts. */
+export type UsdcFlowVolumeInterval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
+
+/**
+ * Parameters for one page of USDC flow totals (`usdcFlows.volume()`). The
+ * totals count every flow, so the route takes no `minUsd` or `kind`.
+ */
+export interface UsdcFlowVolumeParams {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). Defaults to 24 hours before `end`. */
+  start?: Timestamp;
+  /** End of the window, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: Timestamp;
+  /** Bucket width (default `'1h'`); buckets open on UTC epoch boundaries. */
+  interval?: UsdcFlowVolumeInterval;
+  /** The previous page's `nextCursor`, passed back unchanged. */
+  cursor?: string;
+  /** Buckets per page, 1 to 1000 (default 100). */
+  limit?: number;
+}
+
+/**
+ * Parameters for `usdcFlows.iterateVolume()`. `start` is required; when
+ * `end` is left out, the iterator fixes it to the current time before the
+ * first request and sends that same `end` on every page.
+ */
+export interface UsdcFlowVolumeIterateParams extends Omit<UsdcFlowVolumeParams, 'start' | 'cursor'> {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start: Timestamp;
+}
+
+/** USDC flow totals for one bucket (zeros where nothing flowed). */
+export interface UsdcFlowVolumeBucket {
+  /** Bucket open time (RFC 3339 UTC). */
+  timestamp: string;
+  /** Bucket open time in Unix milliseconds. */
+  timestampMs: number;
+  /** USD deposited over the Arbitrum bridge. */
+  depositUsd: number;
+  /** Number of deposits. */
+  depositCount: number;
+  /** USD withdrawn over the Arbitrum bridge. */
+  withdrawUsd: number;
+  /** Number of withdrawals. */
+  withdrawCount: number;
+  /** USD moved from HyperEVM to HyperCore. */
+  evmInUsd: number;
+  /** Number of HyperEVM inflows. */
+  evmInCount: number;
+  /** USD moved from HyperCore to HyperEVM. */
+  evmOutUsd: number;
+  /** Number of HyperEVM outflows. */
+  evmOutCount: number;
+  /** `depositUsd + evmInUsd - withdrawUsd - evmOutUsd`. */
+  netUsd: number;
+}
+
+/** Moving-average lengths, in days, the breadth routes accept. */
+export type BreadthMaLength = 5 | 20 | 50 | 200;
+
+/** Bucket widths the moving-average breadth history route accepts. */
+export type BreadthMaInterval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
+
+/** Parameters for `breadthMa.current()`. */
+export interface BreadthMaCurrentParams {
+  /** Length of the moving average in days: 5, 20, 50 or 200. Required. */
+  n: BreadthMaLength;
+}
+
+/**
+ * Parameters for one page of moving-average breadth (`breadthMa.history()`).
+ * `n` is required; `end` defaults to now and `start` to 24 hours before `end`.
+ */
+export interface BreadthMaHistoryParams {
+  /** Length of the moving average in days: 5, 20, 50 or 200. Required. */
+  n: BreadthMaLength;
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start?: Timestamp;
+  /** End of the window, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: Timestamp;
+  /** Bucket width (default `'1m'`); buckets open on UTC epoch boundaries. */
+  interval?: BreadthMaInterval;
+  /** The previous page's `nextCursor`, passed back unchanged. */
+  cursor?: string;
+  /** Buckets per page, 1 to 1000 (default 100). */
+  limit?: number;
+}
+
+/**
+ * Parameters for `breadthMa.iterate()`. `n` and `start` are required; when
+ * `end` is left out, the iterator fixes it to the current time before the
+ * first request and sends that same `end` on every page.
+ */
+export interface BreadthMaIterateParams extends Omit<BreadthMaHistoryParams, 'start' | 'cursor'> {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start: Timestamp;
+}
+
+/** The counts behind a moving-average breadth reading. */
+export interface BreadthMaCounts {
+  /** `eligible + excludedStalePrice + excludedShortHistory`. */
+  candidates: number;
+  /** Markets with a price and n days of history. */
+  eligible: number;
+  /** Eligible markets above their average. */
+  above: number;
+  /** Eligible markets exactly at their average. */
+  at: number;
+  /** Eligible markets below their average. */
+  below: number;
+  /**
+   * Markets without a 1m close in the 24 hours before the reading. A delisted
+   * perp stays a candidate and is counted here from 24 hours after its last
+   * trade.
+   */
+  excludedStalePrice: number;
+  /** Markets younger than n days before the reading's day. */
+  excludedShortHistory: number;
+}
+
+/** Quartiles of price / average - 1 over the eligible markets (6 decimal places). */
+export interface BreadthMaDistance {
+  /** 25th percentile; null when nothing is eligible. */
+  p25: number | null;
+  /** Median; null when nothing is eligible. */
+  median: number | null;
+  /** 75th percentile; null when nothing is eligible. */
+  p75: number | null;
+}
+
+/**
+ * One reading of breadth above the n-day moving average: the share of the
+ * venue's perps whose price is above the mean of their daily closes over the
+ * n UTC days before the reading's day.
+ *
+ * A bucket carries its last reading, as of its end (`calculatedAt`); the
+ * bucket still forming is as of about 4 minutes before now, on the minute.
+ * Never average `valuePct` across buckets. Every perp the venue ever listed
+ * is a candidate from its first 1m bar, so `coverageRatio` depends on `n`,
+ * is not a data-quality ratio and is not comparable with above-VWAP breadth.
+ */
+export interface BreadthMaReading {
+  /** Bucket open time (RFC 3339 UTC). */
+  timestamp: string;
+  /** Bucket open time in Unix milliseconds. */
+  timestampMs: number;
+  /** The instant of the reading (RFC 3339 UTC). */
+  calculatedAt: string;
+  /** The instant of the reading in Unix milliseconds. */
+  calculatedAtMs: number;
+  /** Length of the moving average in days. */
+  n: number;
+  /** The method version, for example `ma-breadth/1`. */
+  method: string;
+  /** Percent of eligible markets above their average (4 decimal places); null when nothing is eligible. */
+  valuePct: number | null;
+  /** `eligible / candidates` (4 decimal places). */
+  coverageRatio: number;
+  /** The counts behind the reading. */
+  counts: BreadthMaCounts;
+  /** How far above or below their average the eligible markets are. */
+  distance: BreadthMaDistance;
+  /**
+   * True when every bar the reading is made from is final. A final reading
+   * can still change if the underlying candles are rebuilt.
+   */
+  isFinal: boolean;
+}
+
+/** Trailing windows the positioning routes accept. */
+export type PositioningWindow = '1h' | '4h' | '24h';
+
+/** Parameters for `positioning.current()`. */
+export interface PositioningParams {
+  /** The trailing window: `'1h'`, `'4h'` or `'24h'`. Required. */
+  window: PositioningWindow;
+}
+
+/**
+ * One listed perp over the current trailing window.
+ *
+ * The window is `[close - window, close)`, where the close is the newest
+ * 5-minute boundary about 4 minutes behind now (`meta.asOf`).
+ */
+export interface PositioningReading {
+  /** The market's symbol. */
+  symbol: string;
+  /** The trailing window. */
+  window: PositioningWindow | (string & {});
+  /** Window start (RFC 3339 UTC). */
+  windowStart: string;
+  /** Window start in Unix milliseconds. */
+  windowStartMs: number;
+  /** Window end, exclusive: the close (RFC 3339 UTC). */
+  windowEnd: string;
+  /** Window end in Unix milliseconds. */
+  windowEndMs: number;
+  /** Open interest, in contracts, at the 5-minute reading before the window; null when there is none, never 0. */
+  oiStart: number | null;
+  /** Open interest, in contracts, at the window's last 5-minute reading; null when there is none, never 0. */
+  oiEnd: number | null;
+  /** Mark price at the 5-minute reading before the window; null when there is none. */
+  markStart: number | null;
+  /** Mark price at the window's last 5-minute reading; null when there is none. */
+  markEnd: number | null;
+  /** Number of 5-minute open interest readings inside the window. */
+  oiBuckets: number;
+  /** Taker buy notional over the window, in USD. */
+  buyUsd: number;
+  /** Taker sell notional over the window, in USD. */
+  sellUsd: number;
+  /** Long liquidations over the window, in USD. */
+  liqLongUsd: number;
+  /** Short liquidations over the window, in USD. */
+  liqShortUsd: number;
+  /** Number of long liquidations over the window. */
+  liqLongCount: number;
+  /** Number of short liquidations over the window. */
+  liqShortCount: number;
+  /**
+   * The market's typical relative mark move over windows of this length
+   * (median absolute move over windows sliding by 5 minutes across about the
+   * last 6.9 days); null under 288 counted windows.
+   */
+  typicalPrice: number | null;
+  /** The typical relative open interest move, as `typicalPrice`; null under 288 counted windows. */
+  typicalOi: number | null;
+  /** The typical taker imbalance, (buy - sell) / (buy + sell), as `typicalPrice`; null under 288 counted windows. */
+  typicalFlow: number | null;
+  /** How many windows the typical moves were measured over. */
+  typicalWindows: number;
+}
+
+// =============================================================================
 // HIP-3 Oracle Types
 // =============================================================================
 
@@ -2179,6 +2612,10 @@ export type CapabilityDatatype =
   | 'positions'
   | 'ticker'
   | 'mempool'
+  | 'trade_intent'
+  | 'usdc_flows'
+  | 'breadth_ma'
+  | 'positioning'
   | (string & {});
 
 /**
@@ -2224,7 +2661,9 @@ export interface Capability {
   wsEndpoint?: string;
   /**
    * The plans that include the datatype, e.g. `['pro', 'scale', 'enterprise']`
-   * for `mempool`. Absent when every plan includes it, Free included.
+   * for `mempool` and `['build', 'pro', 'scale', 'enterprise']` for
+   * `trade_intent`, `usdc_flows`, `breadth_ma` and `positioning`. Absent when
+   * every plan includes it, Free included.
    */
   plans?: string[];
 }
@@ -3321,6 +3760,15 @@ export interface ApiError {
    * datatype.
    */
   availableOn?: Array<{ venue: string; route: string }>;
+  /**
+   * On `unsupported_for_venue` and on a `forbidden` plan refusal: the
+   * datatype id, as `GET /v1/capabilities` names it.
+   */
+  datatype?: string;
+  /** On a `forbidden` plan refusal: the plans that include the datatype. */
+  requiredPlans?: string[];
+  /** On a `forbidden` plan refusal: where to change plan. */
+  upgradeUrl?: string;
 }
 
 /** Extra fields an {@link OxArchiveError} can carry. */
@@ -3399,6 +3847,63 @@ export class OxArchiveError extends Error {
   /** HTTP status of the failed request (the same value as `code`). */
   get status(): number {
     return this.code;
+  }
+}
+
+/** Extra fields a {@link PlanRequiredError} carries. */
+export interface PlanRequiredErrorDetails extends OxArchiveErrorDetails {
+  /** The datatype id the plan does not include, for example `usdc_flows`. */
+  datatype?: string;
+  /** The plans that include the datatype, for example `['build', 'pro', 'scale', 'enterprise']`. */
+  requiredPlans: string[];
+  /** Where to change plan. */
+  upgradeUrl?: string;
+}
+
+/**
+ * The error thrown when the caller's plan does not include the dataset: HTTP
+ * 403 with `errorCode` `forbidden` and the plans that include it.
+ *
+ * Trade intent, USDC flows, breadth above the n-day moving average and
+ * positioning are included with the Build, Pro, Scale and Enterprise plans;
+ * a Free key gets this error. It extends {@link OxArchiveError}, so existing
+ * `instanceof OxArchiveError` checks still catch it.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await client.hyperliquid.usdcFlows.history();
+ * } catch (error) {
+ *   if (error instanceof PlanRequiredError) {
+ *     console.log(error.datatype, error.requiredPlans, error.upgradeUrl);
+ *   }
+ * }
+ * ```
+ */
+export class PlanRequiredError extends OxArchiveError {
+  /** The datatype id the plan does not include, for example `usdc_flows`. */
+  datatype?: string;
+  /** The plans that include the datatype, for example `['build', 'pro', 'scale', 'enterprise']`. */
+  requiredPlans: string[];
+  /** Where to change plan. */
+  upgradeUrl?: string;
+
+  constructor(
+    message: string,
+    code: number,
+    requestId: string | undefined,
+    errorCode: string | undefined,
+    details: PlanRequiredErrorDetails,
+  ) {
+    super(message, code, requestId, errorCode, details);
+    this.name = 'PlanRequiredError';
+    this.requiredPlans = details.requiredPlans;
+    if (details.datatype !== undefined) {
+      this.datatype = details.datatype;
+    }
+    if (details.upgradeUrl !== undefined) {
+      this.upgradeUrl = details.upgradeUrl;
+    }
   }
 }
 
