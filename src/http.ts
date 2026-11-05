@@ -312,6 +312,8 @@ export class HttpClient {
           [API_VERSION_HEADER]: API_VERSION,
         },
         body: body ? JSON.stringify(body) : undefined,
+        // Never replay X-API-Key to another origin on a 3xx.
+        redirect: 'error',
         signal: controller.signal,
       });
 
