@@ -47,6 +47,7 @@ import {
   UsdcFlowsResource,
   BreadthMaResource,
   PositioningResource,
+  NewsResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -166,6 +167,13 @@ export class HyperliquidClient {
   public readonly positioning: PositioningResource;
 
   /**
+   * News: stories whose lead names a Hyperliquid perp, with what that market
+   * did in the next 5 minutes. Public-display stories only. Build, Pro, Scale
+   * and Enterprise plans.
+   */
+  public readonly news: NewsResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (trades from 2025-10-13)
    */
   public readonly hip3: Hip3Client;
@@ -201,6 +209,7 @@ export class HyperliquidClient {
     this.usdcFlows = new UsdcFlowsResource(http, basePath);
     this.breadthMa = new BreadthMaResource(http, basePath);
     this.positioning = new PositioningResource(http, basePath);
+    this.news = new NewsResource(http, basePath);
     this.hip3 = new Hip3Client(http);
     this.hip4 = new Hip4Client(http);
   }
@@ -361,6 +370,13 @@ export class Hip3Client {
    */
   public readonly positioning: PositioningResource;
 
+  /**
+   * News: stories whose lead names a HIP-3 market, with what that market did
+   * in the next 5 minutes. Public-display stories only. Build, Pro, Scale and
+   * Enterprise plans.
+   */
+  public readonly news: NewsResource;
+
   private http: HttpClient;
 
   constructor(http: HttpClient) {
@@ -386,6 +402,7 @@ export class Hip3Client {
     this.tradeIntent = new TradeIntentResource(http, basePath, coinTransform);
     this.breadthMa = new BreadthMaResource(http, basePath);
     this.positioning = new PositioningResource(http, basePath);
+    this.news = new NewsResource(http, basePath);
   }
 
   /**
@@ -966,11 +983,19 @@ export class LighterClient extends LighterDeploymentClient {
    */
   public readonly accounts: LighterAccountsResource;
 
+  /**
+   * News: stories whose lead names a Lighter market, with what that market
+   * did in the next 5 minutes. Public-display stories only. Build, Pro, Scale
+   * and Enterprise plans. Not on Robinhood Chain.
+   */
+  public readonly news: NewsResource;
+
   constructor(http: HttpClient) {
     const basePath = '/v1/lighter';
     super(http, basePath);
     this.l3Orderbook = new L3OrderBookResource(http, basePath);
     this.accounts = new LighterAccountsResource(http, basePath);
+    this.news = new NewsResource(http, basePath);
   }
 }
 

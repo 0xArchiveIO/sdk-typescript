@@ -5,6 +5,22 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
+## Unreleased
+
+### Added
+- News (Build, Pro, Scale and Enterprise plans): `client.hyperliquid.news`,
+  `client.hyperliquid.hip3.news` and `client.lighter.news`, with
+  `list(params)` and `iterate(params)`. Headlines from outlets and official
+  sources, and our own market events, as stories newest first, each with the
+  reports that joined it, the markets it names and the first market's
+  reaction over 1 and 5 minutes (price move, liquidations, open interest,
+  volume, depth, `moveZ` and `moveLevel`). Public-display stories only.
+  Filters: `symbols`, `topic`, `minWeight`, `start`, `end`, `asOf`. A Free
+  key gets `PlanRequiredError`. New types `NewsStory`, `NewsReport`,
+  `NewsMarket`, `NewsReaction`, `NewsWindow` and the rest of the `News*`
+  family, and the `NewsStorySchema` runtime schema. The routes are dark
+  until the API ships them.
+
 ## 1.14.0 (2026-11-04)
 
 ### Added

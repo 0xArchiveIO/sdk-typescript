@@ -16,6 +16,8 @@
  * - Build-and-above datasets: trade intent, USDC flows, breadth above the
  *   n-day moving average and positioning (client.hyperliquid.tradeIntent,
  *   usdcFlows, breadthMa, positioning, and the HIP-3 twins)
+ * - News stories (Build and above) on client.hyperliquid.news,
+ *   client.hyperliquid.hip3.news and client.lighter.news
  *
  * @example
  * ```typescript
@@ -147,6 +149,10 @@ export {
   BREADTH_MA_MAX_LIMIT,
   PositioningResource,
   POSITIONING_WINDOWS,
+  NewsResource,
+  NEWS_MAX_LIMIT,
+  NEWS_MAX_SYMBOLS,
+  NEWS_WEIGHTS,
 } from './resources';
 
 // Webhooks: management resource and signature verification for your receiver
@@ -285,6 +291,9 @@ export {
   UsdcFlowEventArrayResponseSchema,
   UsdcFlowVolumeBucketSchema,
   UsdcFlowVolumeBucketArrayResponseSchema,
+  NewsStorySchema,
+  NewsReactionSchema,
+  NewsStoryArrayResponseSchema,
   BreadthMaCountsSchema,
   BreadthMaDistanceSchema,
   BreadthMaReadingSchema,
@@ -380,6 +389,7 @@ export {
   type ValidatedTradeIntentBucket,
   type ValidatedUsdcFlowEvent,
   type ValidatedUsdcFlowVolumeBucket,
+  type ValidatedNewsStory,
   type ValidatedBreadthMaReading,
   type ValidatedPositioningReading,
   type ValidatedHip3OracleDiscoveryBounds,
@@ -529,6 +539,22 @@ export type {
   UsdcFlowVolumeParams,
   UsdcFlowVolumeIterateParams,
   UsdcFlowVolumeBucket,
+  // News
+  NewsTopic,
+  NewsOrigin,
+  NewsMoveLevel,
+  NewsVenue,
+  NewsParams,
+  NewsIterateParams,
+  NewsMarket,
+  NewsReport,
+  NewsPrice,
+  NewsLiquidations,
+  NewsDepth,
+  NewsWindow,
+  NewsOtherMove,
+  NewsReaction,
+  NewsStory,
   // Breadth above the n-day moving average
   BreadthMaLength,
   BreadthMaInterval,

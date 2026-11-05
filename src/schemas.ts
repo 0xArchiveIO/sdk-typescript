@@ -1167,6 +1167,76 @@ export const UsdcFlowVolumeBucketSchema = z.object({
 
 export const UsdcFlowVolumeBucketArrayResponseSchema = ApiResponseSchema(z.array(UsdcFlowVolumeBucketSchema));
 
+const NewsMarketSchema = z.object({
+  venue: z.string(),
+  symbol: z.string(),
+});
+
+const NewsReportSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  url: z.string().nullable(),
+  headline: z.string(),
+  publishedAt: z.string().nullable(),
+  observedAt: z.string(),
+});
+
+const NewsDepthSchema = z.object({
+  at: z.number().nullable(),
+  end: z.number().nullable(),
+});
+
+const NewsWindowSchema = z.object({
+  end: z.string(),
+  price: z
+    .object({ at: z.number().nullable(), end: z.number().nullable(), movePct: z.number().nullable() })
+    .nullable(),
+  liquidationsUsd: z
+    .object({ long: z.number().nullable(), short: z.number().nullable(), total: z.number().nullable() })
+    .nullable(),
+  oiChangePct: z.number().nullable(),
+  volumeVsPrior: z.number().nullable(),
+  bidDepth_25bpUsd: NewsDepthSchema.optional(),
+  askDepth_25bpUsd: NewsDepthSchema.optional(),
+  moveZ: z.number().nullable().optional(),
+  moveLevel: z.enum(['normal', 'unusual', 'large']).nullable().optional(),
+});
+
+export const NewsReactionSchema = z.object({
+  market: NewsMarketSchema,
+  from: z.string(),
+  status: z.string(),
+  windows: z.object({ '1m': NewsWindowSchema.optional(), '5m': NewsWindowSchema.optional() }),
+  others: z.array(
+    z.object({
+      market: NewsMarketSchema,
+      movePct_5m: z.number().nullable(),
+      oiChangePct_5m: z.number().nullable(),
+    }),
+  ),
+  knownAt: z.string().optional(),
+});
+
+export const NewsStorySchema = z.object({
+  id: z.string(),
+  headline: z.string(),
+  source: z.string(),
+  sourceLine: z.string().nullable(),
+  url: z.string().nullable(),
+  origin: z.string(),
+  topic: z.string(),
+  weight: z.number(),
+  weightRule: z.string(),
+  publishedAt: z.string().nullable(),
+  firstSeenAt: z.string(),
+  knownAt: z.string(),
+  markets: z.array(NewsMarketSchema),
+  reports: z.array(NewsReportSchema),
+  reaction: NewsReactionSchema.nullable(),
+});
+
+export const NewsStoryArrayResponseSchema = ApiResponseSchema(z.array(NewsStorySchema));
+
 export const BreadthMaCountsSchema = z.object({
   candidates: NonNegativeIntegerSchema,
   eligible: NonNegativeIntegerSchema,
@@ -1411,6 +1481,7 @@ export type ValidatedCvdBucket = z.infer<typeof CvdBucketSchema>;
 export type ValidatedTradeIntentBucket = z.infer<typeof TradeIntentBucketSchema>;
 export type ValidatedUsdcFlowEvent = z.infer<typeof UsdcFlowEventSchema>;
 export type ValidatedUsdcFlowVolumeBucket = z.infer<typeof UsdcFlowVolumeBucketSchema>;
+export type ValidatedNewsStory = z.infer<typeof NewsStorySchema>;
 export type ValidatedBreadthMaReading = z.infer<typeof BreadthMaReadingSchema>;
 export type ValidatedPositioningReading = z.infer<typeof PositioningReadingSchema>;
 export type ValidatedHip3OracleDiscoveryBounds = z.infer<typeof Hip3OracleDiscoveryBoundsSchema>;

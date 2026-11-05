@@ -106,7 +106,7 @@ Dates are the first served instant of each dataset, as `client.capabilities()` r
 
 **Account positions** coverage: Hyperliquid core position changes from 2025-05-25 and HIP-3 from 2025-10-13, hourly snapshots from 2026-06-07, and a live snapshot about every 5 minutes. Lighter mainnet from 2025-01-17 and Lighter on Robinhood Chain from 2026-06-26, with hourly snapshots over the whole history and a live snapshot about every 2 minutes.
 
-**Build-and-above datasets** (Build, Pro, Scale and Enterprise plans): trade intent hourly intervals from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; USDC flows from 2025-09-27 09:33; breadth above the n-day moving average from 2025-03-27 (Hyperliquid, n = 5) and 2025-12-27 (HIP-3, n = 5); positioning for the current window only. See [Build-and-above datasets](#build-and-above-datasets).
+**Build-and-above datasets** (Build, Pro, Scale and Enterprise plans): trade intent hourly intervals from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; USDC flows from 2025-09-27 09:33; breadth above the n-day moving average from 2025-03-27 (Hyperliquid, n = 5) and 2025-12-27 (HIP-3, n = 5); positioning for the current window only; news from the start of the feed. See [Build-and-above datasets](#build-and-above-datasets).
 
 For the first served instant of every venue and datatype, and which WebSocket channels stream live and replay, call [`client.capabilities()`](#capabilities).
 
@@ -1254,7 +1254,7 @@ const hip3Twap = await client.hyperliquid.hip3.wallets.classify({ uses_twap: tru
 
 ### Build-and-above datasets
 
-Four datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, and positioning. A Free key gets HTTP 403 with `errorCode` `forbidden`, thrown as `PlanRequiredError` (see [Error Handling](#error-handling)). `client.capabilities()` lists their rows with `plans`.
+Five datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, positioning and news. A Free key gets HTTP 403 with `errorCode` `forbidden`, thrown as `PlanRequiredError` (see [Error Handling](#error-handling)). `client.capabilities()` lists their rows with `plans`.
 
 | Dataset | Hyperliquid core | HIP-3 | Coverage (UTC) |
 | --- | --- | --- | --- |
@@ -1262,6 +1262,7 @@ Four datasets are included with the Build, Pro, Scale and Enterprise plans: trad
 | USDC flows | `client.hyperliquid.usdcFlows` | none | From 2025-09-27 09:33 |
 | Breadth above the n-day moving average | `client.hyperliquid.breadthMa` | `client.hyperliquid.hip3.breadthMa` | Core: n = 5 from 2025-03-27, 20 from 2025-04-11, 50 from 2025-05-11, 200 from 2025-10-08. HIP-3: n = 5 from 2025-12-27, 20 from 2026-01-11, 50 from 2026-02-10, 200 from 2026-07-10 |
 | Positioning | `client.hyperliquid.positioning` | `client.hyperliquid.hip3.positioning` | The current window only; no history |
+| News | `client.hyperliquid.news` | `client.hyperliquid.hip3.news` (and `client.lighter.news`) | From the start of the feed |
 
 The paged methods return `{ data, nextCursor, hasMore, meta }`. Their `iterate()` helpers (`iterateVolume()` for USDC flow totals) follow `nextCursor` until it is absent and never stop on a short or empty page. They need `start`; when `end` is left out, they fix it to the current time before the first request and send the same `end` on every page. When paging by hand, set `start` and `end` yourself: the default window is the 24 hours before each request's own now.
 
@@ -1328,6 +1329,37 @@ const { data, meta } = await client.hyperliquid.positioning.current({ window: '4
 console.log(meta?.asOf);
 const btc = data.find((r) => r.symbol === 'BTC');
 ```
+
+#### News
+
+Headlines and our own market events as stories. Each carries the reports that joined it, the markets it names and, when a market was matched, what the first one did in the minutes after we first saw the story. A route returns the stories whose lead report names a market on its venue: `client.hyperliquid.news` (perps), `client.hyperliquid.hip3.news` and `client.lighter.news`. Public-display stories only; each names its `source` (and `sourceLine`, for example `via Tree News`) and links to its `url`. `headline` is the source's own words, cleaned by rules, never rewritten.
+
+```typescript
+const page = await client.hyperliquid.news.list({
+  symbols: ['BTC', 'ETH'],  // optional, at most 20, matched to the lead report's markets
+  topic: 'liquidation',     // optional: listing, delisting, liquidation, hack, outage, upgrade, etf, regulation, macro, earnings, partnership, funding, other
+  minWeight: 2,             // optional, 1 to 3 (default 1)
+  start: '2026-11-04', end: '2026-11-05', // firstSeenAt window (default: the 24 hours before end)
+  asOf: '2026-11-05T00:00:00Z',           // optional: the feed as we knew it then
+  limit: 100,               // stories per page (default 100, max 500)
+});
+for (const story of page.data) {
+  console.log(story.firstSeenAt, story.headline, story.source, story.url);
+  const w = story.reaction?.windows['5m'];  // reaction is null when no market was matched
+  if (w && (w.moveLevel === 'unusual' || w.moveLevel === 'large')) {
+    console.log(story.reaction!.market.symbol, w.price?.movePct, w.liquidationsUsd?.total, w.oiChangePct);
+  }
+}
+
+// Newest first, following the cursor (start is optional here)
+for await (const story of client.lighter.news.iterate({ start: '2026-11-04', minWeight: 2 })) {
+  // ...
+}
+```
+
+A story's `reaction` is a measurement, not a cause: for the 1 and 5 minutes after `firstSeenAt` it holds the market's price move, liquidations, open interest change, volume against the prior window and (5 minutes only) book depth within 25 basis points, `moveZ` and `moveLevel`. `status` is `measuring` until both windows close (a window not yet due is absent), then `final`. Story moves are mostly noise: `moveZ` is the 5-minute move over that market's own trailing 24-hour standard deviation of 5-minute moves, and `moveLevel` is `normal`, `unusual` (from 2) or `large` (from 3). Treat a move as typical unless `moveLevel` is `unusual` or `large`; the raw `movePct` stays available. A figure we could not measure is `null`, never 0. Lighter reports liquidations as a `total` only (`long` and `short` are `null`). `others` holds the other markets a story names, over 5 minutes.
+
+The SDK turns snake_case keys into camelCase and leaves an underscore before a digit, so the API's `bid_depth_25bp_usd` is `bidDepth_25bpUsd`, `ask_depth_25bp_usd` is `askDepth_25bpUsd`, `move_pct_5m` is `movePct_5m` and `oi_change_pct_5m` is `oiChangePct_5m`. Stories are ordered by `firstSeenAt`, newest first; `asOf` in the future is now. A story with no matched market has an empty `markets` and no `reaction`.
 
 ### Data Quality Monitoring
 
@@ -2514,7 +2546,7 @@ The codes (`ERROR_CODES`):
 | `endpoint_unsupported` | WebSocket only: this endpoint does not serve the channel or operation; the message names the endpoint that does |
 | `positions_unavailable`, `api_key_limit_reached`, `oauth_not_permitted` | Route-specific codes |
 
-A plan refusal is thrown as `PlanRequiredError`, a subclass of `OxArchiveError`: HTTP 403, `errorCode` `forbidden`, with `datatype`, `requiredPlans` and `upgradeUrl`. Trade intent, USDC flows, breadth above the n-day moving average and positioning are included with the Build, Pro, Scale and Enterprise plans.
+A plan refusal is thrown as `PlanRequiredError`, a subclass of `OxArchiveError`: HTTP 403, `errorCode` `forbidden`, with `datatype`, `requiredPlans` and `upgradeUrl`. Trade intent, USDC flows, breadth above the n-day moving average, positioning and news are included with the Build, Pro, Scale and Enterprise plans.
 
 ```typescript
 import { PlanRequiredError } from '@0xarchive/sdk';
@@ -2579,12 +2611,15 @@ import type {
   Hip4Question,
   WalletClassification,
   SymbolEntry,
-  // Trade intent, USDC flows, moving-average breadth, positioning
+  // Trade intent, USDC flows, moving-average breadth, positioning, news
   TradeIntentBucket,
   UsdcFlowEvent,
   UsdcFlowVolumeBucket,
   BreadthMaReading,
   PositioningReading,
+  NewsStory,
+  NewsReaction,
+  NewsWindow,
   // Webhooks
   WebhookEvent,
   WebhookEndpoint,

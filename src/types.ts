@@ -2156,6 +2156,200 @@ export interface UsdcFlowVolumeBucket {
   netUsd: number;
 }
 
+/** A story's topic, set by rules. Pass one to `topic` to filter. */
+export type NewsTopic =
+  | 'listing'
+  | 'delisting'
+  | 'liquidation'
+  | 'hack'
+  | 'outage'
+  | 'upgrade'
+  | 'etf'
+  | 'regulation'
+  | 'macro'
+  | 'earnings'
+  | 'partnership'
+  | 'funding'
+  | 'other';
+
+/** Where a story's lead report comes from: a news outlet, an official source, or our own venue events. */
+export type NewsOrigin = 'outlet' | 'official' | 'venue';
+
+/**
+ * How far a 5-minute move is from the market's own normal, from `|moveZ|`:
+ * `unusual` from 2, `large` from 3.
+ */
+export type NewsMoveLevel = 'normal' | 'unusual' | 'large';
+
+/** The venue a news market belongs to. */
+export type NewsVenue = 'hyperliquid' | 'hip3' | 'lighter';
+
+/**
+ * Parameters for one page of stories (`news.list()`). Every field is optional.
+ */
+export interface NewsParams {
+  /** Only stories whose lead report names one of these markets on this venue (at most 20; case does not matter). */
+  symbols?: string | readonly string[];
+  /** Only one topic. The API takes any lowercase word and returns an empty page for one it does not use. */
+  topic?: NewsTopic | (string & {});
+  /** Only stories of at least this weight, 1 to 3 (sent as `min_weight`; default 1). */
+  minWeight?: 1 | 2 | 3;
+  /** Earliest `firstSeenAt`, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to 24 hours before `end`. */
+  start?: Timestamp;
+  /** Latest `firstSeenAt`, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: Timestamp;
+  /**
+   * The feed as we knew it at this time, with the reactions and reports
+   * recorded by then (sent as `as_of`). Defaults to now; a time in the
+   * future is now.
+   */
+  asOf?: Timestamp;
+  /** The previous page's `nextCursor`, passed back unchanged. */
+  cursor?: string;
+  /** Stories per page, 1 to 500 (default 100). */
+  limit?: number;
+}
+
+/**
+ * Parameters for `news.iterate()`. When `end` is left out, the iterator fixes
+ * it to the current time before the first request and sends that same `end`
+ * on every page. `start` is optional (the API reads the 24 hours before `end`).
+ */
+export type NewsIterateParams = Omit<NewsParams, 'cursor'>;
+
+/** A market a story names. */
+export interface NewsMarket {
+  /** `hyperliquid`, `hip3` or `lighter`. */
+  venue: NewsVenue | (string & {});
+  /** The venue's symbol as the API spells it (`BTC`, `xyz:CL`). */
+  symbol: string;
+}
+
+/** One report that joined a story. */
+export interface NewsReport {
+  id: string;
+  /** Credit for the report, for example `Tree News`. */
+  source: string;
+  url: string | null;
+  headline: string;
+  /** The source's own time (RFC 3339 UTC), or null when it gave none. */
+  publishedAt: string | null;
+  /** When we first saw the report (RFC 3339 UTC). */
+  observedAt: string;
+}
+
+/** A market's price at the start and end of a window. */
+export interface NewsPrice {
+  at: number | null;
+  end: number | null;
+  movePct: number | null;
+}
+
+/** Liquidations in a window, in USD. Lighter reports `total` only (`long` and `short` are null). */
+export interface NewsLiquidations {
+  long: number | null;
+  short: number | null;
+  total: number | null;
+}
+
+/** Book depth within 25 basis points of the mid, in USD. */
+export interface NewsDepth {
+  at: number | null;
+  end: number | null;
+}
+
+/**
+ * What one market did in the minute or 5 minutes after a story was first
+ * seen. A figure we could not measure is null, never 0.
+ *
+ * The 5-minute window also carries the depth, `moveZ` and `moveLevel` fields.
+ * Keys follow the SDK's snake_case to camelCase rule, which leaves an
+ * underscore before a digit: the API's `bid_depth_25bp_usd` is
+ * `bidDepth_25bpUsd`.
+ */
+export interface NewsWindow {
+  /** When the window closed (RFC 3339 UTC). */
+  end: string;
+  price: NewsPrice | null;
+  liquidationsUsd: NewsLiquidations | null;
+  oiChangePct: number | null;
+  volumeVsPrior: number | null;
+  /** 5-minute window only. */
+  bidDepth_25bpUsd?: NewsDepth;
+  /** 5-minute window only. */
+  askDepth_25bpUsd?: NewsDepth;
+  /**
+   * 5-minute window only: the 5-minute move over that market's trailing
+   * 24-hour standard deviation of 5-minute moves; null when it cannot be computed.
+   */
+  moveZ?: number | null;
+  /**
+   * 5-minute window only: `normal`, `unusual` (|moveZ| from 2) or `large`
+   * (from 3); null with `moveZ`. Story moves are mostly noise: show the move
+   * as typical unless this is `unusual` or `large`.
+   */
+  moveLevel?: NewsMoveLevel | null;
+}
+
+/** Another market a story names, over its first 5 minutes. */
+export interface NewsOtherMove {
+  market: NewsMarket;
+  /** Sent as `move_pct_5m`: the key keeps the underscore before the digit. */
+  movePct_5m: number | null;
+  /** Sent as `oi_change_pct_5m`. */
+  oiChangePct_5m: number | null;
+}
+
+/**
+ * What the story's first market did after the story was first seen. A
+ * measurement, not a cause: neither the API nor the SDK claims the story
+ * moved the market.
+ */
+export interface NewsReaction {
+  market: NewsMarket;
+  /** The story's `firstSeenAt`; the windows start here (RFC 3339 UTC). */
+  from: string;
+  /** `measuring` until the windows close, then `final`. */
+  status: 'measuring' | 'final' | (string & {});
+  /** Keyed `1m` and `5m`; a window not yet due is absent. */
+  windows: { '1m'?: NewsWindow; '5m'?: NewsWindow };
+  others: NewsOtherMove[];
+  /** When we recorded this measurement (RFC 3339 UTC). */
+  knownAt?: string;
+}
+
+/**
+ * One news story: a headline, the reports behind it and the markets it names.
+ * Public-display stories only. `headline` is the source's own words, cleaned
+ * by rules and never rewritten; `source` and `sourceLine` credit it and `url`
+ * links to it.
+ */
+export interface NewsStory {
+  /** `st_` plus the lead report's id. */
+  id: string;
+  headline: string;
+  /** Credit for the lead report, for example `Federal Reserve`. */
+  source: string;
+  /** For example `via Tree News`; null when there is none. */
+  sourceLine: string | null;
+  url: string | null;
+  origin: NewsOrigin | (string & {});
+  topic: NewsTopic | (string & {});
+  /** 1 to 3, set by rules. */
+  weight: number;
+  weightRule: string;
+  publishedAt: string | null;
+  /** When we first saw the story. Stories are ordered by it, newest first. */
+  firstSeenAt: string;
+  /** When we recorded the lead report. */
+  knownAt: string;
+  /** The markets the lead report names; the first is the one `reaction` describes. Empty when none matched. */
+  markets: NewsMarket[];
+  reports: NewsReport[];
+  /** Null when there is no reaction (no market, or a weak match). */
+  reaction: NewsReaction | null;
+}
+
 /** Moving-average lengths, in days, the breadth routes accept. */
 export type BreadthMaLength = 5 | 20 | 50 | 200;
 

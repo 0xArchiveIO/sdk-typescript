@@ -41,5 +41,6 @@ export {
   USDC_FLOW_VOLUME_INTERVALS,
   USDC_FLOWS_MAX_LIMIT,
 } from './usdc-flows';
+export { NewsResource, NEWS_MAX_LIMIT, NEWS_MAX_SYMBOLS, NEWS_WEIGHTS } from './news';
 export { BreadthMaResource, BREADTH_MA_LENGTHS, BREADTH_MA_INTERVALS, BREADTH_MA_MAX_LIMIT } from './breadth-ma';
 export { PositioningResource, POSITIONING_WINDOWS } from './positioning';
