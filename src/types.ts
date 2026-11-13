@@ -1059,8 +1059,18 @@ export interface TriggerLevelBucket {
 export interface TriggerLevels {
   /** Current mid/mark price, center of the requested range */
   midPrice: number;
-  /** UTC RFC3339 server time the pending-trigger state was read */
-  asOf: string;
+  /**
+   * Block time of the newest trigger order event the map reflects, as a UTC
+   * RFC 3339 string with millisecond precision. An answer served from a cache
+   * keeps the time of the data it was built from. `null` when the time of the
+   * data is unknown.
+   */
+  asOf?: string | null;
+  /**
+   * Hyperliquid block number the map reflects. `null` when it is unknown;
+   * absent when the API does not send it.
+   */
+  asOfBlock?: number | null;
   /** Total pending bid size across the returned window */
   totalBidSize: number;
   /** Total pending ask size across the returned window */
@@ -1812,8 +1822,13 @@ export interface SpotFreshness {
 export interface CoinSummary {
   /** Trading pair symbol */
   coin: string;
-  /** Timestamp (UTC) */
-  timestamp: string;
+  /**
+   * Time of the market data the summary is built from (UTC): the sample its
+   * prices, open interest and funding come from. It is not the time of the
+   * request, and the 24h volume and liquidation totals do not move it. `null`
+   * when the time of the data is unknown.
+   */
+  timestamp?: string | null;
   /** Latest mark price */
   markPrice?: string;
   /** Latest oracle price */
@@ -3280,7 +3295,11 @@ export interface WsL4Snapshot<T = WsL4SnapshotData> {
   coin: string;
   symbol: string;
   last_block_number: number;
-  timestamp: number;
+  /**
+   * Block time of `last_block_number` in Unix milliseconds. `null` when the
+   * time of that block is not known yet.
+   */
+  timestamp?: number | null;
   data: T;
 }
 
@@ -3360,7 +3379,11 @@ export interface WsL2FullDepthSnapshot {
   symbol: string;
   /** Block the book is current to. */
   last_block_number: number;
-  timestamp: number;
+  /**
+   * Block time of `last_block_number` in Unix milliseconds. `null` when the
+   * time of that block is not known yet.
+   */
+  timestamp?: number | null;
   data: WsL2FullDepthSnapshotData;
 }
 

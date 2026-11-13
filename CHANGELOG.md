@@ -5,6 +5,35 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
+## 1.14.1 (Unreleased)
+
+Times that describe market data are the time of the data, and are `null`
+when that time is unknown. Responses that carry these fields as before still
+parse, with or without `validate: true`.
+
+### Changed
+- `CoinSummary.timestamp` (`summary()` on Hyperliquid, HIP-3, Lighter and
+  Lighter on Robinhood Chain, `getSummary()` on HIP-4) is
+  `string | null | undefined`. It is the time of the market data the summary
+  is built from, not the time of the request, and `null` when no market data
+  was available. `CoinSummarySchema` accepts `null`.
+- `TriggerLevels.asOf` (`orders.triggerLevels()` on Hyperliquid and HIP-3) is
+  `string | null | undefined`. It is the block time of the newest trigger
+  order event the map reflects, with millisecond precision, and no longer the
+  server read time. An answer served from a cache keeps the time of its data.
+  `TriggerLevelsSchema` accepts `null`.
+- The `timestamp` of an `l4_snapshot` (`WsL4Snapshot`,
+  `WsL2FullDepthSnapshot`) is `number | null | undefined`: the block time of
+  `last_block_number` in Unix milliseconds, or `null` while that block's time
+  is not known. This covers `l4_diffs`, `hip3_l4_diffs`, `spot_l4_diffs`,
+  `hip4_l4_diffs`, `orderbook_full` and `hip3_orderbook_full`, live and in
+  replay. `WsL4SnapshotSchema` and `WsServerMessageSchema` accept `null`.
+
+### Added
+- `TriggerLevels.asOfBlock`: the block the trigger map reflects, or `null`
+  when it is unknown. `TriggerLevelsSchema` keeps it, so it is no longer
+  stripped from a validated response.
+
 ## 1.14.0 (2026-11-04)
 
 ### Added

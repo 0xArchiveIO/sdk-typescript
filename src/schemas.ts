@@ -482,7 +482,8 @@ export const WsL4SnapshotSchema = z.object({
   coin: z.string(),
   symbol: z.string(),
   last_block_number: z.number().int().nonnegative(),
-  timestamp: z.number().int(),
+  // Block time of last_block_number; null while that block's time is unknown.
+  timestamp: z.number().int().nullable().optional(),
   data: z.union([
     z.object({
       bids: z.array(WsL4SnapshotEntrySchema),
@@ -972,7 +973,9 @@ export const TriggerLevelBucketSchema = z.object({
 
 export const TriggerLevelsSchema = z.object({
   midPrice: z.number(),
-  asOf: z.string(),
+  // Block time of the newest trigger order event; null when unknown.
+  asOf: z.string().nullable().optional(),
+  asOfBlock: z.number().int().nonnegative().nullable().optional(),
   totalBidSize: z.number(),
   totalAskSize: z.number(),
   levels: z.array(TriggerLevelBucketSchema),
@@ -1048,7 +1051,8 @@ export const SpotFreshnessResponseSchema = z.object({
 
 export const CoinSummarySchema = z.object({
   coin: z.string(),
-  timestamp: z.string(),
+  // Time of the market data the summary is built from; null when unknown.
+  timestamp: z.string().nullable().optional(),
   markPrice: z.string().nullable().optional(),
   oraclePrice: z.string().nullable().optional(),
   midPrice: z.string().nullable().optional(),

@@ -972,6 +972,7 @@ console.log(`24h volume: ${summary.volume24h}`);
 console.log(`24h liquidation volume: $${summary.liquidationVolume24h}`);
 console.log(`  Long: $${summary.longLiquidationVolume24h}`);
 console.log(`  Short: $${summary.shortLiquidationVolume24h}`);
+console.log(`Data time: ${summary.timestamp}`); // null when the time of the data is unknown
 
 // Lighter (price, funding, OI; no volume or liquidation data)
 const lighterSummary = await client.lighter.summary('BTC');
@@ -2034,8 +2035,10 @@ replay `speed` option is ignored. See [Bulk replay: L4 and full depth](#bulk-rep
 `orderbook_full` (and `hip3_orderbook_full` for HIP-3) streams the whole
 aggregated book rather than the top levels. A subscription starts with an
 `l4_snapshot` message holding every bid and ask level (`{ px, sz, n }`) plus
-level counts, total sizes, mid, spread and `last_block_number`, then sends
-`l4_batch` messages of level changes (`{ side, px, sz, n, bn }`, where `sz: 0`
+level counts, total sizes, mid, spread and `last_block_number` (its
+`timestamp` is that block's time in Unix milliseconds, or `null` while the
+time of the block is not known yet), then sends `l4_batch` messages of level
+changes (`{ side, px, sz, n, bn }`, where `sz: 0`
 removes the level). Read them with `onMessage`; the types are
 `WsL2FullDepthSnapshot` and `WsL2FullDepthBatch`. A replay of these channels
 sends the same two message types, rebuilt from the L4 stream: one batch per

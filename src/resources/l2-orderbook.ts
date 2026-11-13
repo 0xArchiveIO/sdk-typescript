@@ -44,7 +44,11 @@ export class L2OrderBookResource {
     private coinTransform: (s: string) => string = (c) => c.toUpperCase(),
   ) {}
 
-  /** Get full-depth L2 order book snapshot. */
+  /**
+   * Get full-depth L2 order book snapshot. Its `timestamp` is the block time
+   * of the book as a UTC RFC 3339 string, or `null` when the time of the data
+   * is unknown.
+   */
   async get(symbol: string, params?: L2OrderBookParams): Promise<any> {
     const coin = this.coinTransform(symbol);
     const query: Record<string, unknown> = {};
