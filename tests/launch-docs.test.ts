@@ -11,19 +11,19 @@ const section = (text: string, start: string, end: string): string => {
   return text.slice(from, to);
 };
 
-describe('1.14.1 release surface', () => {
+describe('1.15.0 release surface', () => {
   const readme = readRepoFile('README.md');
   const changelog = readRepoFile('CHANGELOG.md');
   const pkg = JSON.parse(readRepoFile('package.json')) as { version: string };
 
   it('carries one aligned version', () => {
-    expect(pkg.version).toBe('1.14.1');
-    expect(changelog.indexOf('## 1.14.1')).toBeGreaterThanOrEqual(0);
-    expect(changelog.indexOf('## 1.14.1')).toBeLessThan(changelog.indexOf('## 1.14.0'));
+    expect(pkg.version).toBe('1.15.0');
+    expect(changelog.indexOf('## 1.15.0')).toBeGreaterThanOrEqual(0);
+    expect(changelog.indexOf('## 1.15.0')).toBeLessThan(changelog.indexOf('## 1.14.0'));
   });
 
   it('documents the nullable data times', () => {
-    const notes = section(changelog, '## 1.14.1', '## 1.14.0');
+    const notes = section(changelog, '## 1.15.0', '## 1.14.0');
     for (const text of [
       '`CoinSummary.timestamp`',
       '`TriggerLevels.asOf`',
