@@ -160,7 +160,9 @@ export class OrdersResource extends OrderFlowResource {
    * Currently pending stop-loss and take-profit trigger orders grouped into
    * price buckets near the current mid/mark price. Voluntary trigger orders,
    * not projected forced liquidations (see `liquidations.levels` for those).
-   * The response's `asOf` is the server read time.
+   * The response's `asOf` is the block time of the newest trigger order event
+   * the map reflects, and `asOfBlock` is that block; either is `null` when
+   * unknown.
    *
    * @param symbol - The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
    * @param params - Range, bucket count, and side filter
