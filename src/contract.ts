@@ -37,7 +37,11 @@ export const API_VERSION_HEADER = '0xArchive-Version';
  *   above the n-day moving average and positioning are included with the
  *   Build, Pro, Scale and Enterprise plans, and the `mempool` WebSocket
  *   channel with Pro, Scale and Enterprise. A REST plan refusal is thrown as
- *   `PlanRequiredError`, with `requiredPlans`.
+ *   `PlanRequiredError`, with `requiredPlans`. From November 23, 2026, after
+ *   an account's first 30 days, Free data runs through yesterday (UTC): a
+ *   Free REST request that reaches into today is also a `PlanRequiredError`
+ *   (`body.reason` is `today_needs_build`), and a live subscribe or a replay
+ *   that reaches into today is answered with `forbidden`.
  * - `upstream_unavailable`: a dependency is unavailable; retry later.
  * - `internal_error`.
  * - `slow_consumer` (WebSocket only): the connection fell behind a stream and

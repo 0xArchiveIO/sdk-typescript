@@ -80,6 +80,8 @@ const history = await client.hyperliquid.orderbook.history('ETH', {
 });
 ```
 
+These calls read today's data, apart from the instrument and pair lists. From November 23, 2026, after an account's first 30 days, Free data runs through yesterday (UTC), so on such an account they throw `PlanRequiredError` and are not charged: today's data needs Build. To stay on Free, pass a `timestamp` or `end` before today's 00:00 UTC. See [Free Plan](#free-plan).
+
 ## Choose Your Next Path
 
 | Need | Link |
@@ -109,6 +111,15 @@ Dates are the first served instant of each dataset, as `client.capabilities()` r
 **Build-and-above datasets** (Build, Pro, Scale and Enterprise plans): trade intent hourly intervals from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; USDC flows from 2025-09-27 09:33; breadth above the n-day moving average from 2025-03-27 (Hyperliquid, n = 5) and 2025-12-27 (HIP-3, n = 5); positioning for the current window only. See [Build-and-above datasets](#build-and-above-datasets).
 
 For the first served instant of every venue and datatype, and which WebSocket channels stream live and replay, call [`client.capabilities()`](#capabilities).
+
+## Free Plan
+
+Free includes 50,000 credits a month and the most recent rolling 30 days of history, with at most 30 days per request or replay, on every route and WebSocket channel except the [Build-and-above datasets](#build-and-above-datasets) and the live `mempool` channel.
+
+From November 23, 2026, after an account's first 30 days (counted from sign-up), Free data runs through yesterday (UTC): today's data and live streams need Build, and replays of past days stay on Free. In its first 30 days an account keeps today's data. Build and above are unaffected.
+
+- **REST.** A request whose window reaches into today is refused before it is metered, so it is not charged. That is an `end` (or `timestamp` on a point-in-time route such as `orderbook.get()`) at or after today's 00:00 UTC, a range sent without `end`, which ends now, and every `current()`, `recent()` and summary call, which always read now. The refusal is HTTP 403 `forbidden`, thrown as `PlanRequiredError`; `body.reason` is `'today_needs_build'` and `body.dataEndsOn` the last day Free serves (`YYYY-MM-DD`, UTC). The latest instant Free serves is 23:59:59.999 UTC on that day. Instrument and pair lists, HIP-4 outcomes and questions, and freshness are never refused. See [Error Handling](#error-handling).
+- **WebSocket.** A live subscribe is answered with an error whose `errorCode` is `forbidden`, and so is a replay whose `end` is at or after today's 00:00 UTC. Replays of past days are served as before.
 
 ## Configuration
 
@@ -1443,7 +1454,7 @@ const liveHip4 = symbols.filter((s) => s.exchange === 'hip4' && s.isSettled === 
 
 Get API keys programmatically using an Ethereum wallet. No browser or email required.
 
-Free includes every market, route, schema, and served depth, with history limited to the most recent rolling 30 days and a maximum 30-day span per request or replay. Build and above keep the full retained archive. Plans gate capacity and Free's 30-day history window, not route families, schemas, or served depth. See [Pricing](https://www.0xarchive.io/pricing) for plan capacity.
+Free includes every market, route, schema, and served depth, with history limited to the most recent rolling 30 days and a maximum 30-day span per request or replay. From November 23, 2026, after an account's first 30 days, Free data runs through yesterday (UTC); today's data and live streams need Build (see [Free Plan](#free-plan)). Build and above keep the full retained archive. Plans gate capacity and Free's history window, not route families, schemas, or served depth. The exceptions are the live `mempool` channel, included with the Pro, Scale and Enterprise plans, and the [Build-and-above datasets](#build-and-above-datasets). See [Pricing](https://www.0xarchive.io/pricing) for plan capacity.
 
 #### Free Tier (SIWE)
 
@@ -1830,6 +1841,8 @@ In Node.js the client connects with the [`ws`](https://www.npmjs.com/package/ws)
 
 > `mempool` streams pending Hyperliquid transactions, live only, on `wss://stream.0xarchive.io/ws` (`STREAM_WS_URL`) only, with the Pro, Scale and Enterprise plans. See [Pending Transactions (mempool)](#pending-transactions-mempool).
 
+> From November 23, 2026, after an account's first 30 days, Free data runs through yesterday (UTC). On such an account a live subscribe, and a replay whose `end` is at or after today's 00:00 UTC, is answered with an error whose `errorCode` is `forbidden`. Replays of past days stay on Free. See [Free Plan](#free-plan).
+
 ```typescript
 import { OxArchiveWs } from '@0xarchive/sdk';
 
@@ -1966,7 +1979,7 @@ ws.onServerError((error) => {
 });
 ```
 
-`unsupported_for_venue` means the channel does not offer that mode (live, replay or seek), and `endpoint_unsupported` that the endpoint you connected to does not serve the channel; the message names the endpoint that does.
+`unsupported_for_venue` means the channel does not offer that mode (live, replay or seek), and `endpoint_unsupported` that the endpoint you connected to does not serve the channel; the message names the endpoint that does. `forbidden` means the plan does not include the channel (`mempool`) or, from November 23, 2026, on a Free account past its first 30 days, a live subscribe or a replay that reaches into today (see [Free Plan](#free-plan)).
 
 ### Gap Detection
 
@@ -2206,7 +2219,7 @@ Historical Lighter data is available through REST, WebSocket replay, or exports.
 
 #### Live Lighter Channels
 
-Live Lighter data uses the same subscribe, ack, and `data` envelope as Hyperliquid live data, and the live payloads use Hyperliquid-style shapes. It is available on every plan and is served on `wss://api.0xarchive.io/ws`, the client's default URL. `wss://stream.0xarchive.io/ws` serves only Hyperliquid node-sourced channels and answers a Lighter subscribe with an error that points to `wss://api.0xarchive.io/ws`.
+Live Lighter data uses the same subscribe, ack, and `data` envelope as Hyperliquid live data, and the live payloads use Hyperliquid-style shapes. It is available on every plan (from November 23, 2026, after an account's first 30 days, live streams need Build; see [Free Plan](#free-plan)) and is served on `wss://api.0xarchive.io/ws`, the client's default URL. `wss://stream.0xarchive.io/ws` serves only Hyperliquid node-sourced channels and answers a Lighter subscribe with an error that points to `wss://api.0xarchive.io/ws`.
 
 Live Lighter messages are metered per message in the same way as Hyperliquid live data, and the usual plan limits on connections and subscriptions apply, as does the limit of 10 subscribe requests per second per connection. Symbols are the same as `client.lighter.instruments.list()`; they are case-insensitive when you subscribe and the server echoes them uppercase.
 
@@ -2507,7 +2520,7 @@ The codes (`ERROR_CODES`):
 | `unsupported_for_venue` | The datatype, or the WebSocket mode, is not offered on this venue; the message names where it is |
 | `route_not_found` | No route matches the path |
 | `not_found` | The route exists but the resource id does not |
-| `unauthorized`, `forbidden` | The API key is missing or invalid, or not allowed this request. `forbidden` is also the plan refusal (`PlanRequiredError`) |
+| `unauthorized`, `forbidden` | The API key is missing or invalid, or not allowed this request. `forbidden` is also the plan refusal (`PlanRequiredError`), including, on Free, today's data |
 | `insufficient_credits` | Monthly credits are spent |
 | `rate_limited` | Too many requests, or too many subscribe operations |
 | `conflict` | The request conflicts with current state (for example a replay already running) |
@@ -2527,6 +2540,18 @@ try {
 } catch (error) {
   if (error instanceof PlanRequiredError) {
     console.error(`${error.datatype} needs ${error.requiredPlans.join(', ')}: ${error.upgradeUrl}`);
+  }
+}
+```
+
+From November 23, 2026, `PlanRequiredError` is also thrown when a Free account past its first 30 days asks for today's data (see [Free Plan](#free-plan)). The request is not charged. `datatype` is then undefined, `requiredPlans` is `['build', 'pro', 'scale', 'enterprise']`, and `body` carries `reason` and `dataEndsOn`:
+
+```typescript
+try {
+  await client.hyperliquid.orderbook.get('BTC');
+} catch (error) {
+  if (error instanceof PlanRequiredError && error.body?.reason === 'today_needs_build') {
+    console.error(`Free data ends on ${error.body.dataEndsOn} (UTC). Build: ${error.upgradeUrl}`);
   }
 }
 ```

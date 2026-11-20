@@ -746,7 +746,10 @@ function transformOrderbook(coin: string, raw: Record<string, unknown>): OrderBo
  * behind a stream and messages were dropped: re-subscribe, or restart the
  * replay, to resync. `endpoint_unsupported` means the endpoint does not serve
  * the channel; the message names the one that does. `forbidden` on
- * `mempool` means the plan does not include it.
+ * `mempool` means the plan does not include it. From November 23, 2026, a
+ * Free account past its first 30 days also gets `forbidden` on a live
+ * subscribe, and on a replay that reaches into today; replays of past days
+ * stay on Free.
  *
  * **Keep-Alive:** The server sends WebSocket ping frames every 30 seconds
  * and will disconnect idle connections after 60 seconds. This SDK automatically
