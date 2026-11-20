@@ -562,6 +562,42 @@ describe('the plan refusal', () => {
     expect(error).not.toBeInstanceOf(PlanRequiredError);
     expect((error as OxArchiveError).errorCode).toBe('forbidden');
   });
+
+  it("a Free refusal for today's data is a PlanRequiredError that keeps its reason", async () => {
+    // The body the API sends from 2026-11-23 when a Free account past its
+    // first 30 days asks for today's data: no datatype, the plans that serve
+    // today, and the reason and last day served as extra fields.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: async () => ({
+          success: false,
+          code: 403,
+          error_code: 'forbidden',
+          reason: 'today_needs_build',
+          data_ends_on: '2026-11-22',
+          required_plans: ['build', 'pro', 'scale', 'enterprise'],
+          upgrade_url: 'https://0xarchive.io/pricing',
+          error:
+            "Free data runs through yesterday: the latest instant Free serves is 2026-11-22T23:59:59.999Z. Today's data and live streams need Build. Upgrade at https://0xarchive.io/pricing.",
+          request_id: 'req-today',
+        }),
+      }),
+    );
+    const error = await client().hyperliquid.orderbook.get('BTC').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PlanRequiredError);
+    const e = error as PlanRequiredError;
+    expect(e.status).toBe(403);
+    expect(e.errorCode).toBe('forbidden');
+    expect(e.datatype).toBeUndefined();
+    expect(e.requiredPlans).toEqual(['build', 'pro', 'scale', 'enterprise']);
+    expect(e.upgradeUrl).toBe('https://0xarchive.io/pricing');
+    expect(e.requestId).toBe('req-today');
+    expect(e.body?.reason).toBe('today_needs_build');
+    expect(e.body?.dataEndsOn).toBe('2026-11-22');
+  });
 });
 
 describe('recorded errors keep their code, parameter and values', () => {

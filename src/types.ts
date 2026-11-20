@@ -3785,10 +3785,14 @@ export interface ApiError {
   availableOn?: Array<{ venue: string; route: string }>;
   /**
    * On `unsupported_for_venue` and on a `forbidden` plan refusal: the
-   * datatype id, as `GET /v1/capabilities` names it.
+   * datatype id, as `GET /v1/capabilities` names it. Absent when a Free
+   * account is refused today's data.
    */
   datatype?: string;
-  /** On a `forbidden` plan refusal: the plans that include the datatype. */
+  /**
+   * On a `forbidden` plan refusal: the plans that include the datatype, or
+   * that serve today's data.
+   */
   requiredPlans?: string[];
   /** On a `forbidden` plan refusal: where to change plan. */
   upgradeUrl?: string;
@@ -3884,13 +3888,19 @@ export interface PlanRequiredErrorDetails extends OxArchiveErrorDetails {
 }
 
 /**
- * The error thrown when the caller's plan does not include the dataset: HTTP
- * 403 with `errorCode` `forbidden` and the plans that include it.
+ * The error thrown when the caller's plan does not include the data asked
+ * for: HTTP 403 with `errorCode` `forbidden` and the plans that include it.
  *
  * Trade intent, USDC flows, breadth above the n-day moving average and
  * positioning are included with the Build, Pro, Scale and Enterprise plans;
  * a Free key gets this error. It extends {@link OxArchiveError}, so existing
  * `instanceof OxArchiveError` checks still catch it.
+ *
+ * From November 23, 2026, after an account's first 30 days, Free data runs
+ * through yesterday (UTC), and a Free request whose window reaches into
+ * today gets this error too, before it is metered. `datatype` is then
+ * undefined, `body.reason` is `today_needs_build` and `body.dataEndsOn` is
+ * the last day Free serves (`YYYY-MM-DD`, UTC).
  *
  * @example
  * ```typescript
