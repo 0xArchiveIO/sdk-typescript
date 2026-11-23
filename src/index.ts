@@ -15,7 +15,8 @@
  * - The public symbol universe on client.symbols
  * - Build-and-above datasets: trade intent, USDC flows, breadth above the
  *   n-day moving average and positioning (client.hyperliquid.tradeIntent,
- *   usdcFlows, breadthMa, positioning, and the HIP-3 twins)
+ *   usdcFlows, breadthMa, positioning, and the HIP-3 twins), and the momentum
+ *   factor on core perps (client.hyperliquid.factors.momentum)
  *
  * @example
  * ```typescript
@@ -147,6 +148,16 @@ export {
   BREADTH_MA_MAX_LIMIT,
   PositioningResource,
   POSITIONING_WINDOWS,
+} from './resources';
+
+// The momentum factor (Build and above)
+export {
+  FactorsResource,
+  MomentumResource,
+  MOMENTUM_LOOKBACKS,
+  MOMENTUM_UNIVERSES,
+  MOMENTUM_INTERVALS,
+  MOMENTUM_MAX_LIMIT,
 } from './resources';
 
 // Webhooks: management resource and signature verification for your receiver
@@ -292,6 +303,12 @@ export {
   BreadthMaReadingArrayResponseSchema,
   PositioningReadingSchema,
   PositioningReadingArrayResponseSchema,
+  // Momentum factor schemas
+  MomentumScoreSchema,
+  MomentumScoreArrayResponseSchema,
+  MomentumHoldingSchema,
+  MomentumReturnSchema,
+  MomentumReturnArrayResponseSchema,
   // HIP-3 oracle schemas
   Hip3OracleDiscoveryBoundsSchema,
   Hip3OracleExternalPriceSchema,
@@ -382,6 +399,8 @@ export {
   type ValidatedUsdcFlowVolumeBucket,
   type ValidatedBreadthMaReading,
   type ValidatedPositioningReading,
+  type ValidatedMomentumScore,
+  type ValidatedMomentumReturn,
   type ValidatedHip3OracleDiscoveryBounds,
   type ValidatedHip3OracleExternalPrice,
   type ValidatedHip4Question,
@@ -542,6 +561,17 @@ export type {
   PositioningWindow,
   PositioningParams,
   PositioningReading,
+  // The momentum factor
+  MomentumLookback,
+  MomentumUniverse,
+  MomentumInterval,
+  MomentumCurrentParams,
+  MomentumScoresParams,
+  MomentumReturnsParams,
+  MomentumReturnsIterateParams,
+  MomentumScore,
+  MomentumHolding,
+  MomentumReturn,
   // HIP-3 oracle
   Hip3OracleDiscoveryBounds,
   Hip3OracleExternalPrice,

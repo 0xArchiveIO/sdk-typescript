@@ -43,3 +43,11 @@ export {
 } from './usdc-flows';
 export { BreadthMaResource, BREADTH_MA_LENGTHS, BREADTH_MA_INTERVALS, BREADTH_MA_MAX_LIMIT } from './breadth-ma';
 export { PositioningResource, POSITIONING_WINDOWS } from './positioning';
+export {
+  FactorsResource,
+  MomentumResource,
+  MOMENTUM_LOOKBACKS,
+  MOMENTUM_UNIVERSES,
+  MOMENTUM_INTERVALS,
+  MOMENTUM_MAX_LIMIT,
+} from './momentum';

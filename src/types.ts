@@ -2348,6 +2348,167 @@ export interface PositioningReading {
 }
 
 // =============================================================================
+// The momentum factor (Hyperliquid core perps; Build, Pro, Scale and Enterprise plans)
+// =============================================================================
+
+/** The window of the return each perp is ranked on. Required on every momentum call: there is no default. */
+export type MomentumLookback = '7d' | '14d';
+
+/** The perps the factor's baskets are built from: the top 25 or top 50 by 30-day dollar volume, re-picked every 30 days. */
+export type MomentumUniverse = 'top25' | 'top50';
+
+/** Bucket widths of the momentum factor's returns, on UTC boundaries. */
+export type MomentumInterval = '1h' | '1d';
+
+/** Parameters for `factors.momentum.current()`: the route takes `lookback` only. */
+export interface MomentumCurrentParams {
+  /** `'7d'` or `'14d'`. Required. */
+  lookback: MomentumLookback;
+}
+
+/** Parameters for `factors.momentum.get()`. */
+export interface MomentumScoresParams {
+  /** `'7d'` or `'14d'`. Required. */
+  lookback: MomentumLookback;
+  /**
+   * The reading is as of the close of the hour at or before this time (Unix
+   * ms, ISO 8601 string or `Date`). Defaults to now; a later time than the
+   * newest settled hour gets the newest reading.
+   */
+  at?: Timestamp;
+}
+
+/**
+ * Parameters for one page of the momentum factor's returns
+ * (`factors.momentum.returns()`). `lookback` is required; `end` defaults to
+ * now and `start` to 30 days before `end`.
+ */
+export interface MomentumReturnsParams {
+  /** `'7d'` or `'14d'`. Required. */
+  lookback: MomentumLookback;
+  /** `'top25'` (default) or `'top50'`. */
+  universe?: MomentumUniverse;
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). Defaults to 30 days before `end`. */
+  start?: Timestamp;
+  /** End of the window, inclusive (Unix ms, ISO 8601 string or `Date`). Defaults to now. */
+  end?: Timestamp;
+  /** Bucket width (default `'1d'`); buckets open on UTC boundaries. */
+  interval?: MomentumInterval;
+  /** `true` adds each bucket's `holdings`: the weights of the rebalance in force at its last hour. */
+  holdings?: boolean;
+  /** The previous page's `nextCursor`, passed back unchanged. */
+  cursor?: string;
+  /** Buckets per page, 1 to 1000 (default 100). */
+  limit?: number;
+}
+
+/**
+ * Parameters for `factors.momentum.iterateReturns()`. `lookback` and `start`
+ * are required; when `end` is left out, the iterator fixes it to the current
+ * time before the first request and sends that same `end` on every page.
+ */
+export interface MomentumReturnsIterateParams extends Omit<MomentumReturnsParams, 'start' | 'cursor'> {
+  /** Start of the window (Unix ms, ISO 8601 string or `Date`). */
+  start: Timestamp;
+}
+
+/**
+ * One perp's momentum reading as of the close of one hour.
+ *
+ * A reading lists every perp eligible at that hour (60 days of history and
+ * dollar volume in the 30 days before the universe pick in force), strongest
+ * first. `score` is `ret` over `vol`: what the perps are ranked on.
+ */
+export interface MomentumScore {
+  /** The perp. */
+  symbol: string;
+  /** The reading's instant: the close of its hour (RFC 3339 UTC). */
+  timestamp: string;
+  /** The reading's instant in Unix milliseconds. */
+  timestampMs: number;
+  /** `'7d'` or `'14d'`. */
+  lookback: MomentumLookback | (string & {});
+  /** The method version, for example `momentum/1`. */
+  method: string;
+  /** The close-to-close return over the lookback, as a fraction (0.05 is 5%). */
+  ret: number | null;
+  /** The standard deviation of the last 30 days of hourly returns (not annualised). */
+  vol: number | null;
+  /** `ret / vol`: the signal the perps are ranked on. */
+  score: number;
+  /** The score's percentile rank among the perps in this reading, in (0, 1], ties averaged. */
+  pctRank: number;
+  /**
+   * The fifth `pctRank` falls in: 5 at or above 0.8, 1 at or below 0.2. The
+   * factor's baskets rank within their own universe, so a perp's place in a
+   * basket is in the returns' `holdings`.
+   */
+  quintile: number;
+  /** Whether the perp is in the top-25 universe in force at that hour. */
+  inTop25: boolean;
+  /** Whether the perp is in the top-50 universe in force at that hour. */
+  inTop50: boolean;
+  /**
+   * True once every candle the reading is made from is final. A final
+   * reading can still change if those candles are rebuilt.
+   */
+  isFinal: boolean;
+}
+
+/** One perp's weight in the momentum factor after a rebalance. */
+export interface MomentumHolding {
+  /** The perp. */
+  symbol: string;
+  /** Positive for the long leg, negative for the short leg. Each leg's weights sum to 1 in size. */
+  weight: number;
+}
+
+/**
+ * The momentum factor's return over one bucket.
+ *
+ * Long the top fifth of the universe on the score, short the bottom fifth,
+ * each leg weighted by inverse volatility, rebalanced every 168 hours
+ * (Saturdays 00:00 UTC, earning from 01:00). `ret` is the sum of the
+ * factor's hourly returns over the hours the bucket holds (simple, not
+ * compounded), gross of fees and funding.
+ */
+export interface MomentumReturn {
+  /** The bucket's open (RFC 3339 UTC). */
+  timestamp: string;
+  /** The bucket's open in Unix milliseconds. */
+  timestampMs: number;
+  /** The close of the last hour the bucket holds (RFC 3339 UTC). */
+  calculatedAt: string;
+  /** `calculatedAt` in Unix milliseconds. */
+  calculatedAtMs: number;
+  /** `'7d'` or `'14d'`. */
+  lookback: MomentumLookback | (string & {});
+  /** `'top25'` or `'top50'`. */
+  universe: MomentumUniverse | (string & {});
+  /** The method version, for example `momentum/1`. */
+  method: string;
+  /** The factor's return: `longRet` minus `shortRet`, as a fraction. */
+  ret: number;
+  /** The long leg's return over the bucket. */
+  longRet: number;
+  /** The short leg's return over the bucket: what the perps held short did, so a rise lowers `ret`. */
+  shortRet: number;
+  /** The hours summed: fewer than the interval's for the bucket still forming and for the first bucket of coverage. */
+  hours: number;
+  /** Perps in the long leg in force at the bucket's last hour. */
+  longs: number;
+  /** Perps in the short leg in force at the bucket's last hour. */
+  shorts: number;
+  /**
+   * With `holdings: true`, the weights of the rebalance in force at the
+   * bucket's last hour, long leg first; absent when not asked for.
+   */
+  holdings?: MomentumHolding[];
+  /** True once the whole bucket has closed and every candle it is made from is final. */
+  isFinal: boolean;
+}
+
+// =============================================================================
 // HIP-3 Oracle Types
 // =============================================================================
 
