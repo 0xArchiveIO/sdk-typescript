@@ -11,13 +11,51 @@ const section = (text: string, start: string, end: string): string => {
   return text.slice(from, to);
 };
 
-describe('1.15.0 release surface', () => {
+describe('1.16.0 release surface', () => {
   const readme = readRepoFile('README.md');
   const changelog = readRepoFile('CHANGELOG.md');
   const pkg = JSON.parse(readRepoFile('package.json')) as { version: string };
 
   it('carries one aligned version', () => {
-    expect(pkg.version).toBe('1.15.0');
+    expect(pkg.version).toBe('1.16.0');
+    expect(changelog.indexOf('## 1.16.0')).toBeGreaterThanOrEqual(0);
+    expect(changelog.indexOf('## 1.16.0')).toBeLessThan(changelog.indexOf('## 1.15.0'));
+  });
+
+  it('documents the momentum factor: methods, lookbacks, coverage and plans', () => {
+    const momentum = section(readme, '#### Momentum factor', '### Data Quality Monitoring');
+    for (const text of [
+      'client.hyperliquid.factors.momentum',
+      "`'7d'` or `'14d'`",
+      '2025-05-24 01:00 UTC',
+      '`meta.coverageFrom`',
+      'gross of fees and funding',
+      'iterateReturns',
+      'holdings: true',
+      "`'top25'`",
+      "`'top50'`",
+    ]) {
+      expect(momentum).toContain(text);
+    }
+    const notes = section(changelog, '## 1.16.0', '## 1.15.0');
+    for (const text of ['`PlanRequiredError`', 'Build', '`MomentumScore`', '`MomentumReturn`', '2025-05-24 01:00 UTC']) {
+      expect(notes).toContain(text);
+    }
+    const datasets = section(readme, '### Build-and-above datasets', '### Data Quality Monitoring');
+    expect(datasets).toContain('| Momentum factor | `client.hyperliquid.factors.momentum` | none |');
+    for (const text of [momentum, notes]) {
+      expect(text).not.toContain('\u2014');
+      // Only the 7-day and 14-day lookbacks exist.
+      expect(text).not.toMatch(/\b(1d|28d) lookback/);
+    }
+  });
+});
+
+describe('1.15.0 release surface', () => {
+  const readme = readRepoFile('README.md');
+  const changelog = readRepoFile('CHANGELOG.md');
+
+  it('keeps its changelog entry in order', () => {
     expect(changelog.indexOf('## 1.15.0')).toBeGreaterThanOrEqual(0);
     expect(changelog.indexOf('## 1.15.0')).toBeLessThan(changelog.indexOf('## 1.14.0'));
   });

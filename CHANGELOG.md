@@ -5,6 +5,37 @@ All notable changes to `@0xarchive/sdk` are documented in this file.
 The format is loosely based on Keep a Changelog, and the project follows
 semantic versioning.
 
+## 1.16.0 (Unreleased)
+
+### Added
+- The momentum factor on Hyperliquid core perps, included with the Build,
+  Pro, Scale and Enterprise plans: `client.hyperliquid.factors.momentum`,
+  with `get({ lookback, at })`, `current({ lookback })`,
+  `returns({ lookback, ... })` and `iterateReturns({ lookback, start, ... })`.
+  `lookback` is required on every call: `'7d'` or `'14d'`. A Free key gets
+  HTTP 403 `forbidden`, thrown as `PlanRequiredError` with `datatype`
+  `'momentum'`.
+- `get()` and `current()` return one reading as of the close of an hour:
+  every eligible perp, strongest first (`MomentumScore`), with its lookback
+  return (`ret`), 30-day hourly volatility (`vol`), `score` (return over
+  volatility), `pctRank`, `quintile` and whether it is in the top-25 and
+  top-50 universes (`inTop25`, `inTop50`).
+- `returns()` returns the long-short factor's return per `'1d'` (default) or
+  `'1h'` bucket on the `'top25'` (default) or `'top50'` universe, oldest
+  first (`MomentumReturn`), with each leg's return (`longRet`, `shortRet`),
+  the legs' sizes (`longs`, `shorts`) and, with `holdings: true`, the
+  rebalance's weights (`MomentumHolding`). `start` defaults to 30 days
+  before `end`, and pages hold up to 1,000 buckets (default 100).
+  `iterateReturns()` follows `nextCursor` until it is absent, needs `start`,
+  and fixes `end` once when it is left out.
+- Scores and returns start 2025-05-24 01:00 UTC; a request that ends before
+  then is empty, with `meta.coverageFrom` and `meta.notice`.
+- Zod schemas `MomentumScoreSchema`, `MomentumReturnSchema` and
+  `MomentumHoldingSchema` (used when `validate: true`), and the types
+  `MomentumLookback`, `MomentumUniverse`, `MomentumInterval` and the
+  parameter types for each method. Parameters are checked before a request
+  is sent.
+
 ## 1.15.0 (2026-11-14)
 
 Times that describe market data are the time of the data, and are `null`

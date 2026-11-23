@@ -47,6 +47,7 @@ import {
   UsdcFlowsResource,
   BreadthMaResource,
   PositioningResource,
+  FactorsResource,
 } from './resources';
 import {
   CoinFreshnessResponseSchema,
@@ -166,6 +167,13 @@ export class HyperliquidClient {
   public readonly positioning: PositioningResource;
 
   /**
+   * Factors on core perps: `factors.momentum`, every perp's momentum score at
+   * an hour and the long-short factor's returns (from 2025-05-24 01:00 UTC).
+   * Build, Pro, Scale and Enterprise plans.
+   */
+  public readonly factors: FactorsResource;
+
+  /**
    * HIP-3 builder-deployed perpetuals (trades from 2025-10-13)
    */
   public readonly hip3: Hip3Client;
@@ -201,6 +209,7 @@ export class HyperliquidClient {
     this.usdcFlows = new UsdcFlowsResource(http, basePath);
     this.breadthMa = new BreadthMaResource(http, basePath);
     this.positioning = new PositioningResource(http, basePath);
+    this.factors = new FactorsResource(http, basePath);
     this.hip3 = new Hip3Client(http);
     this.hip4 = new Hip4Client(http);
   }

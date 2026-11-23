@@ -1230,6 +1230,49 @@ export const PositioningReadingSchema = z.object({
 
 export const PositioningReadingArrayResponseSchema = ApiResponseSchema(z.array(PositioningReadingSchema));
 
+export const MomentumScoreSchema = z.object({
+  symbol: z.string(),
+  timestamp: z.string(),
+  timestampMs: z.number(),
+  lookback: z.string(),
+  method: z.string(),
+  ret: z.number().nullable(),
+  vol: z.number().nullable(),
+  score: z.number(),
+  pctRank: z.number().min(0).max(1),
+  quintile: z.number().int().min(1).max(5),
+  inTop25: z.boolean(),
+  inTop50: z.boolean(),
+  isFinal: z.boolean(),
+});
+
+export const MomentumScoreArrayResponseSchema = ApiResponseSchema(z.array(MomentumScoreSchema));
+
+export const MomentumHoldingSchema = z.object({
+  symbol: z.string(),
+  weight: z.number(),
+});
+
+export const MomentumReturnSchema = z.object({
+  timestamp: z.string(),
+  timestampMs: z.number(),
+  calculatedAt: z.string(),
+  calculatedAtMs: z.number(),
+  lookback: z.string(),
+  universe: z.string(),
+  method: z.string(),
+  ret: z.number(),
+  longRet: z.number(),
+  shortRet: z.number(),
+  hours: NonNegativeIntegerSchema,
+  longs: NonNegativeIntegerSchema,
+  shorts: NonNegativeIntegerSchema,
+  holdings: z.array(MomentumHoldingSchema).optional(),
+  isFinal: z.boolean(),
+});
+
+export const MomentumReturnArrayResponseSchema = ApiResponseSchema(z.array(MomentumReturnSchema));
+
 // =============================================================================
 // HIP-3 Oracle Schemas
 // =============================================================================
@@ -1417,6 +1460,8 @@ export type ValidatedUsdcFlowEvent = z.infer<typeof UsdcFlowEventSchema>;
 export type ValidatedUsdcFlowVolumeBucket = z.infer<typeof UsdcFlowVolumeBucketSchema>;
 export type ValidatedBreadthMaReading = z.infer<typeof BreadthMaReadingSchema>;
 export type ValidatedPositioningReading = z.infer<typeof PositioningReadingSchema>;
+export type ValidatedMomentumScore = z.infer<typeof MomentumScoreSchema>;
+export type ValidatedMomentumReturn = z.infer<typeof MomentumReturnSchema>;
 export type ValidatedHip3OracleDiscoveryBounds = z.infer<typeof Hip3OracleDiscoveryBoundsSchema>;
 export type ValidatedHip3OracleExternalPrice = z.infer<typeof Hip3OracleExternalPriceSchema>;
 export type ValidatedHip4Question = z.infer<typeof Hip4QuestionSchema>;

@@ -106,7 +106,7 @@ Dates are the first served instant of each dataset, as `client.capabilities()` r
 
 **Account positions** coverage: Hyperliquid core position changes from 2025-05-25 and HIP-3 from 2025-10-13, hourly snapshots from 2026-06-07, and a live snapshot about every 5 minutes. Lighter mainnet from 2025-01-17 and Lighter on Robinhood Chain from 2026-06-26, with hourly snapshots over the whole history and a live snapshot about every 2 minutes.
 
-**Build-and-above datasets** (Build, Pro, Scale and Enterprise plans): trade intent hourly intervals from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; USDC flows from 2025-09-27 09:33; breadth above the n-day moving average from 2025-03-27 (Hyperliquid, n = 5) and 2025-12-27 (HIP-3, n = 5); positioning for the current window only. See [Build-and-above datasets](#build-and-above-datasets).
+**Build-and-above datasets** (Build, Pro, Scale and Enterprise plans): trade intent hourly intervals from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; USDC flows from 2025-09-27 09:33; breadth above the n-day moving average from 2025-03-27 (Hyperliquid, n = 5) and 2025-12-27 (HIP-3, n = 5); positioning for the current window only; the momentum factor (Hyperliquid core) from 2025-05-24 01:00. See [Build-and-above datasets](#build-and-above-datasets).
 
 For the first served instant of every venue and datatype, and which WebSocket channels stream live and replay, call [`client.capabilities()`](#capabilities).
 
@@ -1255,7 +1255,7 @@ const hip3Twap = await client.hyperliquid.hip3.wallets.classify({ uses_twap: tru
 
 ### Build-and-above datasets
 
-Four datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, and positioning. A Free key gets HTTP 403 with `errorCode` `forbidden`, thrown as `PlanRequiredError` (see [Error Handling](#error-handling)). `client.capabilities()` lists their rows with `plans`.
+Five datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, positioning, and the momentum factor. A Free key gets HTTP 403 with `errorCode` `forbidden`, thrown as `PlanRequiredError` (see [Error Handling](#error-handling)). `client.capabilities()` lists their rows with `plans`.
 
 | Dataset | Hyperliquid core | HIP-3 | Coverage (UTC) |
 | --- | --- | --- | --- |
@@ -1263,8 +1263,9 @@ Four datasets are included with the Build, Pro, Scale and Enterprise plans: trad
 | USDC flows | `client.hyperliquid.usdcFlows` | none | From 2025-09-27 09:33 |
 | Breadth above the n-day moving average | `client.hyperliquid.breadthMa` | `client.hyperliquid.hip3.breadthMa` | Core: n = 5 from 2025-03-27, 20 from 2025-04-11, 50 from 2025-05-11, 200 from 2025-10-08. HIP-3: n = 5 from 2025-12-27, 20 from 2026-01-11, 50 from 2026-02-10, 200 from 2026-07-10 |
 | Positioning | `client.hyperliquid.positioning` | `client.hyperliquid.hip3.positioning` | The current window only; no history |
+| Momentum factor | `client.hyperliquid.factors.momentum` | none | Scores and returns from 2025-05-24 01:00 |
 
-The paged methods return `{ data, nextCursor, hasMore, meta }`. Their `iterate()` helpers (`iterateVolume()` for USDC flow totals) follow `nextCursor` until it is absent and never stop on a short or empty page. They need `start`; when `end` is left out, they fix it to the current time before the first request and send the same `end` on every page. When paging by hand, set `start` and `end` yourself: the default window is the 24 hours before each request's own now.
+The paged methods return `{ data, nextCursor, hasMore, meta }`. Their `iterate()` helpers (`iterateVolume()` for USDC flow totals, `iterateReturns()` for the momentum factor's returns) follow `nextCursor` until it is absent and never stop on a short or empty page. They need `start`; when `end` is left out, they fix it to the current time before the first request and send the same `end` on every page. When paging by hand, set `start` and `end` yourself: the default window is the 24 hours before each request's own now (the 30 days before it for the momentum factor's returns).
 
 #### Trade intent
 
@@ -1328,6 +1329,38 @@ Every listed perp over the current trailing window (`window`: `1h`, `4h` or `24h
 const { data, meta } = await client.hyperliquid.positioning.current({ window: '4h' });
 console.log(meta?.asOf);
 const btc = data.find((r) => r.symbol === 'BTC');
+```
+
+#### Momentum factor
+
+Every Hyperliquid core perp's momentum score at an hour, and the returns of the long-short momentum factor built from those scores (method `momentum/1`). `lookback` is required on every call: `'7d'` or `'14d'`. A perp's `score` is its close-to-close return over the lookback (`ret`) divided by the standard deviation of its last 30 days of hourly returns (`vol`).
+
+A reading (`get()` and `current()`) is as of the close of the hour at or before `at` (default now; a later time gets the newest reading) and lists every perp eligible then, strongest first: 60 days of history and dollar volume in the 30 days before the universe pick in force. `pctRank` is the score's percentile rank among them (ties averaged), `quintile` the fifth it falls in (5 at or above 0.8, 1 at or below 0.2), and `inTop25` and `inTop50` say whether the perp is in each universe at that hour. A reading is never paged.
+
+The factor's universe is the top 25 (`'top25'`, the default) or top 50 (`'top50'`) perps by 30-day dollar volume, re-picked every 30 days, with delisted perps included while they traded. Every 168 hours (Saturdays 00:00 UTC, earning from 01:00) it goes long the top fifth of the universe on the score and short the bottom fifth, each leg weighted by inverse volatility and summing to 1. A bucket's `ret` is `longRet` minus `shortRet`, the sum of the factor's hourly returns over the `hours` it holds (simple, not compounded), gross of fees and funding. `longs` and `shorts` are the legs' sizes in force at the bucket's last hour; with `holdings: true`, `holdings` lists that rebalance's weights (positive long, negative short). Intervals are `'1d'` (the default) and `'1h'`, on UTC boundaries; `limit` is 1 to 1,000 (default 100).
+
+Scores and returns start 2025-05-24 01:00 UTC; a request that ends before then is empty, with `meta.coverageFrom` and `meta.notice`. `isFinal` is true once every candle a record is made from is final (and, for a bucket, once the bucket has closed). A 503 `upstream_unavailable` ("still being prepared") on the first request after a server restart is retryable.
+
+```typescript
+const { data } = await client.hyperliquid.factors.momentum.current({ lookback: '7d' });
+for (const s of data.slice(0, 5)) {
+  console.log(s.symbol, s.ret, s.vol, s.score, s.pctRank, s.quintile, s.inTop25);
+}
+
+const past = await client.hyperliquid.factors.momentum.get({ lookback: '14d', at: '2026-11-01T12:00:00Z' });
+
+const page = await client.hyperliquid.factors.momentum.returns({
+  lookback: '7d', universe: 'top25', start: '2026-10-01', end: '2026-11-01', interval: '1d', holdings: true,
+});
+for (const b of page.data) {
+  console.log(b.timestamp, b.ret, b.longRet, b.shortRet, b.longs, b.shorts, b.holdings?.length);
+}
+
+for await (const b of client.hyperliquid.factors.momentum.iterateReturns({
+  lookback: '14d', universe: 'top50', start: '2025-06-01', end: '2026-11-01',
+})) {
+  console.log(b.timestamp, b.ret, b.isFinal);
+}
 ```
 
 ### Data Quality Monitoring
@@ -2517,7 +2550,7 @@ The codes (`ERROR_CODES`):
 | `endpoint_unsupported` | WebSocket only: this endpoint does not serve the channel or operation; the message names the endpoint that does |
 | `positions_unavailable`, `api_key_limit_reached`, `oauth_not_permitted` | Route-specific codes |
 
-A plan refusal is thrown as `PlanRequiredError`, a subclass of `OxArchiveError`: HTTP 403, `errorCode` `forbidden`, with `datatype`, `requiredPlans` and `upgradeUrl`. Trade intent, USDC flows, breadth above the n-day moving average and positioning are included with the Build, Pro, Scale and Enterprise plans.
+A plan refusal is thrown as `PlanRequiredError`, a subclass of `OxArchiveError`: HTTP 403, `errorCode` `forbidden`, with `datatype`, `requiredPlans` and `upgradeUrl`. Trade intent, USDC flows, breadth above the n-day moving average, positioning and the momentum factor are included with the Build, Pro, Scale and Enterprise plans.
 
 ```typescript
 import { PlanRequiredError } from '@0xarchive/sdk';
@@ -2588,6 +2621,10 @@ import type {
   UsdcFlowVolumeBucket,
   BreadthMaReading,
   PositioningReading,
+  // The momentum factor
+  MomentumScore,
+  MomentumReturn,
+  MomentumHolding,
   // Webhooks
   WebhookEvent,
   WebhookEndpoint,
